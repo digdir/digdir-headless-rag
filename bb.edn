@@ -220,24 +220,5 @@
                                "-M:dev"
                                "-m" "digdir.setup")}
 
-         add-domain {:description "Add an allowed domain (usage: bb add-domain @example.com)"
-                     :task (let [domain (first *command-line-args*)]
-                             (if (clojure.string/blank? domain)
-                               (do
-                                 (println "Usage: bb add-domain <domain>")
-                                 (println "Example: bb add-domain @example.com")
-                                 (println "")
-                                 (println "Or run 'bb setup' for interactive configuration."))
-                               (clojure {:dir "server"}
-                                        "-M:dev"
-                                        "-e" (str "(require '[datahike.api :as d] '[digdir.config.db :as config-db])"
-                                                  "(let [conn (config-db/get-conn)"
-                                                  "      domain (if (clojure.string/starts-with? \"" domain "\" \"@\") \"" domain "\" (str \"@\" \"" domain "\"))]"
-                                                  "  (d/transact conn [{:allowed-domain/domain domain :allowed-domain/added-at (java.util.Date.)}])"
-                                                  "  (println (str \"Added domain: \" domain)))"))))}
-
-         list-domains {:description "List all allowed domains"
-                       :task (clojure {:dir "server"}
-                                      "-M:dev"
-                                      "-e" "(require '[datahike.api :as d] '[digdir.config.db :as config-db]) (let [domains (d/q '[:find [?d ...] :where [?e :allowed-domain/domain ?d]] @(config-db/get-conn))] (println \"Allowed domains:\") (if (seq domains) (doseq [d (sort domains)] (println (str \"  \" d))) (println \"  (none configured)\")))")}}}
+}}}
 

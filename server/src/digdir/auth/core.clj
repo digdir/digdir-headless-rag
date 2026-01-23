@@ -107,69 +107,6 @@
      ;; Error if not found anywhere
      (throw (ex-info "JWT_SECRET must be configured" {})))))
 
-;; =============================================================================
-;; DEPRECATED FUNCTIONS - Legacy auth mechanisms
-;; These functions are deprecated and will be removed in a future release.
-;; Use the permissions system in digdir.config.permissions instead.
-;; =============================================================================
-
-(defn admin-user?
-  "DEPRECATED: Use digdir.config.permissions/is-admin? instead.
-
-   Check if an email is in the ADMIN_USER_EMAILS environment variable.
-   This legacy mechanism is replaced by the permissions system."
-  {:deprecated "Use digdir.config.permissions/is-admin? instead"}
-  [email]
-  (println "WARNING: admin-user? is deprecated. Use digdir.config.permissions/is-admin? instead.")
-  (let [admins-env (or (cfg/get :services :auth :admin-user-emails) "")
-        admins (set (map str/trim (str/split admins-env #" ")))]
-    (contains? admins email)))
-
-(defn get-allowed-domains
-  "DEPRECATED: Domain whitelist is replaced by permissions-based login.
-
-   Get all allowed domains from the legacy database entities.
-   This function is kept for migration purposes only."
-  {:deprecated "Use digdir.config.permissions/can-login? instead"}
-  []
-  (let [conn (db/get-conn)
-        domains (d/q '[:find [?domain ...]
-                       :where
-                       [?e :allowed-domain/domain ?domain]]
-                     @conn)]
-    (set domains)))
-
-(defn domain-whitelist
-  "DEPRECATED: Domain whitelist is replaced by permissions-based login.
-
-   Check if an email domain is in the whitelist.
-   This function is kept for migration purposes only."
-  {:deprecated "Use digdir.config.permissions/can-login? instead"}
-  [email]
-  (println "WARNING: domain-whitelist is deprecated. Use permissions-based login instead.")
-  (let [use-db? (cfg/get :services :auth :use-db)
-        domains (if (false? use-db?)
-                  (let [config-domains (set (cfg/get :services :auth :approved-domains))]
-                    config-domains)
-                  (let [db-domains (get-allowed-domains)]
-                    db-domains))]
-    (contains? domains email)))
-
-(defn approved-domain?
-  "DEPRECATED: Domain whitelist is replaced by permissions-based login.
-
-   Check if an email's domain is approved.
-   Use digdir.config.permissions/can-login? instead."
-  {:deprecated "Use digdir.config.permissions/can-login? instead"}
-  [email]
-  (println "WARNING: approved-domain? is deprecated. Use permissions-based login instead.")
-  (let [[_local-part domain] (str/split email #"@")]
-    (boolean (domain-whitelist (str "@" domain)))))
-
-;; =============================================================================
-;; END DEPRECATED FUNCTIONS
-;; =============================================================================
-
 (def confirmation-codes (atom {}))
 
 (defn generate-confirmation-code [email]

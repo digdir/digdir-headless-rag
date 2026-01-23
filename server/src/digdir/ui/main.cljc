@@ -9,7 +9,6 @@
             ;; Import UI modules
             [digdir.ui.components :refer [StatusBar] :refer-macros [routed-tabs]]
             [digdir.docs.ui :refer [KudosDocuments FolderLoading OptimizelyLoading WebsiteLoading]]
-            [digdir.auth.ui :refer [AccessControl]]
             [digdir.config.ui :refer [Config]]
             [digdir.playground.ui :refer [PlaygroundChat]]
             [digdir.i18n :refer [t] :as i18n]))
@@ -65,10 +64,7 @@
                     (dom/text (t :nav/website))
                     (WebsiteLoading ts-settings))
 
-                   (dom/text (t :nav/access-control))
-                   (AccessControl)
-
-                   )))))))
+)))))))
 
 (defn electric-boot [ring-request]
   #?(:clj  (e/boot-server {} Main (e/server ring-request))  ; inject server-only ring-request

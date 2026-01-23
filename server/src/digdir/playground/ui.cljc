@@ -702,6 +702,62 @@
                                            :font-family   "monospace"}})
                        (dom/text coll))))))))))
 
+         ;; Config resolution debug info (when available)
+         (when-let [debug-info (:debug-info execution)]
+           (dom/div
+            (dom/props {:style {:padding       "0.75rem"
+                                :background    "#eff6ff"
+                                :border        "1px solid #bfdbfe"
+                                :border-radius "4px"
+                                :margin-bottom "0.75rem"}})
+            (dom/div
+             (dom/props {:style {:font-weight   "600"
+                                 :margin-bottom "0.5rem"
+                                 :color         "#1e40af"}})
+             (dom/text "Config Resolution Debug"))
+
+            ;; Scope info
+            (dom/div
+             (dom/props {:style {:display               "grid"
+                                 :grid-template-columns "auto 1fr"
+                                 :gap                   "0.25rem 0.75rem"
+                                 :font-size             "0.75rem"
+                                 :margin-bottom         "0.5rem"}})
+             (dom/span (dom/props {:style {:color "#6b7280"}}) (dom/text "Entity ID:"))
+             (dom/span (dom/props {:style {:font-family "monospace"}})
+                       (dom/text (str (:entity-id debug-info))))
+             (dom/span (dom/props {:style {:color "#6b7280"}}) (dom/text "Tenant:"))
+             (dom/span (dom/props {:style {:font-family "monospace"}})
+                       (dom/text (str (:effective-tenant debug-info))))
+             (dom/span (dom/props {:style {:color "#6b7280"}}) (dom/text "Environment:"))
+             (dom/span (dom/props {:style {:font-family "monospace"}})
+                       (dom/text (str (:effective-env debug-info)))))
+
+            ;; Entity config values
+            (when-let [entity-config (:entity-config debug-info)]
+              (dom/div
+               (dom/div
+                (dom/props {:style {:font-weight   "500"
+                                    :font-size     "0.7rem"
+                                    :color         "#6b7280"
+                                    :margin-bottom "0.25rem"}})
+                (dom/text "Resolved Entity Config:"))
+               (dom/div
+                (dom/props {:style {:display               "grid"
+                                    :grid-template-columns "auto 1fr"
+                                    :gap                   "0.125rem 0.5rem"
+                                    :font-size             "0.7rem"
+                                    :background            "white"
+                                    :padding               "0.5rem"
+                                    :border-radius         "4px"}})
+                (e/for [[k v] (e/diff-by first (sort-by first entity-config))]
+                  (e/client
+                   (dom/span (dom/props {:style {:color "#6b7280"}}) (dom/text (name k)))
+                   (dom/span (dom/props {:style {:font-family "monospace"
+                                                 :word-break  "break-all"
+                                                 :color       (if v "#374151" "#9ca3af")}})
+                             (dom/text (str (or v "(nil)")))))))))))
+
          ;; Search pipeline results
          (dom/div
           (dom/props {:style {:display               "grid"

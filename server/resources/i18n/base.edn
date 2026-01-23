@@ -42,7 +42,6 @@
   :nav/folder                         "Folder"
   :nav/optimizely                     "Optimizely"
   :nav/website                        "Website"
-  :nav/access-control                 "Tilgangskontroll"
   :nav/api-keys                       "API-nøkler"
   :nav/config                         "Config"
 
@@ -168,7 +167,6 @@
   :nav/folder                         "Folder"
   :nav/optimizely                     "Optimizely"
   :nav/website                        "Website"
-  :nav/access-control                 "Access Control"
   :nav/api-keys                       "API Keys"
   :nav/config                         "Config"
 

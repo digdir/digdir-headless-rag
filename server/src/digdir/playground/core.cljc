@@ -726,6 +726,12 @@
                                    :error (.getMessage e)
                                    :error-type (str (type e))
                                    :typesense-diagnostics ts-diagnostics
+                                   ;; Add entity/scope info for debugging config resolution
+                                   :debug-info {:entity-id entity-id
+                                                :effective-tenant effective-tenant
+                                                :effective-env effective-env
+                                                :entity-config (select-keys entity [:id :name :docs-collection
+                                                                                    :chunks-collection :phrases-collection])}
                                    :completed-at (str (java.time.Instant/now))})))))
 
        ;; Return execution ID and conversation ID immediately
