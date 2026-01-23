@@ -1,0 +1,748 @@
+openapi: 3.0.3
+info:
+  title: Digdir RAG API
+  description: |
+    Retrieval-Augmented Generation API for querying Norwegian government documents.
+
+    ## Authentication
+
+    Most endpoints require an API key passed in the `X-API-Key` header.
+    API key management endpoints require JWT authentication via cookie.
+
+    ## Rate Limiting
+
+    Authentication endpoints are rate limited to 10 requests per 15 minutes per IP.
+  version: 1.0.0
+  contact:
+    name: Digdir Support
+
+servers:
+  - url: https://admin.kunnskap.digdir.cloud
+    description: Production
+  - url: https://admin.staging.kunnskap.digdir.cloud
+    description: Staging
+
+tags:
+  - name: RAG
+    description: Retrieval-Augmented Generation endpoints
+  - name: Conversations
+    description: Conversation management
+  - name: API Keys
+    description: API key management (admin)
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /api/rag:
+    post:
+      tags:
+        - RAG
+      summary: RAG Query
+      description: |
+        Execute a full RAG pipeline: retrieve relevant documents and generate an answer using an LLM.
+
+        The response includes the generated answer along with the source chunks used.
+      operationId: ragQuery
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RagRequest'
+            examples:
+              simple:
+                summary: Simple query
+                value:
+                  query: "Hva er Altinn?"
+              withConversation:
+                summary: Continue conversation
+                value:
+                  query: "Kan du forklare mer?"
+                  conversation-id: "abc123xyz"
+              withOptions:
+                summary: With custom options
+                value:
+                  query: "Hva er Altinn?"
+                  model: "gpt-4o-2024-11-20"
+                  rerank-top-k: 20
+                  context-top-k: 5
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RagResponse'
+              example:
+                answer: "Altinn er en digital plattform for offentlige tjenester i Norge..."
+                conversation-id: "abc123xyz"
+                model: "gpt-4o-2024-11-20"
+                chunks-used:
+                  - chunk-id: "chunk_001"
+                    doc-title: "Om Altinn"
+                    doc-num: "doc_123"
+                    content-markdown: "# Altinn\n\nAltinn er..."
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/retrieve:
+    post:
+      tags:
+        - RAG
+      summary: Retrieve Documents
+      description: |
+        Retrieve relevant documents without LLM generation.
+
+        Use this endpoint when you want to handle generation yourself or just need the source documents.
+        Returns ranked chunks with relevance scores and search attribution.
+      operationId: retrieve
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetrieveRequest'
+            examples:
+              simple:
+                summary: Simple retrieval
+                value:
+                  query: "Hva er Altinn?"
+              withOptions:
+                summary: With options
+                value:
+                  query: "Hva er Altinn?"
+                  top_k: 5
+                  include_query_expansion: true
+              withFilter:
+                summary: With filter
+                value:
+                  query: "tilgjengelighet"
+                  top_k: 10
+                  filter:
+                    fields:
+                      - field: "owner_short"
+                        selected_options: ["Digdir"]
+                        value_type: "string"
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetrieveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/conversations:
+    get:
+      tags:
+        - Conversations
+      summary: List Conversations
+      description: Get a paginated list of conversations.
+      operationId: listConversations
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: page_size
+          in: query
+          description: Number of conversations per page
+          schema:
+            type: integer
+            default: 50
+        - name: page_index
+          in: query
+          description: Page number (0-indexed)
+          schema:
+            type: integer
+            default: 0
+        - name: X-User-Email
+          in: header
+          description: Filter by user email
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Conversations
+      summary: Create Conversation
+      description: Create a new conversation.
+      operationId: createConversation
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: X-User-Email
+          in: header
+          required: true
+          description: User email for the conversation
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConversationRequest'
+      responses:
+        '201':
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/conversations/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Conversation ID
+        schema:
+          type: string
+
+    get:
+      tags:
+        - Conversations
+      summary: Get Conversation
+      description: Get a specific conversation with all its messages.
+      operationId: getConversation
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationWithMessages'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Conversations
+      summary: Update Conversation
+      description: Update a conversation (e.g., rename).
+      operationId: updateConversation
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateConversationRequest'
+      responses:
+        '200':
+          description: Conversation updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Conversations
+      summary: Delete Conversation
+      description: Delete a conversation and all its messages.
+      operationId: deleteConversation
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Conversation deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/keys:
+    get:
+      tags:
+        - API Keys
+      summary: List API Keys
+      description: List all API keys for the authenticated user.
+      operationId: listApiKeys
+      security:
+        - JwtAuth: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - API Keys
+      summary: Create API Key
+      description: |
+        Create a new API key. The key is only returned once in the response.
+        Store it securely as it cannot be retrieved again.
+      operationId: createApiKey
+      security:
+        - JwtAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyRequest'
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateApiKeyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/keys/{key-id}/revoke:
+    post:
+      tags:
+        - API Keys
+      summary: Revoke API Key
+      description: Revoke an API key. This action cannot be undone.
+      operationId: revokeApiKey
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: key-id
+          in: path
+          required: true
+          description: API key ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: API key revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Not authorized to revoke this key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication
+    JwtAuth:
+      type: apiKey
+      in: cookie
+      name: auth-token
+      description: JWT token in HTTP-only cookie
+
+  schemas:
+    # Request Schemas
+    RagRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: The question to ask
+          example: "Hva er Altinn?"
+        conversation-id:
+          type: string
+          description: Continue an existing conversation
+        model:
+          type: string
+          description: LLM model to use
+          default: "gpt-4o-2024-11-20"
+        rerank-top-k:
+          type: integer
+          description: Maximum chunks to rerank
+        rerank-max-chunk-length:
+          type: integer
+          description: Maximum length per chunk for reranking
+        rerank-max-length:
+          type: integer
+          description: Maximum total length for reranking
+        context-top-k:
+          type: integer
+          description: Maximum chunks for context
+        context-max-chunk-length:
+          type: integer
+          description: Maximum length per context chunk
+        max-context-length:
+          type: integer
+          description: Maximum total context length
+
+    RetrieveRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: The search query
+          example: "Hva er Altinn?"
+        top_k:
+          type: integer
+          description: Number of chunks to return
+          default: 10
+        include_query_expansion:
+          type: boolean
+          description: Use LLM to expand the query
+          default: true
+        filter:
+          type: object
+          description: Filter by document metadata
+          properties:
+            fields:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    description: Field name to filter on
+                  selected_options:
+                    type: array
+                    items:
+                      type: string
+                    description: Values to filter for
+                  value_type:
+                    type: string
+                    enum: [string, integer]
+                    default: string
+
+    CreateConversationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Optional conversation title
+        filterValue:
+          type: object
+          description: Optional filter for the conversation
+
+    UpdateConversationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          description: New conversation title
+
+    CreateApiKeyRequest:
+      type: object
+      required:
+        - name
+        - entity-id
+      properties:
+        name:
+          type: string
+          description: Human-readable name for the key
+          example: "Production Integration"
+        entity-id:
+          type: string
+          description: Entity ID the key will be scoped to
+          example: "entity-123"
+
+    # Response Schemas
+    RagResponse:
+      type: object
+      properties:
+        answer:
+          type: string
+          description: Generated answer
+        conversation-id:
+          type: string
+          description: Conversation ID
+        model:
+          type: string
+          description: Model used
+        chunks-used:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChunkBasic'
+
+    RetrieveResponse:
+      type: object
+      properties:
+        chunks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChunkDetailed'
+        query_expansion:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            expanded_queries:
+              type: array
+              items:
+                type: string
+        search_stats:
+          type: object
+          properties:
+            phrase:
+              type: integer
+              description: Chunks found via phrase search
+            metadata:
+              type: integer
+              description: Chunks found via metadata search
+            content:
+              type: integer
+              description: Chunks found via content search
+            merged:
+              type: integer
+              description: Total unique chunks after merging
+
+    ChunkBasic:
+      type: object
+      properties:
+        chunk-id:
+          type: string
+        doc-title:
+          type: string
+        doc-num:
+          type: string
+        content-markdown:
+          type: string
+
+    ChunkDetailed:
+      type: object
+      properties:
+        chunk_id:
+          type: string
+        content_markdown:
+          type: string
+        metadata:
+          type: string
+          description: Formatted metadata headers
+        metadata_raw:
+          type: string
+          description: Raw metadata string
+        document:
+          type: object
+          properties:
+            doc_num:
+              type: string
+            title:
+              type: string
+            url:
+              type: string
+        relevance:
+          type: object
+          properties:
+            rerank_position:
+              type: integer
+              description: Position after reranking (1-indexed)
+            original_position:
+              type: integer
+              description: Position before reranking
+            normalized_score:
+              type: number
+              description: Relevance score (0-1)
+            search_types:
+              type: array
+              items:
+                type: string
+                enum: [phrase, metadata, content]
+            hit_count:
+              type: integer
+              description: Number of search methods that found this chunk
+
+    ConversationListResponse:
+      type: object
+      properties:
+        conversations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Conversation'
+        total:
+          type: integer
+        page_size:
+          type: integer
+        page_index:
+          type: integer
+
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: string
+        topic:
+          type: string
+        entity-id:
+          type: string
+        user-id:
+          type: string
+        created:
+          type: integer
+          description: Unix timestamp
+
+    ConversationWithMessages:
+      type: object
+      properties:
+        conversation:
+          $ref: '#/components/schemas/Conversation'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant]
+        created:
+          type: integer
+
+    ApiKeyListResponse:
+      type: object
+      properties:
+        api-keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiKeyInfo'
+
+    ApiKeyInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        entity-id:
+          type: string
+        created:
+          type: integer
+        last-used:
+          type: integer
+        revoked:
+          type: boolean
+
+    CreateApiKeyResponse:
+      type: object
+      properties:
+        api-key-id:
+          type: string
+        api-key:
+          type: string
+          description: The actual API key (only shown once)
+        name:
+          type: string
+        entity-id:
+          type: string
+        warning:
+          type: string
+          description: Reminder to store the key securely
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Missing required field: query"
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Invalid or missing API key"
+
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Entity not found"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Internal server error"

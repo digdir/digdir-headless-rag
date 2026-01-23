@@ -1,0 +1,19 @@
+<configuration scan="false">
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} -- %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="WARN">
+        <appender-ref ref="STDOUT" />
+    </root>
+
+    <!-- Suppress expected error logs from API route handlers during tests -->
+    <logger name="digdir.api.routes" level="OFF" />
+
+    <!-- Suppress noisy third-party loggers -->
+    <logger name="org.eclipse.jetty" level="WARN" />
+    <logger name="com.mchange" level="WARN" />
+    <logger name="datahike" level="WARN" />
+</configuration>

@@ -1,0 +1,243 @@
+{:tasks
+ {:init (do
+          (def valid-destinations
+            ["test" "prod"])
+
+          (def destination-mapping
+            {"prod" "prod"
+             "test" "test"})
+
+          (defn kamal-destination [user-dest]
+            "Maps user-friendly destination name to actual kamal destination name"
+            (get destination-mapping user-dest user-dest))
+
+          (defn show-destination-error [task-name]
+            (println "Error: destination is required.")
+            (println (str "\nUsage: bb " task-name " <destination>"))
+            (println "\nValid destinations:")
+            (doseq [dest valid-destinations]
+              (println (str "  - " dest))))
+
+          ;; API base URLs for integration testing
+          (def api-base-urls
+            {"prod" "https://admin.kunnskap.digdir.cloud"
+             "test" "https://admin.test.kunnskap.digdir.cloud"})
+
+          (defn show-integration-test-error []
+            (println "Error: environment is required.")
+            (println "\nUsage: bb integration-test <environment>")
+            (println "\nAvailable environments:")
+            (doseq [env (keys api-base-urls)]
+              (println (str "  - " env)))))
+
+  dev {:description "Starts admin in dev mode with port forwarding"
+       :task (run '-dev {:parallel true})}
+         admin-dev {:description "Starts admin in dev mode"
+                    :task (run '-admin-dev {:parallel true})}
+         port-forward {:description "Sets up port forwarding to test accessories"
+                       :task (run '-port-forward {:parallel true})}
+         kill-all {:description "Kill all processes listening on forwarded ports (8108, 5432)"
+                   :task (do
+                           (println "\nChecking for processes on forwarded ports...")
+                           (doseq [[port name] [[8108 "Typesense"] [5432 "Postgres"]]]
+                             (let [result (shell {:out :string :continue true}
+                                                "bash" "-c"
+                                                (str "lsof -ti :" port " 2>/dev/null"))
+                                   pids (when (zero? (:exit result))
+                                          (clojure.string/split-lines (:out result)))]
+                               (if (seq pids)
+                                 (do
+                                   (println (str "\n[" name " - Port " port "]"))
+                                   (doseq [pid pids]
+                                     (let [proc-info (shell {:out :string :continue true}
+                                                           "bash" "-c"
+                                                           (str "ps -p " pid " -o pid,comm,args | tail -n 1"))]
+                                       (when (zero? (:exit proc-info))
+                                         (println (str "  " (clojure.string/trim (:out proc-info)))))))
+                                   (shell "bash" "-c" (str "kill -9 " (clojure.string/join " " pids)))
+                                   (println (str "  ✓ Killed " (count pids) " process(es)")))
+                                 (println (str "[" name " - Port " port "] No process found")))))
+                           (println "\n✓ Done checking all ports\n"))}
+
+         ;; Port forwarding tasks
+         -port-forward {:depends [-port-forward-test-typesense
+                                  -port-forward-test-postgres]}
+         -port-forward-dev-typesense (shell
+"ssh -N -L 8108:localhost:8308 -o ServerAliveInterval=60
+                               -o ServerAliveCountMax=17
+                               -o ExitOnForwardFailure=yes
+                               root@5.75.220.232")
+         -port-forward-test-typesense (shell
+"ssh -N -L 8108:localhost:8208 -o ServerAliveInterval=60
+                               -o ServerAliveCountMax=17
+                               -o ExitOnForwardFailure=yes
+                               root@5.75.220.232")
+         -port-forward-prod-typesense (shell
+"ssh -N -L 8108:localhost:8108 -o ServerAliveInterval=60
+                               -o ServerAliveCountMax=17
+                               -o ExitOnForwardFailure=yes
+                               root@5.75.220.232")
+         -port-forward-test-postgres (shell
+"ssh -N -L 5432:localhost:5433 -o ServerAliveInterval=60
+                               -o ServerAliveCountMax=17
+                               -o ExitOnForwardFailure=yes
+                               root@5.75.220.232")
+         
+         ;; Main dev task with port forwarding
+         -dev {:depends [port-forward admin-dev]}
+
+         ;; Parameterized deploy tasks
+         deploy-admin {:description "Deploy admin (usage: bb deploy-admin <destination>, e.g., bb deploy-admin prod)"
+                       :task (let [dest (first *command-line-args*)]
+                               (if dest
+                                 (let [kamal-dest (kamal-destination dest)]
+                                   (if (= kamal-dest "prod")
+                                     (shell "kamal" "deploy" "--config-file=deploy-admin.yml")
+                                     (shell "kamal" "deploy" "--config-file=deploy-admin.yml" (str "--destination=" kamal-dest))))
+                                 (show-destination-error "deploy-admin")))}
+
+         ;; Parameterized boot tasks
+         boot-admin {:description "Boot admin (usage: bb boot-admin <destination>, e.g., bb boot-admin prod)"
+                     :task (let [dest (first *command-line-args*)]
+                             (if dest
+                               (let [kamal-dest (kamal-destination dest)]
+                                 (if (= kamal-dest "prod")
+                                   (shell "kamal" "app" "boot" "--config-file=deploy-admin.yml")
+                                   (shell "kamal" "app" "boot" "--config-file=deploy-admin.yml" (str "--destination=" kamal-dest))))
+                               (show-destination-error "boot-admin")))}
+
+         ;; Parameterized exec tasks
+         exec-admin {:description "Interactive shell in admin container (usage: bb exec-admin <destination> [command...], e.g., bb exec-admin prod bash)"
+                     :task (let [dest (first *command-line-args*)
+                                 rest-args (rest *command-line-args*)]
+                             (if dest
+                               (let [kamal-dest (kamal-destination dest)]
+                                 (if (= kamal-dest "prod")
+                                   (apply shell "kamal" "app" "--config-file=deploy-admin.yml" "exec" "--reuse" "--interactive" rest-args)
+                                   (apply shell "kamal" "app" "--config-file=deploy-admin.yml" (str "--destination=" kamal-dest) "exec" "--reuse" "--interactive" rest-args)))
+                               (show-destination-error "exec-admin <command...>")))}
+
+         ;; Parameterized log viewing tasks
+         logs-admin {:description "View admin container logs (usage: bb logs-admin <destination>, e.g., bb logs-admin prod)"
+                     :task (let [dest (first *command-line-args*)]
+                             (if dest
+                               (let [kamal-dest (kamal-destination dest)]
+                                 (if (= kamal-dest "prod")
+                                   (shell "kamal" "app" "logs" "--config-file=deploy-admin.yml" "--lines" "300" "--follow")
+                                   (shell "kamal" "app" "logs" "--config-file=deploy-admin.yml" (str "--destination=" kamal-dest) "--lines" "300" "--follow")))
+                               (show-destination-error "logs-admin")))}
+
+         ;; Lock release tasks
+         release-admin-lock {:description "Release kamal admin deploy lock (usage: bb release-admin-lock <destination>, e.g., bb release-admin-lock prod)"
+                             :task (let [dest (first *command-line-args*)]
+                                     (if dest
+                                       (let [kamal-dest (kamal-destination dest)]
+                                         (if (= kamal-dest "prod")
+                                           (shell "kamal" "lock" "release" "--config-file=deploy-admin.yml")
+                                           (shell "kamal" "lock" "release" "--config-file=deploy-admin.yml" (str "--destination=" kamal-dest))))
+                                       (show-destination-error "release-admin-lock")))}
+
+         ;; Accessory log tasks
+         logs-typesense {:description "View typesense logs"
+                         :task (shell "kamal" "accessory" "logs" "typesense" "--config-file=accessories.yml" "--lines" "300" "--follow")}
+         logs-typesense-test {:description "View typesense-test logs"
+                              :task (shell "kamal" "accessory" "logs" "typesense-test" "--config-file=accessories.yml" "--lines" "300" "--follow")}
+         logs-postgres {:description "View postgres logs"
+                        :task (shell "kamal" "accessory" "logs" "postgres" "--config-file=accessories.yml" "--lines" "300" "--follow")}
+
+         ;; Accessory exec tasks
+         exec-typesense {:description "Interactive shell in typesense container"
+                         :task (apply shell "kamal" "accessory" "exec" "typesense" "--config-file=accessories.yml" "--reuse" "--interactive" *command-line-args*)}
+         exec-postgres {:description "Interactive shell in postgres container"
+                        :task (apply shell "kamal" "accessory" "exec" "postgres" "--config-file=accessories.yml" "--reuse" "--interactive" *command-line-args*)}
+
+         ;; Internal admin dev task
+         -admin-dev {:depends [-admin-dev:electric]}
+         -admin-dev:electric {:task (clojure {:dir "server"} "-X:personal/dev:dev dev/-main")}
+
+         import-kudos {:description "Import kudos documents"
+                       :task (clojure {:dir "server"} "-X:personal/dev:dev electric-starter-app.document-loading/-main")}
+
+         import-kudos-doc {:description "Import a single Kudos document by ID (usage: bb import-kudos-doc <doc-id>)"
+                           :task (clojure {:dir "server"}
+                                          "-X:personal/dev:dev"
+                                          "electric-starter-app.document-loading/-main-single"
+                                          ":doc-id"
+                                          (first *command-line-args*))}
+
+         server-jar {:description "Build server uberjar and run it"
+                    :task (do
+                            (println "Building server uberjar...")
+                            (clojure {:dir "server"} "-X:build:prod uberjar :build/jar-name \"app.jar\"")
+                            (println "Running server jar...")
+                            (shell {:dir "server"} "java" "-cp" "target/app.jar" "clojure.main" "-m" "prod"))}
+
+         test {:description "Run unit tests (usage: bb test)"
+               :task (shell {:dir "server"} "clj" "-M:test" "-d" "test")}
+
+         test-config {:description "Run config resolution tests (usage: bb test-config)"
+                      :task (shell {:dir "server"} "clj" "-M:test"
+                                   "-n" "digdir.config.db-test"
+                                   "-n" "digdir.config.ui-test"
+                                   "-n" "digdir.config.permissions-test")}
+
+         integration-test {:description "Run API integration tests against deployed environment (usage: bb integration-test <env>, e.g., bb integration-test test)"
+                           :task (let [env (first *command-line-args*)]
+                                   (if-let [base-url (get api-base-urls env)]
+                                     (shell {:dir "server"
+                                             :extra-env {"RAG_API_BASE_URL" base-url
+                                                         "RAG_API_TEST_KEY" (System/getenv "RAG_API_TEST_KEY")}}
+                                            "clj" "-M:test" "-n" "digdir.api.integration-test")
+                                     (show-integration-test-error)))}
+
+         lint {:description "Run clj-kondo linter (usage: bb lint)"
+               :task (clojure {:dir "server"} "-M:clj-kondo" "--lint" "src" "test")}
+
+         clear-config-db {:description "Clear config database (usage: bb clear-config-db --confirm)"
+                          :task (let [args *command-line-args*
+                                      has-confirm (some (fn [x] (= x "--confirm")) args)]
+                                  (println "")
+                                  (println "⚠️  CONFIG DATABASE CLEAR")
+                                  (println "========================")
+                                  (println "")
+                                  (if has-confirm
+                                    (do
+                                      (println "🗑️  Clearing config database...")
+                                      (println "")
+                                      (clojure {:dir "server"}
+                                               "-M:dev"
+                                               "-e" "(require '[digdir.config.db :as config-db] '[datahike.api :as d]) (let [conn (config-db/get-conn)] (d/transact conn [{:db/retract-entity [:config-def/path \"_\"]}]) (println \"✓ Config database cleared\"))"))
+                                    (do
+                                      (println "This will DELETE all config definitions and values from the database.")
+                                      (println "")
+                                      (println "To proceed, run:")
+                                      (println "  bb clear-config-db --confirm")
+                                      (println "")
+                                      (println "⛔ Production databases are blocked from this command."))))}
+
+         setup {:description "Interactive setup wizard for initial configuration"
+                :task (clojure {:dir "server"}
+                               "-M:dev"
+                               "-m" "digdir.setup")}
+
+         add-domain {:description "Add an allowed domain (usage: bb add-domain @example.com)"
+                     :task (let [domain (first *command-line-args*)]
+                             (if (clojure.string/blank? domain)
+                               (do
+                                 (println "Usage: bb add-domain <domain>")
+                                 (println "Example: bb add-domain @example.com")
+                                 (println "")
+                                 (println "Or run 'bb setup' for interactive configuration."))
+                               (clojure {:dir "server"}
+                                        "-M:dev"
+                                        "-e" (str "(require '[datahike.api :as d] '[digdir.config.db :as config-db])"
+                                                  "(let [conn (config-db/get-conn)"
+                                                  "      domain (if (clojure.string/starts-with? \"" domain "\" \"@\") \"" domain "\" (str \"@\" \"" domain "\"))]"
+                                                  "  (d/transact conn [{:allowed-domain/domain domain :allowed-domain/added-at (java.util.Date.)}])"
+                                                  "  (println (str \"Added domain: \" domain)))"))))}
+
+         list-domains {:description "List all allowed domains"
+                       :task (clojure {:dir "server"}
+                                      "-M:dev"
+                                      "-e" "(require '[datahike.api :as d] '[digdir.config.db :as config-db]) (let [domains (d/q '[:find [?d ...] :where [?e :allowed-domain/domain ?d]] @(config-db/get-conn))] (println \"Allowed domains:\") (if (seq domains) (doseq [d (sort domains)] (println (str \"  \" d))) (println \"  (none configured)\")))")}}}
+

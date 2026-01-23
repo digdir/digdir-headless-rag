@@ -1,0 +1,30 @@
+[tools]
+java = "24"
+clojure = "latest"
+node = "22"
+yarn = "latest"
+babashka = "latest"
+
+
+[tasks.bb]
+run = "bb"
+
+[env]
+
+# Database-based config mode (set CONFIG_MASTER_KEY to enable)
+# When set, config is loaded from database instead of EDN files
+CONFIG_MASTER_KEY=""
+TENANT=""
+ENV=""
+
+# Database credentials (secrets only)
+ADH_POSTGRES_URL=""
+ADH_POSTGRES_USER=""
+ADH_POSTGRES_PWD=""
+
+
+# Integration test API key
+RAG_API_TEST_KEY=""
+
+# Development settings
+LOGLEVEL="DEBUG"

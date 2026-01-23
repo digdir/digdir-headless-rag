@@ -1,0 +1,74 @@
+# Version control
+.git
+.gitignore
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+*~
+.DS_Store
+.dir-locals.el
+
+# Clojure/ClojureScript development
+.clj-kondo
+.cpcache
+.lsp
+.nrepl-port
+.shadow-cljs
+target/
+out/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.pytest_cache/
+
+# Logs
+logs/
+*.log
+
+# State and runtime files
+state/
+.kamal/secrets
+
+# Development files
+src-dev/
+dev.cljc
+user.clj
+
+# Documentation
+README.md
+*.md
+
+# Test files
+test/
+tests/
+*_test.*
+*.test.*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# OS files
+Thumbs.db
+ehthumbs.db
+
+# Build artifacts (keep some as they might be needed in container)
+# Uncomment if you want to rebuild these in the container
+# /resources/public/admin_app/js
+# /resources/electric-manifest.edn
