@@ -226,29 +226,29 @@
 (defn resolve-value
   "Resolve a config value following 8-level multi-dimensional precedence order.
 
-   Resolution based on dimension count (more specific = higher priority),
-   with tiebreaker: entity > tenant > environment.
+   Resolution prioritizes deployment context (tenant/environment) over entity defaults.
+   This allows tenant-specific overrides to take precedence over entity-level defaults.
 
    Order (most to least specific):
-   1. Entity+Tenant+Environment (3 dims)
-   2. Entity+Tenant (2 dims, highest priority at 2 dims)
+   1. Entity+Tenant+Environment (3 dims) - most specific
+   2. Tenant+Environment (2 dims) - deployment context
    3. Entity+Environment (2 dims)
-   4. Tenant+Environment (2 dims)
-   5. Entity (1 dim, highest priority at 1 dim)
+   4. Entity+Tenant (2 dims)
+   5. Environment (1 dim)
    6. Tenant (1 dim)
-   7. Environment (1 dim)
-   8. Global (0 dims)
+   7. Entity (1 dim) - entity defaults
+   8. Global (0 dims) - system defaults
 
    Returns the value entity or nil if not found at any level."
   [db tenant environment entity path]
-  (let [resolution-order [[entity tenant environment]    ; 3 dims
-                          [entity tenant nil]             ; 2 dims: entity+tenant
-                          [entity nil environment]        ; 2 dims: entity+env
-                          [nil tenant environment]        ; 2 dims: tenant+env
-                          [entity nil nil]                ; 1 dim: entity
-                          [nil tenant nil]                ; 1 dim: tenant
-                          [nil nil environment]           ; 1 dim: env
-                          [nil nil nil]]]                 ; 0 dims: global
+  (let [resolution-order [[entity tenant environment]    ; 1. entity+tenant+env
+                          [nil tenant environment]        ; 2. tenant+env
+                          [entity nil environment]        ; 3. entity+env
+                          [entity tenant nil]             ; 4. entity+tenant
+                          [nil nil environment]           ; 5. env
+                          [nil tenant nil]                ; 6. tenant
+                          [entity nil nil]                ; 7. entity
+                          [nil nil nil]]]                 ; 8. global
     (some (fn [[ent t env]]
             (get-value-entity db t env ent path))
           resolution-order)))
@@ -258,17 +258,17 @@
 
    Returns: {:value entity, :level keyword} or nil if not found.
    Levels (from most to least specific):
-     :entity-tenant-env, :entity-tenant, :entity-env, :tenant-env,
-     :entity, :tenant, :environment, :global"
+     :entity-tenant-env, :tenant-env, :entity-env, :entity-tenant,
+     :environment, :tenant, :entity, :global"
   [db tenant environment entity path]
-  (let [levels [[:entity-tenant-env entity tenant environment]
-                [:entity-tenant entity tenant nil]
-                [:entity-env entity nil environment]
-                [:tenant-env nil tenant environment]
-                [:entity entity nil nil]
-                [:tenant nil tenant nil]
-                [:environment nil nil environment]
-                [:global nil nil nil]]]
+  (let [levels [[:entity-tenant-env entity tenant environment]  ; 1
+                [:tenant-env nil tenant environment]            ; 2
+                [:entity-env entity nil environment]            ; 3
+                [:entity-tenant entity tenant nil]              ; 4
+                [:environment nil nil environment]              ; 5
+                [:tenant nil tenant nil]                        ; 6
+                [:entity entity nil nil]                        ; 7
+                [:global nil nil nil]]]                         ; 8
     (some (fn [[level ent t env]]
             (when-let [value-entity (get-value-entity db t env ent path)]
               {:value value-entity :level level}))
