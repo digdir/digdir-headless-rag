@@ -498,7 +498,8 @@
    :line-height   "1.6"})
 
 (e/defn ExecutionDebugPanel
-  "Debug panel showing execution state, errors, and search results during pipeline execution."
+  "Debug panel showing execution state, errors, and search results during pipeline execution.
+   Auto-expands while running, auto-collapses on success, stays expanded on error."
   [execution]
   (e/client
    (let [status  (:status execution)
@@ -511,8 +512,18 @@
          content-search     (get results :content-search [])
          merged-results     (get results :merged-results [])
          retrieved-chunks   (get results :retrieved-chunks [])
-         !expanded          (atom true)
-         expanded           (e/watch !expanded)]
+         ;; Track user's manual override separately from auto-expand behavior
+         !user-toggled      (atom false)
+         !user-expanded     (atom true)
+         user-toggled       (e/watch !user-toggled)
+         user-expanded      (e/watch !user-expanded)
+         ;; Auto-expand when running or error, collapse on complete (unless user overrode)
+         auto-expanded      (case status
+                              :running true
+                              :error true
+                              :complete false
+                              true)
+         expanded           (if user-toggled user-expanded auto-expanded)]
      (dom/div
       (dom/props {:style {:margin        "0.5rem 1rem"
                           :padding       "0.75rem"
@@ -533,7 +544,9 @@
                            :justify-content "space-between"
                            :align-items     "center"
                            :cursor          "pointer"}})
-       (dom/On "click" #(swap! !expanded not) nil)
+       (dom/On "click" (fn [_]
+                         (reset! !user-toggled true)
+                         (swap! !user-expanded not)) nil)
        (dom/div
         (dom/props {:style {:display     "flex"
                             :align-items "center"
@@ -1737,18 +1750,36 @@
 
 (e/defn ConversationSidebar
   "Sidebar listing playground conversations."
-  [conversations current-convo-id on-select-convo entity-names]
+  [conversations current-convo-id on-select-convo on-delete-convo on-clear-all entity-names]
   (e/client
    (dom/div
     (dom/props {:style conversation-sidebar-style})
-    ;; Header
+    ;; Header with Clear all button
     (dom/div
-     (dom/props {:style {:padding "0.75rem 1rem"
+     (dom/props {:style {:padding       "0.75rem 1rem"
                          :border-bottom "1px solid #e5e7eb"
-                         :font-weight "600"
-                         :font-size "0.875rem"
-                         :color "#374151"}})
-     (dom/text "Conversations"))
+                         :display       "flex"
+                         :justify-content "space-between"
+                         :align-items   "center"}})
+     (dom/span
+      (dom/props {:style {:font-weight "600"
+                          :font-size   "0.875rem"
+                          :color       "#374151"}})
+      (dom/text "Conversations"))
+     (when (seq conversations)
+       (dom/button
+        (dom/props {:style {:padding       "0.25rem 0.5rem"
+                            :background    "transparent"
+                            :border        "1px solid #fecaca"
+                            :border-radius "4px"
+                            :font-size     "0.7rem"
+                            :color         "#dc2626"
+                            :cursor        "pointer"}})
+        (dom/text "Clear all")
+        (let [[t err] (e/Token (dom/On "click" identity nil))]
+          (when t
+            (on-clear-all)
+            (t))))))
     ;; Conversation list
     (dom/div
      (dom/props {:style {:flex "1" :overflow-y "auto"}})
@@ -1757,22 +1788,41 @@
         (dom/props {:style {:padding "1rem" :color "#9ca3af" :font-size "0.8rem"}})
         (dom/text "No conversations yet"))
        (e/for [conv (e/diff-by :conversation/id conversations)]
-         (dom/div
-          (dom/props {:style (merge sidebar-item-style
-                                    (when (= (:conversation/id conv) current-convo-id)
-                                      {:background "#dbeafe"}))})
+         (let [conv-id (:conversation/id conv)
+               is-selected (= conv-id current-convo-id)]
+           (dom/div
+            (dom/props {:style (merge sidebar-item-style
+                                      {:display     "flex"
+                                       :align-items "flex-start"
+                                       :gap         "0.5rem"}
+                                      (when is-selected
+                                        {:background "#dbeafe"}))})
+          ;; Conversation info (clickable)
           (dom/div
-           (dom/props {:style {:font-weight "500" :margin-bottom "0.25rem"}})
-           (dom/text (or (:conversation/topic conv) "Untitled")))
-          (dom/div
-           (dom/props {:style {:font-size "0.75rem" :color "#6b7280"}})
-           (let [entity-id (:conversation/entity-id conv)
-                 entity-name (clojure.core/get entity-names entity-id)]
-             (dom/text (or entity-name entity-id))))
-          (let [[t err] (e/Token (dom/On "click" identity nil))]
-            (when t
-              (on-select-convo (:conversation/id conv))
-              (t))))))))))
+           (dom/props {:style {:flex   "1"
+                               :cursor "pointer"}})
+           (dom/On "click" (fn [_] (on-select-convo conv)) nil)
+           (dom/div
+            (dom/props {:style {:font-weight "500" :margin-bottom "0.25rem"}})
+            (dom/text (or (:conversation/topic conv) "Untitled")))
+           (dom/div
+            (dom/props {:style {:font-size "0.75rem" :color "#6b7280"}})
+            (let [entity-id (:conversation/entity-id conv)
+                  entity-name (clojure.core/get entity-names entity-id)]
+              (dom/text (or entity-name entity-id)))))
+          ;; Delete button
+          (dom/button
+           (dom/props {:style {:padding    "0.25rem"
+                               :background "transparent"
+                               :border     "none"
+                               :color      "#9ca3af"
+                               :cursor     "pointer"
+                               :font-size  "0.875rem"}})
+           (dom/text "×")
+           (let [[t err] (e/Token (dom/On "click" identity nil))]
+             (when t
+               (on-delete-convo conv-id)
+               (t))))))))))))
 
 (e/defn PlaygroundChatInput
   "Chat input area with send button."
@@ -1888,12 +1938,18 @@
                                     (not (str/blank? selected-environment))
                                     (not (str/blank? selected-entity-id)))
 
-         ;; Fetch conversations from server
-         conversations         (e/server (db/playground-conversations @(db/get-conn)))
+         ;; Fetch conversations from server (use e/watch to react to DB changes)
+         conversations         (e/server
+                                (let [db (e/watch (db/get-conn))]
+                                  (e/Offload #(db/playground-conversations db))))
 
          ;; Fetch all messages for current conversation
+         ;; Use e/watch on the connection to reactively re-fetch when database changes
          all-messages          (when conversation-id
-                                 (e/server (db/fetch-conversation-tree @(db/get-conn) (e/client conversation-id))))
+                                 (e/server
+                                  (let [db (e/watch (db/get-conn))
+                                        convo-id (e/client conversation-id)]
+                                    (e/Offload #(db/fetch-conversation-tree db convo-id)))))
 
          ;; Filter to visible messages based on active branch
          visible-messages      (get-visible-messages (or all-messages []) active-branch-path)
@@ -1973,11 +2029,75 @@
       ;; Sidebar
       (when (:show-sidebar state)
         (ConversationSidebar conversations conversation-id
-                             (fn [new-id]
+                             ;; on-select-convo - updates state and signals to load execution
+                             (fn [conv]
+                               ;; Restore full context from conversation
                                (swap! !playground-chat-state assoc
-                                      :conversation-id new-id
-                                      :active-branch-path {}))
+                                      :conversation-id (:conversation/id conv)
+                                      :selected-entity-id (:conversation/entity-id conv)
+                                      :selected-tenant (:conversation/tenant conv)
+                                      :selected-environment (:conversation/environment conv)
+                                      :active-branch-path {}
+                                      :show-diagnostics #{}
+                                      :pending-load-execution-for-convo (:conversation/id conv)))
+                             ;; on-delete-convo - signals intent, handled below
+                             (fn [convo-id]
+                               (swap! !playground-chat-state assoc :pending-delete-convo-id convo-id))
+                             ;; on-clear-all - signals intent, handled below
+                             (fn []
+                               (swap! !playground-chat-state assoc :pending-clear-all true))
                              entity-names))
+
+      ;; Handle pending delete conversation (server operation)
+      (when-some [delete-id (:pending-delete-convo-id state)]
+        (e/server
+         (let [id-to-delete (e/client delete-id)]
+           (e/Offload #(db/delete-playground-conversation (db/get-conn) id-to-delete))))
+        (e/client
+         (swap! !playground-chat-state assoc
+                :pending-delete-convo-id nil
+                :conversation-id (when-not (= delete-id conversation-id) conversation-id)
+                :active-branch-path (when-not (= delete-id conversation-id) active-branch-path))))
+
+      ;; Handle pending clear all (server operation)
+      (when (:pending-clear-all state)
+        (e/server
+         (e/Offload #(db/clear-all-playground-conversations (db/get-conn))))
+        (e/client
+         (swap! !playground-chat-state assoc
+                :pending-clear-all nil
+                :conversation-id nil
+                :active-branch-path {})))
+
+      ;; Handle pending load execution for conversation (server lookup)
+      (when-some [convo-id (:pending-load-execution-for-convo state)]
+        (let [latest-exec-id (e/server
+                              (playground/get-latest-execution-id-for-conversation
+                               (e/client convo-id)))]
+          (e/client
+           (swap! !playground-chat-state assoc
+                  :pending-load-execution-for-convo nil
+                  :execution-id latest-exec-id))))
+
+      ;; Handle pending new conversation (server operation)
+      (when (:pending-new-conversation state)
+        (let [new-convo-id (e/server
+                            (let [entity-id (e/client effective-entity-id)
+                                  tenant (e/client selected-tenant)
+                                  env (e/client selected-environment)]
+                              (e/Offload
+                               #(let [result (db/create-playground-conversation
+                                              (db/get-conn)
+                                              entity-id
+                                              {:tenant tenant :environment env})]
+                                  (:conversation-id result)))))]
+          (e/client
+           (swap! !playground-chat-state assoc
+                  :pending-new-conversation nil
+                  :conversation-id new-convo-id
+                  :execution-id nil
+                  :active-branch-path {}
+                  :show-diagnostics #{}))))
 
       ;; Main chat area
       (dom/div
@@ -2095,7 +2215,7 @@
                       6 "Tenant"
                       7 "Env"
                       "Global")))
-         ;; New conversation button
+         ;; New conversation button - signals intent, handled by reactive block below
          (dom/button
           (dom/props {:style {:padding       "0.5rem 1rem"
                               :background    (if scope-complete? "#10b981" "#9ca3af")
@@ -2107,18 +2227,10 @@
                       :disabled (not scope-complete?)})
           (dom/text (t :playground/new-chat))
           (when scope-complete?
-            (let [[t err] (e/Token (dom/On "click" identity nil))]
-              (when t
-                (let [result (e/server
-                              (db/create-playground-conversation
-                               (db/get-conn)
-                               (e/client effective-entity-id)
-                               nil))]
-                  (swap! !playground-chat-state assoc
-                         :conversation-id (:conversation-id result)
-                         :execution-id nil
-                         :active-branch-path {}))
-                (t)))))))
+            (let [[tok err] (e/Token (dom/On "click" identity nil))]
+              (when tok
+                (swap! !playground-chat-state assoc :pending-new-conversation true)
+                (tok)))))))
 
        ;; Message thread with branching support
        (MessageThread

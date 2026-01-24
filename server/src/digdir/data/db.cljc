@@ -146,7 +146,19 @@
    {:db/ident :conversation/type
     :db/valueType :db.type/keyword
     :db/cardinality :db.cardinality/one
-    :db/doc "Type of conversation: :playground, :chat, etc."}])
+    :db/doc "Type of conversation: :playground, :chat, etc."}
+
+   ;; Tenant for playground conversations (stores config resolution context)
+   {:db/ident :conversation/tenant
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one
+    :db/doc "Tenant ID for config resolution in playground conversations"}
+
+   ;; Environment for playground conversations (stores config resolution context)
+   {:db/ident :conversation/environment
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one
+    :db/doc "Environment for config resolution in playground conversations"}])
 
 (def dh-schema
   (concat
@@ -609,20 +621,29 @@
 
 #?(:clj
    (defn create-playground-conversation
-     "Create a new playground conversation"
-     [conn entity-id user-id]
-     (let [convo-id (nano-id)
-           time-point (System/currentTimeMillis)
-           base-tx {:conversation/id convo-id
-                    :conversation/entity-id entity-id
-                    :conversation/type :playground
-                    :conversation/topic "Playground Session"
-                    :conversation/created time-point}
-           tx-data (if user-id
-                     (assoc base-tx :conversation/user-id user-id)
-                     base-tx)]
-       (d/transact conn [tx-data])
-       {:conversation-id convo-id})))
+     "Create a new playground conversation.
+      Args:
+        conn - Database connection
+        entity-id - Entity ID for the conversation
+        opts - Optional map with :user-id, :tenant, :environment"
+     ([conn entity-id]
+      (create-playground-conversation conn entity-id nil))
+     ([conn entity-id opts]
+      (let [convo-id (nano-id)
+            time-point (System/currentTimeMillis)
+            {:keys [user-id tenant environment]} (if (string? opts)
+                                                   {:user-id opts} ; backwards compat
+                                                   opts)
+            base-tx (cond-> {:conversation/id convo-id
+                             :conversation/entity-id entity-id
+                             :conversation/type :playground
+                             :conversation/topic "Playground Session"
+                             :conversation/created time-point}
+                      user-id (assoc :conversation/user-id user-id)
+                      tenant (assoc :conversation/tenant tenant)
+                      environment (assoc :conversation/environment environment))]
+        (d/transact conn [base-tx])
+        {:conversation-id convo-id}))))
 
 #?(:clj
    (defn transact-playground-user-msg
@@ -726,7 +747,8 @@
      (sort-by #(or (:conversation/created %) 0) >
               (d/q '[:find [(pull ?e [:db/id :conversation/id :conversation/topic
                                       :conversation/created :conversation/entity-id
-                                      :conversation/user-id :conversation/type]) ...]
+                                      :conversation/user-id :conversation/type
+                                      :conversation/tenant :conversation/environment]) ...]
                      :where
                      [?e :conversation/id ?conv-id]
                      [?e :conversation/type :playground]]
@@ -739,7 +761,8 @@
      (sort-by #(or (:conversation/created %) 0) >
               (d/q '[:find [(pull ?e [:db/id :conversation/id :conversation/topic
                                       :conversation/created :conversation/entity-id
-                                      :conversation/user-id :conversation/type]) ...]
+                                      :conversation/user-id :conversation/type
+                                      :conversation/tenant :conversation/environment]) ...]
                      :in $ ?user-id
                      :where
                      [?e :conversation/id ?conv-id]
@@ -757,6 +780,44 @@
                    [?parent :message/id ?parent-id]
                    [?child :message/parent-message ?parent]]
                  db msg-id))))
+
+#?(:clj
+   (defn delete-playground-conversation
+     "Delete a playground conversation and all its messages by conversation ID."
+     [conn convo-id]
+     (let [db @conn
+           ;; Find conversation entity
+           convo-eid (d/q '[:find ?e .
+                           :in $ ?convo-id
+                           :where [?e :conversation/id ?convo-id]]
+                         db convo-id)]
+       (when convo-eid
+         ;; Find all message entities for this conversation
+         (let [msg-eids (d/q '[:find [?m ...]
+                              :in $ ?convo-id
+                              :where
+                              [?c :conversation/id ?convo-id]
+                              [?c :conversation/messages ?m]]
+                            db convo-id)
+               ;; Retract messages first, then conversation
+               retract-ops (concat
+                            (mapv (fn [eid] [:db.fn/retractEntity eid]) msg-eids)
+                            [[:db.fn/retractEntity convo-eid]])]
+           (d/transact conn retract-ops))))))
+
+#?(:clj
+   (defn clear-all-playground-conversations
+     "Delete all playground conversations and their messages."
+     [conn]
+     (let [db @conn
+           ;; Find all playground conversation IDs
+           convo-ids (d/q '[:find [?convo-id ...]
+                          :where
+                          [?e :conversation/id ?convo-id]
+                          [?e :conversation/type :playground]]
+                        db)]
+       (doseq [convo-id convo-ids]
+         (delete-playground-conversation conn convo-id)))))
 
 (comment
 

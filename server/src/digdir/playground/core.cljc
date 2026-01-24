@@ -453,6 +453,17 @@
      (get @!playground-executions execution-id)))
 
 #?(:clj
+   (defn get-latest-execution-id-for-conversation
+     "Find the most recent execution-id for a conversation"
+     [conversation-id]
+     (when conversation-id
+       (->> @!playground-executions
+            (filter (fn [[_ v]] (= (:conversation-id v) conversation-id)))
+            (sort-by (fn [[_ v]] (:started-at v)))
+            last
+            first))))
+
+#?(:clj
    (defn cleanup-old-executions!
      "Remove executions older than the specified duration (in minutes)"
      [max-age-minutes]
