@@ -92,6 +92,87 @@ The `e/Token` pattern is **required** for event handlers that perform side effec
 3. **Use identity**: Pass `identity` to `dom/On` when using e/Token pattern
 4. **Check for token**: Always wrap side effects in `(when token ...)` to ensure proper execution
 
+## Pending Signal Pattern (Avoiding Race Conditions)
+
+When a button click needs to perform a server operation AND update client state that depends on the result (e.g., creating a record and selecting it in a list), use the **pending signal pattern** to avoid race conditions.
+
+### The Problem
+
+Directly performing server operations inside event handlers can cause race conditions:
+```clojure
+;; PROBLEMATIC: Race condition between server op and reactive list update
+(let [[tok err] (e/Token (dom/On "click" identity nil))]
+  (when tok
+    (let [new-id (e/server (create-record ...))]
+      ;; State updates before the reactive list has refreshed
+      (swap! !state assoc :selected-id new-id))  ; ❌ List may not contain new-id yet
+    (tok)))
+```
+
+### The Solution: Pending Signal Pattern
+
+1. **Button sets a pending flag** in state (no server call)
+2. **Reactive block** detects the flag, performs server operation, then updates state
+
+```clojure
+;; CORRECT: Use pending signal pattern
+;; Step 1: Button just sets a flag
+(dom/button
+  (dom/text "Create")
+  (let [[tok err] (e/Token (dom/On "click" identity nil))]
+    (when tok
+      (swap! !state assoc :pending-create true)
+      (tok))))
+
+;; Step 2: Reactive block handles the operation (elsewhere in component)
+(when (:pending-create state)
+  (let [new-id (e/server
+                 (let [param1 (e/client (:param1 state))
+                       param2 (e/client (:param2 state))]
+                   (e/Offload
+                     #(create-record param1 param2))))]
+    (e/client
+      (swap! !state assoc
+             :pending-create nil
+             :selected-id new-id))))
+```
+
+### Key Points
+
+1. **Separation of concerns**: Button signals intent, reactive block handles execution
+2. **Proper ordering**: Server operation completes before client state updates
+3. **e/Offload for DB ops**: Wrap database operations in `e/Offload` to avoid blocking
+4. **Transfer values correctly**: Use `(e/client ...)` inside `e/server` (but outside `e/Offload`) to transfer values, then capture them in the Offload closure
+
+### Real-World Example: Creating and Selecting a Conversation
+
+```clojure
+;; Button signals intent
+(dom/button
+  (dom/text "New Chat")
+  (let [[tok err] (e/Token (dom/On "click" identity nil))]
+    (when tok
+      (swap! !playground-chat-state assoc :pending-new-conversation true)
+      (tok))))
+
+;; Reactive handler creates conversation and updates selection
+(when (:pending-new-conversation state)
+  (let [new-convo-id (e/server
+                       (let [entity-id (e/client effective-entity-id)
+                             tenant (e/client selected-tenant)
+                             env (e/client selected-environment)]
+                         (e/Offload
+                           #(let [result (db/create-playground-conversation
+                                           (db/get-conn)
+                                           entity-id
+                                           {:tenant tenant :environment env})]
+                              (:conversation-id result)))))]
+    (e/client
+      (swap! !playground-chat-state assoc
+             :pending-new-conversation nil
+             :conversation-id new-convo-id))))
+```
+
 ## Node Rendering Patterns
 
 ### Displaying Node Content Before Processing
