@@ -537,7 +537,12 @@
                          :query query
                          :collections collections}])
 
-         (let [result (skills-api/simple-qa query collections opts)]
+         (let [result (skills-api/simple-qa query collections opts)
+               _ (t/log! :debug [:skills-pipeline/raw-result
+                                 {:result-type (type result)
+                                  :result-keys (when (map? result) (keys result))
+                                  :outputs-keys (when (map? result) (keys (:outputs result)))
+                                  :search-attribution (get-in result [:outputs :search-attribution])}])]
            (if (skills-core/result-error? result)
              ;; Handle error
              (let [error (skills-core/get-result-error result)]
@@ -554,12 +559,31 @@
              (let [outputs (skills-core/get-result-outputs result)
                    response (:response outputs)
                    chunks (:chunks outputs)
-                   search-phrases (:search-phrases outputs)]
+                   search-phrases (:search-phrases outputs)
+                   ;; Extract search attribution for UI diagnostics
+                   search-attribution (or (:search-attribution outputs) {})
+                   ;; Format chunks for diagnostics (compatible with classic pipeline)
+                   format-chunk (fn [c]
+                                  (select-keys c [:chunk_id :rank :search-types :hit-count
+                                                  :title :metadata :content_markdown]))]
 
                (t/log! :info [:skills-pipeline/completed
                               {:execution-id execution-id
                                :response-length (count response)
-                               :chunks-count (count chunks)}])
+                               :chunks-count (count chunks)
+                               :search-attribution search-attribution}])
+
+               ;; Store results in execution state for UI display
+               (update-execution-results! execution-id :query-relaxation (or search-phrases [query]))
+               (update-execution-results! execution-id :phrase-search
+                                          (vec (repeat (get search-attribution :phrase 0) {:search-type :phrase})))
+               (update-execution-results! execution-id :metadata-search
+                                          (vec (repeat (get search-attribution :metadata 0) {:search-type :metadata})))
+               (update-execution-results! execution-id :content-search
+                                          (vec (repeat (get search-attribution :content 0) {:search-type :content})))
+               (update-execution-results! execution-id :merged-results (mapv format-chunk (take 20 chunks)))
+               (update-execution-results! execution-id :retrieved-chunks chunks)
+               (update-execution-results! execution-id :used-chunks (mapv format-chunk chunks))
 
                ;; Stream the response to execution state
                (update-execution! execution-id
@@ -568,9 +592,17 @@
 
                {:response response
                 :chunks chunks
-                :diagnostics {:query-relaxation search-phrases
+                :diagnostics {:query-relaxation (or search-phrases [query])
+                              ;; Search counts for UI display
+                              :phrase-search-count (get search-attribution :phrase 0)
+                              :metadata-search-count (get search-attribution :metadata 0)
+                              :content-search-count (get search-attribution :content 0)
+                              :merged-count (get search-attribution :merged 0)
+                              ;; Detailed results (use chunks as proxy for merged results)
+                              :merged-results (mapv format-chunk (take 20 chunks))
                               :used-chunks-count (count chunks)
-                              :used-chunks (mapv #(select-keys % [:chunk_id :rank :content_markdown]) chunks)
+                              :used-chunks (mapv format-chunk chunks)
+                              ;; Additional skill metadata
                               :skill-execution-metadata (skills-core/get-result-metadata result)}}))))
 
        (catch Exception e

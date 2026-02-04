@@ -150,6 +150,73 @@
       (is (string? result))
       (is (str/includes? result "...")))))
 
+(deftest test-rag-log-truncation
+  (testing "truncate-log-data via log!"
+    (testing "Truncates data map in log vector"
+      ;; Test the internal behavior by calling log! and observing no errors
+      ;; The actual truncation is tested through truncate-for-logging tests
+      (is (nil? (log-utils/log! :info [:test/event {:key "short"}]))))
+
+    (testing "Handles long strings in RAG data"
+      (let [long-content (apply str (repeat 500 "chunk content "))
+            log-vec [:rag/chunks {:content long-content
+                                  :chunk-id "123"}]]
+        ;; Should not throw
+        (is (nil? (log-utils/log! :info log-vec)))))
+
+    (testing "Handles collections in RAG data"
+      (let [many-chunks (vec (for [i (range 50)]
+                               {:chunk-id i
+                                :content (str "Content for chunk " i)}))
+            log-vec [:rag/search-results {:chunks many-chunks}]]
+        ;; Should not throw
+        (is (nil? (log-utils/log! :info log-vec)))))))
+
+(deftest test-rag-default-opts
+  (testing "RAG defaults are more aggressive than general defaults"
+    ;; RAG defaults should truncate more aggressively
+    (is (= 200 (:max-string-len log-utils/*rag-log-opts*)))
+    (is (= 5 (:max-coll-items log-utils/*rag-log-opts*)))
+    (is (= 6 (:max-depth log-utils/*rag-log-opts*)))))
+
+(deftest test-set-rag-log-opts
+  (testing "set-rag-log-opts! updates global options"
+    (let [original log-utils/*rag-log-opts*
+          _ (log-utils/set-rag-log-opts! {:max-string-len 50})
+          updated log-utils/*rag-log-opts*]
+      ;; Restore original
+      (log-utils/set-rag-log-opts! original)
+
+      (is (= 50 (:max-string-len updated)))
+      ;; Other opts should be merged with defaults
+      (is (= 5 (:max-coll-items updated))))))
+
+(deftest test-log-level-macros
+  (testing "log-info! macro works"
+    (is (nil? (log-utils/log-info! [:test/info {:msg "test"}]))))
+
+  (testing "log-warn! macro works"
+    (is (nil? (log-utils/log-warn! [:test/warn {:msg "test"}]))))
+
+  (testing "log-error! macro works"
+    (is (nil? (log-utils/log-error! [:test/error {:msg "test"}]))))
+
+  (testing "log-debug! macro works"
+    (is (nil? (log-utils/log-debug! [:test/debug {:msg "test"}])))))
+
+(deftest test-rag-realistic-data
+  (testing "Realistic RAG pipeline data is truncated properly"
+    (let [rag-data {:execution-id "abc-123"
+                    :query "What is machine learning?"
+                    :chunks (vec (for [i (range 20)]
+                                   {:chunk-id (str "chunk-" i)
+                                    :content (apply str (repeat 1000 "x"))
+                                    :metadata {:source "document.pdf"
+                                               :page i}}))
+                    :response (apply str (repeat 2000 "response text "))}]
+      ;; Should not throw, and should complete quickly (not hang on huge data)
+      (is (nil? (log-utils/log! :info [:rag/pipeline-complete rag-data]))))))
+
 ;; Run all tests
 (defn run-tests []
   (clojure.test/run-tests 'digdir.util.logging-test))

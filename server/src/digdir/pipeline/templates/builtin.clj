@@ -12,15 +12,19 @@
 ;; =============================================================================
 
 (def simple-qa-graph
-  "Basic RAG graph: retrieve -> generate"
+  "Basic RAG graph: plan -> retrieve -> rerank -> generate"
   {:id :simple-qa
    :name "Simple Q&A"
-   :description "Basic question answering with retrieval"
+   :description "Basic question answering with query expansion and retrieval"
    :inputs [:user-query :docs-collection :chunks-collection :phrases-collection]
-   :outputs [:response :chunks]
-   :steps [{:id :retrieve
+   :outputs [:response :chunks :search-phrases]
+   :steps [{:id :plan
+            :skill :builtin/query-planner
+            :inputs {:query :$user-query
+                     :conversation-history []}}
+           {:id :retrieve
             :skill :builtin/retrieval
-            :inputs {:queries :$user-query  ; retrieval skill normalizes string to vector
+            :inputs {:queries [:plan :search-phrases]
                      :docs-collection :$docs-collection
                      :chunks-collection :$chunks-collection
                      :phrases-collection :$phrases-collection}}

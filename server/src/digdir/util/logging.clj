@@ -1,6 +1,9 @@
 (ns digdir.util.logging
-  "Utilities for safe and efficient logging of complex data structures"
-  (:require [clojure.string :as str]))
+  "Utilities for safe and efficient logging of complex data structures.
+
+   Includes Telemere wrappers for automatic truncation of RAG pipeline data."
+  (:require [clojure.string :as str]
+            [taoensso.telemere :as t]))
 
 ;; ============================================================================
 ;; Configuration defaults
@@ -135,3 +138,88 @@
    (safe-pr-str value {}))
   ([value opts]
    (pr-str (truncate-for-logging value opts))))
+
+;; ============================================================================
+;; RAG-specific logging with Telemere
+;; ============================================================================
+
+(def ^:private rag-default-opts
+  "More aggressive truncation defaults for RAG pipeline data.
+   RAG outputs tend to have long text content and many chunks."
+  {:max-string-len 200
+   :max-coll-items 5
+   :max-depth 6
+   :ellipsis "..."})
+
+(def ^:dynamic *rag-log-opts*
+  "Dynamic var for customizing RAG log truncation options per-thread.
+   Bind this to override defaults in specific contexts."
+  rag-default-opts)
+
+(defn set-rag-log-opts!
+  "Set global RAG logging options. Returns the previous options."
+  [opts]
+  (let [prev *rag-log-opts*]
+    (alter-var-root #'*rag-log-opts* (constantly (merge rag-default-opts opts)))
+    prev))
+
+(defn- truncate-log-data
+  "Truncate the data map in a Telemere log vector.
+   Preserves the event keyword, truncates the data map."
+  [log-vec opts]
+  (if (and (vector? log-vec) (>= (count log-vec) 2))
+    (let [[event-key data & rest] log-vec
+          truncated-data (if (map? data)
+                           (truncate-for-logging data opts)
+                           data)]
+      (into [event-key truncated-data] rest))
+    log-vec))
+
+(defn log!
+  "Log with automatic truncation for RAG data.
+
+   Wraps taoensso.telemere/log! with automatic truncation of the data map.
+   Uses RAG-optimized defaults that are more aggressive than general logging.
+
+   Usage:
+     (log! :info [:event/name {:key value}])
+     (log! :info [:event/name {:key value}] {:max-string-len 100})
+
+   The optional third argument overrides truncation options:
+     :max-string-len  - Max chars for strings (default 200)
+     :max-coll-items  - Max items in collections (default 5)
+     :max-depth       - Max recursion depth (default 6)"
+  ([level log-vec]
+   (log! level log-vec {}))
+  ([level log-vec opts]
+   (let [effective-opts (merge *rag-log-opts* opts)
+         truncated-vec (truncate-log-data log-vec effective-opts)]
+     (t/log! level truncated-vec))))
+
+(defmacro log-info!
+  "Log at INFO level with automatic RAG data truncation."
+  ([log-vec]
+   `(log! :info ~log-vec))
+  ([log-vec opts]
+   `(log! :info ~log-vec ~opts)))
+
+(defmacro log-warn!
+  "Log at WARN level with automatic RAG data truncation."
+  ([log-vec]
+   `(log! :warn ~log-vec))
+  ([log-vec opts]
+   `(log! :warn ~log-vec ~opts)))
+
+(defmacro log-error!
+  "Log at ERROR level with automatic RAG data truncation."
+  ([log-vec]
+   `(log! :error ~log-vec))
+  ([log-vec opts]
+   `(log! :error ~log-vec ~opts)))
+
+(defmacro log-debug!
+  "Log at DEBUG level with automatic RAG data truncation."
+  ([log-vec]
+   `(log! :debug ~log-vec))
+  ([log-vec opts]
+   `(log! :debug ~log-vec ~opts)))
