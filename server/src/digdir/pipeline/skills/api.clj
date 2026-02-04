@@ -55,12 +55,12 @@
     (register-builtin-templates!)
     (reset! !initialized true)))
 
-(defn reset!
+(defn reset-skills!
   "Reset the skills system. Clears all registrations."
   []
   (skills/clear-registry!)
   (templates/clear-registry!)
-  (clojure.core/reset! !initialized false))
+  (reset! !initialized false))
 
 ;; =============================================================================
 ;; Skill Execution

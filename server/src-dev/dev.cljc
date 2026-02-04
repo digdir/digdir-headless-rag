@@ -7,6 +7,7 @@
    #?(:clj [clojure.tools.logging :as log])
 
    #?(:clj [digdir.api.http :as server])
+   #?(:clj [digdir.pipeline.skills.init :as skills-init])
    #?(:clj [clojure.repl.deps :refer [sync-deps add-lib]])
    ))
 
@@ -17,6 +18,12 @@
 #?(:clj ; server entrypoint
    (defn -main [& args]
      (log/info "Starting Electric compiler and server...")
+
+     ;; Initialize the skills system
+     (log/info "Initializing skills system...")
+     (let [result (skills-init/initialize!)]
+       (log/info (str "Skills initialized: " (:skills-registered result) " skills, "
+                      (:templates-registered result) " templates")))
 
      (shadow-cljs-compiler-server/start!)
      (shadow-cljs-compiler/watch :dev)

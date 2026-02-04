@@ -20,7 +20,7 @@
    :outputs [:response :chunks]
    :steps [{:id :retrieve
             :skill :builtin/retrieval
-            :inputs {:queries [:$user-query]
+            :inputs {:queries :$user-query  ; retrieval skill normalizes string to vector
                      :docs-collection :$docs-collection
                      :chunks-collection :$chunks-collection
                      :phrases-collection :$phrases-collection}}
@@ -96,7 +96,7 @@
    :outputs [:verification :evidence]
    :steps [{:id :retrieve
             :skill :builtin/retrieval
-            :inputs {:queries [:$claim]
+            :inputs {:queries :$claim  ; retrieval skill normalizes string to vector
                      :docs-collection :$docs-collection
                      :chunks-collection :$chunks-collection
                      :phrases-collection :$phrases-collection}}

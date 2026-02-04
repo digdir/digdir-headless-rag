@@ -121,7 +121,7 @@
     (initialize!))
   true)
 
-(defn reset!
+(defn reset-skills!
   "Reset the skill system to uninitialized state.
 
    Clears all registrations. Useful for testing."
@@ -129,16 +129,16 @@
   (skills-core/clear-registry!)
   (templates-core/clear-registry!)
   (reset! !init-state {:initialized false
-                        :skills-registered 0
-                        :templates-registered 0
-                        :initialized-at nil}))
+                       :skills-registered 0
+                       :templates-registered 0
+                       :initialized-at nil}))
 
 (defn reinitialize!
   "Force re-initialization of the skill system.
 
    Returns: New initialization state"
   []
-  (reset!)
+  (reset-skills!)
   (initialize!))
 
 ;; =============================================================================
@@ -208,7 +208,7 @@
   (health-check)
 
   ;; Reset for testing
-  (reset!)
+  (reset-skills!)
 
   ;; Force re-initialization
   (reinitialize!))

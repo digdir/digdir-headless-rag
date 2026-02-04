@@ -21,10 +21,13 @@
 (def InputRef
   "Schema for input references in graph steps.
    Can be a keyword (graph input if starts with $, or step id)
-   or a vector [step-id output-key]."
+   or a vector [step-id output-key] for specific outputs,
+   or a single-element vector [:$ref] to wrap a scalar into an array,
+   or any other value as a literal (e.g., [] for empty list)."
   [:or
    keyword?
-   [:vector {:min 2 :max 2} keyword? keyword?]])
+   [:vector keyword?]
+   any?])
 
 ;; =============================================================================
 ;; Graph Step Schema

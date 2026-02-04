@@ -36,7 +36,7 @@
   "Execute the retrieval skill.
 
    Inputs:
-     :queries - Vector of search query strings
+     :queries - Vector of search query strings, or a single query string
      :docs-collection - TypeSense documents collection name
      :chunks-collection - TypeSense chunks collection name
      :phrases-collection - TypeSense phrases collection name
@@ -50,6 +50,12 @@
      :search-attribution - Map of search-type to hit counts"
   [{:keys [inputs parameters services pipeline-config] :as ctx}]
   (let [{:keys [queries docs-collection chunks-collection phrases-collection]} inputs
+        ;; Normalize queries to always be a vector
+        queries (cond
+                  (nil? queries) []
+                  (string? queries) [queries]
+                  (sequential? queries) (vec queries)
+                  :else [queries])
         {:keys [limit filter-by]} parameters
         opts {:tenant (:tenant pipeline-config)
               :environment (:environment pipeline-config)}

@@ -158,7 +158,8 @@
                      :max-tokens 4096
                      :rerank-top-k 40
                      :context-top-k 10
-                     :rerank-threshold nil}
+                     :rerank-threshold nil
+                     :use-skills false}
             :execution-id nil
             :show-sidebar true
             :active-branch-path {}    ; Map of parent-msg-id -> selected child index
@@ -1746,7 +1747,20 @@
          (dom/props {:type "number" :style input-style
                      :value (str (:context-top-k config))
                      :min "1" :max "50"})
-         (dom/On "input" #(on-config-change (assoc config :context-top-k (js/parseInt (.. % -target -value) 10))) nil))))))))
+         (dom/On "input" #(on-config-change (assoc config :context-top-k (js/parseInt (.. % -target -value) 10))) nil)))
+       ;; Use Skills toggle (experimental)
+       (dom/div
+        (dom/props {:style {:display "flex" :align-items "center" :gap "0.5rem"}})
+        (dom/input
+         (dom/props {:type "checkbox"
+                     :id "use-skills-toggle"
+                     :checked (boolean (:use-skills config))
+                     :style {:width "1rem" :height "1rem" :cursor "pointer"}})
+         (dom/On "change" #(on-config-change (assoc config :use-skills (.. % -target -checked))) nil))
+        (dom/label
+         (dom/props {:for "use-skills-toggle"
+                     :style (merge label-style {:margin-bottom "0" :cursor "pointer"})})
+         (dom/text "Use Skills (experimental)"))))))))
 
 (e/defn ConversationSidebar
   "Sidebar listing playground conversations."

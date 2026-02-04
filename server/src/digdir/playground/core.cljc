@@ -14,6 +14,8 @@
             #?(:clj [clojure.data.json :as json])
             #?(:clj [clj-http.client :as http])
             #?(:clj [taoensso.telemere :as t])
+            #?(:clj [digdir.pipeline.skills.api :as skills-api])
+            #?(:clj [digdir.rag.skills.core :as skills-core])
             [clojure.string :as str]))
 
 ;; Execution state atom - stores results from each pipeline stage
@@ -491,6 +493,96 @@
           (mapv #(select-keys % [:message/role :message/text])))))
 
 #?(:clj
+   (defn execute-skills-pipeline
+     "Execute the playground pipeline using the skills system.
+      This is an experimental alternative to the classic pipeline.
+
+      Parameters:
+        execution-id - Execution ID for tracking
+        query - User query
+        all-messages - Conversation history
+        rag-params - RAG configuration parameters
+        config - Playground config (model, temperature, etc.)
+        ts-opts - TypeSense options
+
+      Returns: Map with :response and :diagnostics"
+     [execution-id query all-messages rag-params config ts-opts]
+     (t/log! :info [:skills-pipeline/starting {:execution-id execution-id}])
+
+     ;; Update stage
+     (update-execution! execution-id {:stage :skills-init})
+
+     (try
+       ;; Initialize skills system (safe to call multiple times)
+       (skills-api/initialize!)
+
+       ;; Build inputs for the simple-qa template
+       (let [collections {:docs-collection (:docsCollectionName rag-params)
+                          :chunks-collection (:chunksCollectionName rag-params)
+                          :phrases-collection (:phrasesCollectionName rag-params)}
+             opts {:tenant (:tenant rag-params)
+                   :environment (:environment rag-params)
+                   :parameters {:model (:selected-model rag-params)
+                                :temperature (or (:temperature config) 0.1)
+                                :context-top-k (or (:contextTopkChunks rag-params) 10)
+                                :rerank-top-k (or (:rerankTopkChunks rag-params) 40)}}]
+
+         ;; Update stage: query planning
+         (update-execution! execution-id {:stage :skills-query-planning})
+
+         ;; Execute the simple-qa template which runs:
+         ;; query-planner -> retrieval -> rerank -> synthesis
+         (t/log! :info [:skills-pipeline/executing-template
+                        {:template :builtin/simple-qa
+                         :query query
+                         :collections collections}])
+
+         (let [result (skills-api/simple-qa query collections opts)]
+           (if (skills-core/result-error? result)
+             ;; Handle error
+             (let [error (skills-core/get-result-error result)]
+               (t/log! :error [:skills-pipeline/failed {:error error}])
+               (update-execution! execution-id
+                                  {:status :error
+                                   :error (:error-message error)
+                                   :error-type (str (:error-type error))})
+               {:response nil
+                :error error
+                :diagnostics {:skills-error error}})
+
+             ;; Handle success
+             (let [outputs (skills-core/get-result-outputs result)
+                   response (:response outputs)
+                   chunks (:chunks outputs)
+                   search-phrases (:search-phrases outputs)]
+
+               (t/log! :info [:skills-pipeline/completed
+                              {:execution-id execution-id
+                               :response-length (count response)
+                               :chunks-count (count chunks)}])
+
+               ;; Stream the response to execution state
+               (update-execution! execution-id
+                                  {:stage :skills-generating
+                                   :streaming-content response})
+
+               {:response response
+                :chunks chunks
+                :diagnostics {:query-relaxation search-phrases
+                              :used-chunks-count (count chunks)
+                              :used-chunks (mapv #(select-keys % [:chunk_id :rank :content_markdown]) chunks)
+                              :skill-execution-metadata (skills-core/get-result-metadata result)}}))))
+
+       (catch Exception e
+         (t/log! :error [:skills-pipeline/exception
+                         {:execution-id execution-id
+                          :error (.getMessage e)}])
+         {:response nil
+          :error {:error-type :exception
+                  :error-message (.getMessage e)}
+          :diagnostics {:exception (.getMessage e)}}))))
+
+#?(:clj
    (defn execute-playground-chat-pipeline
      "Execute the playground pipeline with conversation history and persistence.
       Supports multi-turn context and branching.
@@ -512,239 +604,295 @@
       Returns the execution-id for tracking."
      [{:keys [conversation-id tenant environment entity-id query config parent-msg-id branch-index
               query-relax-prompt rag-generate-prompt filter-by user-id]}]
-     (let [execution-id (nano-id)
-           conn (db/get-conn)
+     (let [execution-id     (nano-id)
+           conn             (db/get-conn)
            ;; Use explicit tenant/environment if provided, otherwise fall back to env vars
            effective-tenant (or tenant (digdir.config.core/get-tenant))
-           effective-env (or environment (digdir.config.core/get-environment))
+           effective-env    (or environment (digdir.config.core/get-environment))
            ;; Get entity with explicit scope
-           entity (when entity-id
-                    (when-let [config-conn (digdir.config.db/get-conn)]
-                      (digdir.config.db/get-entity
-                       @config-conn
-                       effective-tenant
-                       effective-env
-                       entity-id
-                       (digdir.config.core/get-master-key))))
-           _ (when-not entity
-               (throw (ex-info (str "Entity not found: " entity-id) {:entity-id entity-id
-                                                                      :tenant effective-tenant
-                                                                      :environment effective-env})))
+           entity           (when entity-id
+                              (when-let [config-conn (digdir.config.db/get-conn)]
+                                (digdir.config.db/get-entity
+                                 @config-conn
+                                 effective-tenant
+                                 effective-env
+                                 entity-id
+                                 (digdir.config.core/get-master-key))))
+           _                (when-not entity
+                              (throw (ex-info (str "Entity not found: " entity-id) {:entity-id   entity-id
+                                                                                    :tenant      effective-tenant
+                                                                                    :environment effective-env})))
 
            ;; Create conversation if not provided
-           actual-convo-id (or conversation-id
-                               (:conversation-id
-                                (db/create-playground-conversation conn entity-id user-id)))
+           actual-convo-id  (or conversation-id
+                                (:conversation-id
+                                 (db/create-playground-conversation conn entity-id user-id)))
 
            ;; Get message lineage for context (if we have a parent)
            context-messages (when parent-msg-id
                               (db/get-message-lineage @conn parent-msg-id))
 
            ;; Build full message history for query relaxation
-           all-messages (-> (messages->context (or context-messages []))
-                            (conj {:message/role :user
-                                   :message/text query}))
+           all-messages     (-> (messages->context (or context-messages []))
+                                (conj {:message/role :user
+                                       :message/text query}))
 
            ;; Initialize execution state
-           _ (swap! !playground-executions assoc execution-id
-                    {:status :running
-                     :stage :init
-                     :streaming-content ""
-                     :results {}
-                     :error nil
-                     :started-at (str (java.time.Instant/now))
-                     :tenant effective-tenant
-                     :environment effective-env
-                     :entity-id entity-id
-                     :conversation-id actual-convo-id
-                     :query query
-                     :parent-msg-id parent-msg-id
-                     :branch-index branch-index})
+           _                (swap! !playground-executions assoc execution-id
+                                   {:status            :running
+                                    :stage             :init
+                                    :streaming-content ""
+                                    :results           {}
+                                    :error             nil
+                                    :started-at        (str (java.time.Instant/now))
+                                    :tenant            effective-tenant
+                                    :environment       effective-env
+                                    :entity-id         entity-id
+                                    :conversation-id   actual-convo-id
+                                    :query             query
+                                    :parent-msg-id     parent-msg-id
+                                    :branch-index      branch-index})
 
            ;; Build params for reranking
            ;; Uses 3-level precedence: playground config > entity config > global default
-           rag-params {:conversation-id actual-convo-id
-                       :execution-id execution-id
-                       :tenant effective-tenant
-                       :environment effective-env
-                       :entity-id entity-id
-                       :original_user_query query
-                       :translated_user_query query
-                       :selected-model (:model config)
-                       ;; Rerank parameters
-                       :rerankTopkChunks (or (:rerank-top-k config)
-                                             (:rerank-top-k entity))
-                       :rerankMaxChunkLength (or (:rerank-max-chunk-length config)
-                                                 (:rerank-max-chunk-length entity))
-                       :rerankMaxLength (or (:rerank-max-total-length config)
-                                            (:rerank-max-total-length entity))
-                       ;; Context parameters
-                       :contextTopkChunks (or (:context-top-k config)
-                                              (:context-top-k entity))
-                       :contextMaxChunkLength (or (:context-max-chunk-length config)
-                                                  (:context-max-chunk-length entity))
-                       :maxContextLength (or (:context-max-total-length config)
-                                             (:context-max-total-length entity))
-                       ;; Collection names
-                       :docsCollectionName (:docs-collection entity)
-                       :chunksCollectionName (:chunks-collection entity)
-                       :phrasesCollectionName (:phrases-collection entity)
-                       ;; Prompts (use new kebab-case property names)
-                       :promptRagQueryRelax (or query-relax-prompt (:prompt-query-relax entity))
-                       :promptRagGenerate (or rag-generate-prompt (:prompt-rag-generate entity))}
+           rag-params       {:conversation-id       actual-convo-id
+                             :execution-id          execution-id
+                             :tenant                effective-tenant
+                             :environment           effective-env
+                             :entity-id             entity-id
+                             :original_user_query   query
+                             :translated_user_query query
+                             :selected-model        (:model config)
+                             ;; Rerank parameters
+                             :rerankTopkChunks      (or (:rerank-top-k config)
+                                                        (:rerank-top-k entity))
+                             :rerankMaxChunkLength  (or (:rerank-max-chunk-length config)
+                                                        (:rerank-max-chunk-length entity))
+                             :rerankMaxLength       (or (:rerank-max-total-length config)
+                                                        (:rerank-max-total-length entity))
+                             ;; Context parameters
+                             :contextTopkChunks     (or (:context-top-k config)
+                                                        (:context-top-k entity))
+                             :contextMaxChunkLength (or (:context-max-chunk-length config)
+                                                        (:context-max-chunk-length entity))
+                             :maxContextLength      (or (:context-max-total-length config)
+                                                        (:context-max-total-length entity))
+                             ;; Collection names
+                             :docsCollectionName    (:docs-collection entity)
+                             :chunksCollectionName  (:chunks-collection entity)
+                             :phrasesCollectionName (:phrases-collection entity)
+                             ;; Prompts (use new kebab-case property names)
+                             :promptRagQueryRelax   (or query-relax-prompt (:prompt-query-relax entity))
+                             :promptRagGenerate     (or rag-generate-prompt (:prompt-rag-generate entity))}
 
            ;; Build Typesense opts for config resolution with explicit tenant/environment
-           ts-opts {:tenant effective-tenant :environment effective-env}]
+           ts-opts          {:tenant      effective-tenant
+                             :environment effective-env}]
 
        ;; Execute pipeline in a future to not block
        (future
          (try
-           ;; Stage 1: Query relaxation with full history
-           (let [search-phrases (execute-query-relaxation-with-history
-                                 execution-id
-                                 all-messages
-                                 (:promptRagQueryRelax rag-params))]
-
-             ;; Stage 2: Run all three searches (pass ts-opts for config resolution)
-             (let [phrase-results (execute-phrase-search
-                                   execution-id
-                                   (:phrasesCollectionName rag-params)
-                                   (:docsCollectionName rag-params)
-                                   search-phrases
-                                   (:phrase-gen-prompt entity)
-                                   filter-by
-                                   ts-opts)
-                   metadata-results (execute-metadata-search
-                                     execution-id
-                                     (:chunksCollectionName rag-params)
-                                     (:docsCollectionName rag-params)
-                                     search-phrases
-                                     filter-by
-                                     ts-opts)
-                   content-results (execute-content-search
+           ;; Check if skills mode is enabled
+           (if (:use-skills config)
+             ;; === SKILLS-BASED EXECUTION ===
+             (do
+               (t/log! :info [:playground-chat/using-skills {:execution-id execution-id}])
+               (let [result        (execute-skills-pipeline
                                     execution-id
-                                    (:chunksCollectionName rag-params)
-                                    (:docsCollectionName rag-params)
-                                    search-phrases
-                                    filter-by
-                                    ts-opts)]
+                                    query
+                                    all-messages
+                                    rag-params
+                                    config
+                                    ts-opts)
+                     response-text (:response result)
+                     diagnostics   (:diagnostics result)]
 
-               ;; Stage 3: Merge results (with optional threshold filtering)
-               (let [merged (execute-merge-results
-                             execution-id
-                             phrase-results
-                             metadata-results
-                             content-results
-                             (:rerank-threshold config))]
+                 (if (:error result)
+                   ;; Skills execution failed
+                   (update-execution! execution-id
+                                      {:status     :error
+                                       :error      (get-in result [:error :error-message])
+                                       :error-type (str (get-in result [:error :error-type]))})
 
-                 ;; Stage 4: Retrieve chunks
-                 (let [retrieved (execute-retrieve-chunks
-                                  execution-id
-                                  (:docsCollectionName rag-params)
-                                  (:chunksCollectionName rag-params)
-                                  merged
-                                  ts-opts)]
+                   ;; Skills execution succeeded - persist messages
+                   (let [;; Persist user message
+                         user-msg-result      (db/transact-playground-user-msg
+                                               conn
+                                               actual-convo-id
+                                               query
+                                               config
+                                               parent-msg-id
+                                               branch-index)
+                         user-msg-id          (:message/id user-msg-result)
 
-                   ;; Stage 5: Rerank
-                   (let [{:keys [used-chunks full-prompt]} (execute-rerank
-                                                            execution-id
-                                                            retrieved
-                                                            rag-params)]
+                         ;; Persist assistant response
+                         assistant-msg-result (db/transact-playground-assistant-msg
+                                               conn
+                                               actual-convo-id
+                                               response-text
+                                               diagnostics
+                                               execution-id
+                                               user-msg-id
+                                               0)]
 
-                     ;; Stage 6: Generate response
-                     (stream-playground-generation execution-id full-prompt config)
-
-                     ;; Store used chunks in execution state
-                     (update-execution-results! execution-id :used-chunks used-chunks)
-
-                     ;; === PERSISTENCE ===
-                     ;; Now persist the user message and assistant response to Datahike
-                     (let [response-text (get-in @!playground-executions
-                                                  [execution-id :streaming-content])
-                           ;; Build lookup for title/metadata from retrieved chunks
-                           docs-coll-key (keyword (:docsCollectionName rag-params))
-                           chunk-lookup (into {}
-                                              (map (fn [c]
-                                                     [(:chunk_id c)
-                                                      {:title (get-in c [docs-coll-key :title])
-                                                       :metadata (:metadata c)}])
-                                                   retrieved))
-                           ;; Enrich result with title/metadata from lookup
-                           enrich-result (fn [r]
-                                           (let [chunk-id (:chunk_id r)
-                                                 lookup-data (get chunk-lookup chunk-id)]
-                                             (-> (select-keys r [:chunk_id :rank :search-types :hit-count])
-                                                 (assoc :title (:title lookup-data))
-                                                 (assoc :metadata (or (:metadata lookup-data)
-                                                                      (:metadata r))))))
-                           diagnostics {:query-relaxation search-phrases
-                                        :phrase-search-count (count phrase-results)
-                                        :phrase-search (mapv enrich-result (take 20 phrase-results))
-                                        :metadata-search-count (count metadata-results)
-                                        :metadata-search (mapv enrich-result (take 20 metadata-results))
-                                        :content-search-count (count content-results)
-                                        :content-search (mapv enrich-result (take 20 content-results))
-                                        :merged-count (count merged)
-                                        :merged-results (mapv enrich-result (take 20 merged))
-                                        :used-chunks-count (count used-chunks)
-                                        :used-chunks (mapv enrich-result used-chunks)}
-
-                           ;; Persist user message
-                           user-msg-result (db/transact-playground-user-msg
-                                            conn
-                                            actual-convo-id
-                                            query
-                                            config
-                                            parent-msg-id
-                                            branch-index)
-                           user-msg-id (:message/id user-msg-result)
-
-                           ;; Persist assistant response (parent is the user message)
-                           assistant-msg-result (db/transact-playground-assistant-msg
-                                                 conn
-                                                 actual-convo-id
-                                                 response-text
-                                                 diagnostics
-                                                 execution-id
-                                                 user-msg-id
-                                                 0)]  ; Assistant always branch-index 0 under its parent
-
-                       ;; Store message IDs in execution state
-                       (update-execution! execution-id
-                                          {:user-msg-id user-msg-id
-                                           :assistant-msg-id (:message/id assistant-msg-result)}))
+                     ;; Store message IDs in execution state
+                     (update-execution! execution-id
+                                        {:user-msg-id      user-msg-id
+                                         :assistant-msg-id (:message/id assistant-msg-result)})
 
                      ;; Mark complete
                      (update-execution! execution-id
-                                        {:status :complete
-                                         :stage :complete
-                                         :completed-at (str (java.time.Instant/now))}))))))
+                                        {:status       :complete
+                                         :stage        :complete
+                                         :completed-at (str (java.time.Instant/now))})))))
+
+             ;; === CLASSIC EXECUTION (else branch of skills if) ===
+             ;; Stage 1: Query relaxation with full history
+             (let [search-phrases (execute-query-relaxation-with-history
+                                   execution-id
+                                   all-messages
+                                   (:promptRagQueryRelax rag-params))]
+
+               ;; Stage 2: Run all three searches (pass ts-opts for config resolution)
+               (let [phrase-results   (execute-phrase-search
+                                       execution-id
+                                       (:phrasesCollectionName rag-params)
+                                       (:docsCollectionName rag-params)
+                                       search-phrases
+                                       (:phrase-gen-prompt entity)
+                                       filter-by
+                                       ts-opts)
+                     metadata-results (execute-metadata-search
+                                       execution-id
+                                       (:chunksCollectionName rag-params)
+                                       (:docsCollectionName rag-params)
+                                       search-phrases
+                                       filter-by
+                                       ts-opts)
+                     content-results  (execute-content-search
+                                       execution-id
+                                       (:chunksCollectionName rag-params)
+                                       (:docsCollectionName rag-params)
+                                       search-phrases
+                                       filter-by
+                                       ts-opts)]
+
+                 ;; Stage 3: Merge results (with optional threshold filtering)
+                 (let [merged (execute-merge-results
+                               execution-id
+                               phrase-results
+                               metadata-results
+                               content-results
+                               (:rerank-threshold config))]
+
+                   ;; Stage 4: Retrieve chunks
+                   (let [retrieved (execute-retrieve-chunks
+                                    execution-id
+                                    (:docsCollectionName rag-params)
+                                    (:chunksCollectionName rag-params)
+                                    merged
+                                    ts-opts)]
+
+                     ;; Stage 5: Rerank
+                     (let [{:keys [used-chunks full-prompt]} (execute-rerank
+                                                              execution-id
+                                                              retrieved
+                                                              rag-params)]
+
+                       ;; Stage 6: Generate response
+                       (stream-playground-generation execution-id full-prompt config)
+
+                       ;; Store used chunks in execution state
+                       (update-execution-results! execution-id :used-chunks used-chunks)
+
+                       ;; === PERSISTENCE ===
+                       ;; Now persist the user message and assistant response to Datahike
+                       (let [response-text        (get-in @!playground-executions
+                                                          [execution-id :streaming-content])
+                             ;; Build lookup for title/metadata from retrieved chunks
+                             docs-coll-key        (keyword (:docsCollectionName rag-params))
+                             chunk-lookup         (into {}
+                                                        (map (fn [c]
+                                                               [(:chunk_id c)
+                                                                {:title    (get-in c [docs-coll-key :title])
+                                                                 :metadata (:metadata c)}])
+                                                             retrieved))
+                             ;; Enrich result with title/metadata from lookup
+                             enrich-result        (fn [r]
+                                                    (let [chunk-id    (:chunk_id r)
+                                                          lookup-data (get chunk-lookup chunk-id)]
+                                                      (-> (select-keys r [:chunk_id :rank :search-types :hit-count])
+                                                          (assoc :title (:title lookup-data))
+                                                          (assoc :metadata (or (:metadata lookup-data)
+                                                                               (:metadata r))))))
+                             diagnostics          {:query-relaxation      search-phrases
+                                                   :phrase-search-count   (count phrase-results)
+                                                   :phrase-search         (mapv enrich-result (take 20 phrase-results))
+                                                   :metadata-search-count (count metadata-results)
+                                                   :metadata-search       (mapv enrich-result (take 20 metadata-results))
+                                                   :content-search-count  (count content-results)
+                                                   :content-search        (mapv enrich-result (take 20 content-results))
+                                                   :merged-count          (count merged)
+                                                   :merged-results        (mapv enrich-result (take 20 merged))
+                                                   :used-chunks-count     (count used-chunks)
+                                                   :used-chunks           (mapv enrich-result used-chunks)}
+
+                             ;; Persist user message
+                             user-msg-result      (db/transact-playground-user-msg
+                                                   conn
+                                                   actual-convo-id
+                                                   query
+                                                   config
+                                                   parent-msg-id
+                                                   branch-index)
+                             user-msg-id          (:message/id user-msg-result)
+
+                             ;; Persist assistant response (parent is the user message)
+                             assistant-msg-result (db/transact-playground-assistant-msg
+                                                   conn
+                                                   actual-convo-id
+                                                   response-text
+                                                   diagnostics
+                                                   execution-id
+                                                   user-msg-id
+                                                   0)]  ; Assistant always branch-index 0 under its parent
+                         
+                         ;; Store message IDs in execution state
+                         (update-execution! execution-id
+                                            {:user-msg-id      user-msg-id
+                                             :assistant-msg-id (:message/id assistant-msg-result)}))
+
+                       ;; Mark complete
+                       (update-execution! execution-id
+                                          {:status       :complete
+                                           :stage        :complete
+                                           :completed-at (str (java.time.Instant/now))}))))))) 
            (catch Exception e
              (t/log! :error [:playground-chat/pipeline-error
-                             {:execution-id execution-id
+                             {:execution-id  execution-id
                               :error-message (.getMessage e)
-                              :error-type (str (type e))}])
+                              :error-type    (str (type e))}])
              ;; Gather Typesense diagnostics on error
              (let [expected-collections [(:docs-collection entity)
                                          (:chunks-collection entity)
                                          (:phrases-collection entity)]
-                   ts-diagnostics (try
-                                    (get-typesense-diagnostics expected-collections ts-opts)
-                                    (catch Exception diag-e
-                                      {:diagnostic-error (.getMessage diag-e)}))]
+                   ts-diagnostics       (try
+                                          (get-typesense-diagnostics expected-collections ts-opts)
+                                          (catch Exception diag-e
+                                            {:diagnostic-error (.getMessage diag-e)}))]
                (update-execution! execution-id
-                                  {:status :error
-                                   :error (.getMessage e)
-                                   :error-type (str (type e))
+                                  {:status                :error
+                                   :error                 (.getMessage e)
+                                   :error-type            (str (type e))
                                    :typesense-diagnostics ts-diagnostics
                                    ;; Add entity/scope info for debugging config resolution
-                                   :debug-info {:entity-id entity-id
-                                                :effective-tenant effective-tenant
-                                                :effective-env effective-env
-                                                :entity-config (select-keys entity [:id :name :docs-collection
-                                                                                    :chunks-collection :phrases-collection])}
-                                   :completed-at (str (java.time.Instant/now))})))))
+                                   :debug-info            {:entity-id        entity-id
+                                                           :effective-tenant effective-tenant
+                                                           :effective-env    effective-env
+                                                           :entity-config    (select-keys entity [:id :name :docs-collection
+                                                                                                  :chunks-collection :phrases-collection])}
+                                   :completed-at          (str (java.time.Instant/now))})))))
 
        ;; Return execution ID and conversation ID immediately
-       {:execution-id execution-id
+       {:execution-id    execution-id
         :conversation-id actual-convo-id})))
