@@ -46,7 +46,8 @@
        result)
 
      (catch Exception e
-       (t/error! :pipeline.episerver/failed {} e)
+       (t/error! {:id :pipeline.episerver/failed
+                  :error e})
        (throw e)))))
 
 (comment

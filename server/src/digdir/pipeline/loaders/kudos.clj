@@ -32,7 +32,7 @@
        result)
 
      (catch Exception e
-       (t/error! :pipeline.kudos/failed {} e)
+       (t/error! {:id :pipeline.kudos/failed :error e})
        (throw e)))))
 
 (defn mk-import-single-document-t
@@ -53,7 +53,7 @@
        result)
 
      (catch Exception e
-       (t/error! :pipeline.kudos/single-failed {:data {:doc-id doc-id}} e)
+       (t/error! {:id :pipeline.kudos/single-failed :data {:doc-id doc-id} :error e})
        (throw e)))))
 
 (comment

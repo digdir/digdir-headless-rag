@@ -767,6 +767,64 @@
   [property]
   (get pipeline-property-to-path property))
 
+;; =============================================================================
+;; Skill Configuration (Scope-Based Design)
+;; =============================================================================
+
+(def skill-property-to-path
+  "Maps skill property keywords to their database paths.
+   Organized by functional area:
+   - pipeline.skills.{skill-id}/enabled - Whether skill is enabled
+   - pipeline.skills.{skill-id}/model - Model override
+   - pipeline.skills.{skill-id}/prompt - Prompt override
+   - pipeline.skills.{skill-id}/temperature - Temperature override
+   - pipeline.skills.{skill-id}/top-k - Top-k override"
+  {;; Common skill properties (applied to any skill)
+   :enabled                     "pipeline.skills.enabled"
+   :model                       "pipeline.skills.model"
+   :prompt                      "pipeline.skills.prompt"
+   :temperature                 "pipeline.skills.temperature"
+   :top-k                       "pipeline.skills.top-k"
+   :max-tokens                  "pipeline.skills.max-tokens"
+
+   ;; Retrieval skill specific
+   :retrieval-limit             "pipeline.skills.retrieval.limit"
+   :retrieval-filter            "pipeline.skills.retrieval.filter"
+
+   ;; Rerank skill specific
+   :rerank-top-k                "pipeline.skills.rerank.top-k"
+   :rerank-max-chunk-length     "pipeline.skills.rerank.max-chunk-length"
+   :rerank-max-total-length     "pipeline.skills.rerank.max-total-length"
+
+   ;; Synthesis skill specific
+   :synthesis-max-context       "pipeline.skills.synthesis.max-context"
+   :synthesis-system-prompt     "pipeline.skills.synthesis.system-prompt"
+
+   ;; Query planner skill specific
+   :query-planner-max-queries   "pipeline.skills.query-planner.max-queries"})
+
+;; Reverse mapping: database path -> keyword
+(def path-to-skill-property
+  "Reverse mapping from database paths to skill property keywords."
+  (into {} (map (fn [[k v]] [v k]) skill-property-to-path)))
+
+(def skill-property-paths
+  "Config paths for skill properties.
+   These paths are used with entity scope (skill ID in scope field, not path).
+   Enables full 8-level inheritance for skill properties."
+  (set (vals skill-property-to-path)))
+
+(def skill-properties
+  "Standard properties that skills can have (as keywords)."
+  (set (keys skill-property-to-path)))
+
+(defn skill-property-path
+  "Get the config path for a skill property.
+   Example: (skill-property-path :enabled) => \"pipeline.skills.enabled\"
+            (skill-property-path :retrieval-limit) => \"pipeline.skills.retrieval.limit\""
+  [property]
+  (get skill-property-to-path property))
+
 (defn list-tenants
   "Get all registered tenants from the config database.
    Returns a sorted vector of tenant ID strings."

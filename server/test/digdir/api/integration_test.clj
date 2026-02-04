@@ -15,16 +15,24 @@
 (def base-url (System/getenv "RAG_API_BASE_URL"))
 (def api-key (System/getenv "RAG_API_TEST_KEY"))
 
-(defn skip-if-not-configured []
-  (when (or (empty? base-url) (empty? api-key))
+(def ^:private integration-tests-configured?
+  "Flag indicating whether integration tests can run"
+  (and (not (empty? base-url))
+       (not (empty? api-key))))
+
+(defn skip-unless-configured
+  "Prints skip message and returns true if tests should be skipped"
+  []
+  (when-not integration-tests-configured?
     (println "Skipping integration tests: RAG_API_BASE_URL or RAG_API_TEST_KEY not set")
-    (System/exit 0)))
+    true))
 
 ;; === Fixtures ===
 
 (defn configuration-check-fixture [f]
-  (skip-if-not-configured)
-  (f))
+  ;; Only run the test if configured, otherwise just return without running
+  (when integration-tests-configured?
+    (f)))
 
 (use-fixtures :once configuration-check-fixture)
 

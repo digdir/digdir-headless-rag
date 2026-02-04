@@ -255,7 +255,7 @@
                          :search_stats (:search-attribution result)}]
 
       (log/info "Retrieval API request successful"
-                {:entity-id entity-id
+                {:entity-id pipeline-id
                  :chunks-count (count (:chunks result))})
 
       (-> (res/response (json/generate-string response-data))

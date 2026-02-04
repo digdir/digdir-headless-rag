@@ -14,10 +14,12 @@
 (def test-master-key "test-key-for-encryption")
 
 (defn setup-test-db []
-  (let [cfg {:store {:backend :mem :id "pipeline-integration-test"}}
-        conn (d/connect cfg)]
-    (config-db/ensure-schema! conn)
-    conn))
+  (let [cfg {:store {:backend :mem
+                     :id (str "pipeline-integration-test-" (random-uuid))}}]
+    (d/create-database cfg)
+    (let [conn (d/connect cfg)]
+      (config-db/ensure-schema! conn)
+      conn)))
 
 (defn cleanup-test-db [conn]
   (d/release conn))
@@ -25,7 +27,7 @@
 (defn with-test-db [f]
   (let [conn (setup-test-db)]
     (try
-      (binding [db/get-conn (constantly conn)]
+      (with-redefs [db/get-conn (constantly conn)]
         (f))
       (finally
         (cleanup-test-db conn)))))

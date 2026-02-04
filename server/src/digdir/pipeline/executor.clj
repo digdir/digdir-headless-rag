@@ -278,19 +278,19 @@
            (update-execution-status! conn execution-id :failed
                                      {:error-message (.getMessage e)})
 
-           (t/error! :pipeline/failed
-                     {:data {:execution-id execution-id
-                             :pipeline-id pipeline-id}}
-                     e)
+           (t/error! {:id :pipeline/failed
+                      :data {:execution-id execution-id
+                             :pipeline-id pipeline-id
+                             :error (.getMessage e)}})
 
            (throw e))))
 
      (catch Exception e
-       (t/error! :pipeline/execution-error
-                 {:data {:tenant tenant
+       (t/error! {:id :pipeline/execution-error
+                  :data {:tenant tenant
                          :environment environment
-                         :pipeline-name pipeline-name}}
-                 e)
+                         :pipeline-name pipeline-name
+                         :error (.getMessage e)}})
        (throw e)))))
 
 (defn cancel-execution!
@@ -340,8 +340,9 @@
       (try
         (m/? execution-task)
         (catch Exception e
-          (t/error! :pipeline/async-execution-error
-                    {:data {:execution-id execution-id}} e))))
+          (t/error! {:id :pipeline/async-execution-error
+                     :data {:execution-id execution-id
+                            :error (.getMessage e)}}))))
 
     execution-id))
 

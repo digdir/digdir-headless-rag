@@ -45,7 +45,7 @@
        result)
 
      (catch Exception e
-       (t/error! :pipeline.folder/failed {} e)
+       (t/error! {:id :pipeline.folder/failed :error e})
        (throw e)))))
 
 (comment

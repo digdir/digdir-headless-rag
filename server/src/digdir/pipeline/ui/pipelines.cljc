@@ -246,7 +246,7 @@
                           (let [[tok err] (e/Token (dom/On "click" identity nil))]
                             (when tok
                               ;; TODO: Confirm and delete
-                              (tok)))))))))))))))
+                              (tok))))))))))))))))
 
 (e/defn PipelineForm
   "Create/edit form for pipelines"

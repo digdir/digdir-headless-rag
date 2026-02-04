@@ -505,6 +505,133 @@
      :stack-trace (when e
                     (mapv str (.getStackTrace e)))}))
 
+;; =============================================================================
+;; Skill Registry
+;; =============================================================================
+
+(defonce ^{:private true
+           :doc "Atom containing registered skills, keyed by :skill/id"}
+  !skill-registry
+  (atom {}))
+
+(defn register-skill!
+  "Register a skill in the registry.
+
+  Args:
+    skill - Complete skill definition map with :metadata and :execute keys
+
+  Throws: ex-info if skill metadata is invalid
+  Returns: The registered skill"
+  [skill]
+  (let [metadata (:metadata skill)
+        execute-fn (:execute skill)]
+    ;; Validate metadata
+    (validate-skill-metadata! metadata)
+    ;; Validate execute function
+    (when-not (fn? execute-fn)
+      (throw (ex-info "Skill :execute must be a function"
+                      {:skill-id (:skill-id metadata)
+                       :execute execute-fn})))
+    ;; Register the skill
+    (let [skill-id (:skill-id metadata)]
+      (swap! !skill-registry assoc skill-id skill)
+      skill)))
+
+(defn get-skill
+  "Get a skill by ID from the registry.
+
+  Args:
+    skill-id - Keyword identifier for the skill
+
+  Returns: Skill definition map or nil if not found"
+  [skill-id]
+  (get @!skill-registry skill-id))
+
+(defn list-skills
+  "List all registered skills.
+
+  Returns: Sequence of skill definition maps"
+  []
+  (vals @!skill-registry))
+
+(defn list-skill-ids
+  "List all registered skill IDs.
+
+  Returns: Sequence of skill ID keywords"
+  []
+  (keys @!skill-registry))
+
+(defn unregister-skill!
+  "Remove a skill from the registry.
+
+  Args:
+    skill-id - Keyword identifier for the skill
+
+  Returns: The removed skill or nil if not found"
+  [skill-id]
+  (let [skill (get-skill skill-id)]
+    (swap! !skill-registry dissoc skill-id)
+    skill))
+
+(defn clear-registry!
+  "Clear all skills from the registry. Primarily for testing.
+
+  Returns: Empty map"
+  []
+  (reset! !skill-registry {}))
+
+;; =============================================================================
+;; Skill Execution
+;; =============================================================================
+
+(defn execute-skill
+  "Execute a skill with context validation.
+
+  Args:
+    skill-id - Keyword identifier for the skill
+    ctx - Execution context map (without :skill-id, will be added)
+
+  Returns: Execution result map with :outputs/:metadata on success,
+           or :error on failure"
+  [skill-id ctx]
+  (let [skill (get-skill skill-id)]
+    (if-not skill
+      ;; Skill not found
+      (error-result
+        :skill-not-found
+        (str "Skill not found: " skill-id)
+        {:skill-id skill-id
+         :available-skills (list-skill-ids)})
+      ;; Skill found, validate and execute
+      (let [metadata (:metadata skill)
+            execute-fn (:execute skill)
+            full-ctx (assoc ctx :skill-id skill-id)]
+        ;; Validate execution context structure
+        (if-not (valid-execution-context? full-ctx)
+          (error-result
+            :invalid-context
+            "Invalid execution context"
+            {:skill-id skill-id
+             :errors (me/humanize (m/explain ExecutionContext full-ctx))})
+          ;; Validate skill-specific requirements (inputs, services)
+          (if-let [validation-error (validate-context-for-skill metadata full-ctx)]
+            (error-result
+              (:error-type validation-error)
+              (:error-message validation-error)
+              (:error-data validation-error))
+            ;; Execute the skill
+            (let [start-time (System/currentTimeMillis)]
+              (try
+                (let [result (execute-fn full-ctx)
+                      end-time (System/currentTimeMillis)
+                      duration-ms (- end-time start-time)]
+                  ;; Add duration to metadata if successful
+                  (if (result-success? result)
+                    (update result :metadata assoc :duration-ms duration-ms)
+                    result))
+                (catch Exception e
+                  (wrap-execution-error e skill-id full-ctx))))))))))
+
 (comment
   ;; Example skill metadata
   (def example-metadata
