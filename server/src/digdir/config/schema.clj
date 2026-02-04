@@ -299,6 +299,58 @@
     :db/doc "User ID who created the tenant"}])
 
 ;; =============================================================================
+;; Pipeline Execution Schema
+;; =============================================================================
+
+(def pipeline-execution-schema
+  "Schema for tracking pipeline execution runs"
+  [{:db/ident :pipeline-execution/id
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one
+    :db/unique :db.unique/identity
+    :db/doc "Unique execution identifier"}
+
+   {:db/ident :pipeline-execution/pipeline-id
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one
+    :db/doc "ID of the pipeline being executed (format: tenant:env:pipeline-name)"}
+
+   {:db/ident :pipeline-execution/status
+    :db/valueType :db.type/keyword
+    :db/cardinality :db.cardinality/one
+    :db/doc "Execution status: :running, :completed, :failed, :cancelled"}
+
+   {:db/ident :pipeline-execution/started-at
+    :db/valueType :db.type/instant
+    :db/cardinality :db.cardinality/one
+    :db/doc "Timestamp when execution started"}
+
+   {:db/ident :pipeline-execution/completed-at
+    :db/valueType :db.type/instant
+    :db/cardinality :db.cardinality/one
+    :db/doc "Timestamp when execution completed (success or failure)"}
+
+   {:db/ident :pipeline-execution/documents-processed
+    :db/valueType :db.type/long
+    :db/cardinality :db.cardinality/one
+    :db/doc "Number of documents successfully processed"}
+
+   {:db/ident :pipeline-execution/documents-failed
+    :db/valueType :db.type/long
+    :db/cardinality :db.cardinality/one
+    :db/doc "Number of documents that failed processing"}
+
+   {:db/ident :pipeline-execution/error-message
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one
+    :db/doc "Error message if execution failed"}
+
+   {:db/ident :pipeline-execution/started-by
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one
+    :db/doc "User ID who started the execution"}])
+
+;; =============================================================================
 ;; Combined Migration Schema
 ;; =============================================================================
 
@@ -310,7 +362,8 @@
           permission-schema
           user-schema
           user-permission-schema
-          tenant-schema))
+          tenant-schema
+          pipeline-execution-schema))
 
 ;; =============================================================================
 ;; Default Permissions

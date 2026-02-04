@@ -97,6 +97,10 @@
     :db/valueType :db.type/string
     :db/cardinality :db.cardinality/many
     :db/doc "Entity IDs that this API key has access to"}
+   {:db/ident :api-key/pipelines
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/many
+    :db/doc "Pipeline IDs that this API key has access to (format: tenant:env:pipeline-name)"}
    {:db/ident :api-key/scopes
     :db/valueType :db.type/keyword
     :db/cardinality :db.cardinality/many
@@ -158,7 +162,13 @@
    {:db/ident :conversation/environment
     :db/valueType :db.type/string
     :db/cardinality :db.cardinality/one
-    :db/doc "Environment for config resolution in playground conversations"}])
+    :db/doc "Environment for config resolution in playground conversations"}
+
+   ;; Pipeline ID for conversations (format: tenant:env:pipeline-name)
+   {:db/ident :conversation/pipeline-id
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one
+    :db/doc "Pipeline ID for data loading and query configuration"}])
 
 (def dh-schema
   (concat

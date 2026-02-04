@@ -49,7 +49,8 @@
    :config {:tabs [{:id :config :segment "config"}
                    {:id :audit :segment "audit"}
                    {:id :permissions :segment "permissions"}
-                   {:id :api-keys :segment "api-keys"}]
+                   {:id :api-keys :segment "api-keys"}
+                   {:id :pipelines :segment "pipelines"}]
             :default :config}
 
    :import {:tabs [{:id :kudos :segment "kudos"}

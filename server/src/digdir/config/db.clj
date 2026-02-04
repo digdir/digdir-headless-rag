@@ -672,6 +672,101 @@
   [property]
   (get entity-property-to-path property))
 
+;; =============================================================================
+;; Pipeline Operations (Scope-Based Design)
+;; =============================================================================
+
+;; Pipeline property mapping: keyword -> database path
+(def pipeline-property-to-path
+  "Maps pipeline property keywords to their database paths.
+   Organized by functional area:
+   - pipeline.ui.* - Display/identity properties
+   - pipeline.source.* - Data source configuration
+   - pipeline.documents.* - Document filtering
+   - pipeline.chunks.* - Chunking strategy
+   - pipeline.search-phrases.* - Search phrase generation
+   - pipeline.storage.* - Collection names and storage
+   - pipeline.retrieval.* - Retrieval parameters (rerank, context)
+   - pipeline.generate.prompt.* - Generation prompts
+   - pipeline.operations.* - Execution parameters"
+  {;; UI/Identity
+   :name                      "pipeline.ui.name"
+   :image                     "pipeline.ui.image"
+   :description               "pipeline.ui.description"
+
+   ;; Data Source
+   :source-type               "pipeline.source.type"
+   :sitemap-url               "pipeline.source.sitemap-url"
+   :folder-path               "pipeline.source.folder-path"
+   :api-endpoint              "pipeline.source.api-endpoint"
+   :use-preprod               "pipeline.source.use-preprod"
+
+   ;; Document Filtering
+   :document-types            "pipeline.documents.types"
+   :document-limit            "pipeline.documents.limit"
+   :document-offset           "pipeline.documents.offset"
+   :document-transducer       "pipeline.documents.transducer"
+
+   ;; Chunking
+   :chunk-strategy            "pipeline.chunks.strategy"
+   :chunk-minimum-length      "pipeline.chunks.minimum-length"
+   :chunk-maximum-length      "pipeline.chunks.maximum-length"
+
+   ;; Search Phrases
+   :search-phrases-model      "pipeline.search-phrases.model"
+   :search-phrases-fallback   "pipeline.search-phrases.fallback-model"
+   :search-phrases-prompt     "pipeline.search-phrases.prompt"
+
+   ;; Storage/Collections
+   :collection-prefix         "pipeline.storage.collection-prefix"
+   :docs-collection           "pipeline.storage.docs-collection"
+   :chunks-collection         "pipeline.storage.chunks-collection"
+   :phrases-collection        "pipeline.storage.phrases-collection"
+
+   ;; Retrieval - Rerank
+   :rerank-enabled            "pipeline.retrieval.rerank.enabled"
+   :rerank-top-k              "pipeline.retrieval.rerank.top-k"
+   :rerank-max-chunk-length   "pipeline.retrieval.rerank.max-chunk-length"
+   :rerank-max-total-length   "pipeline.retrieval.rerank.max-total-length"
+
+   ;; Retrieval - Context
+   :context-top-k             "pipeline.retrieval.context.top-k"
+   :context-max-docs          "pipeline.retrieval.context.max-docs"
+   :context-max-chunk-length  "pipeline.retrieval.context.max-chunk-length"
+   :context-max-total-length  "pipeline.retrieval.context.max-total-length"
+
+   ;; Generation Prompts
+   :phrase-gen-prompt         "pipeline.generate.prompt.phrase-gen"
+   :prompt-query-relax        "pipeline.generate.prompt.query-relax"
+   :prompt-rag-generate       "pipeline.generate.prompt.rag-generate"
+
+   ;; Operations
+   :parallelism-documents     "pipeline.operations.parallelism-documents"
+   :parallelism-store         "pipeline.operations.parallelism-store"
+   :max-document-failures     "pipeline.operations.max-document-failures"})
+
+;; Reverse mapping: database path -> keyword
+(def path-to-pipeline-property
+  "Reverse mapping from database paths to pipeline property keywords."
+  (into {} (map (fn [[k v]] [v k]) pipeline-property-to-path)))
+
+(def pipeline-property-paths
+  "Config paths for pipeline properties.
+   These paths are used with entity scope (pipeline ID in scope field, not path).
+   Enables full 8-level inheritance for pipeline properties."
+  (set (vals pipeline-property-to-path)))
+
+(def pipeline-properties
+  "Standard properties that pipelines can have (as keywords)."
+  (set (keys pipeline-property-to-path)))
+
+(defn pipeline-property-path
+  "Get the config path for a pipeline property.
+   Example: (pipeline-property-path :name) => \"pipeline.ui.name\"
+            (pipeline-property-path :source-type) => \"pipeline.source.type\""
+  [property]
+  (get pipeline-property-to-path property))
+
 (defn list-tenants
   "Get all registered tenants from the config database.
    Returns a sorted vector of tenant ID strings."

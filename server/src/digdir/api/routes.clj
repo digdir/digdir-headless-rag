@@ -12,8 +12,11 @@
    [digdir.auth.core :as auth]
    [digdir.rag.core :as rag]
    [digdir.config.permissions :as perms]
+   [digdir.pipeline.core :as pipeline]
+   [digdir.pipeline.collections :as collections]
    [cheshire.core :as json]
    [clojure.tools.logging :as log]
+   [clojure.string :as str]
    [datahike.api :as d]
    [digdir.data.db :as db]
    [nano-id.core :refer [nano-id]]
@@ -24,19 +27,46 @@
 ;; ===== Utilities =====
 
 (defn get-entity-by-id
-  "Get entity configuration by ID.
-   Delegates to cfg/get-entity which supports both DB mode and legacy EDN fallback."
+  "DEPRECATED: Get entity configuration by ID.
+   Delegates to cfg/get-entity which supports both DB mode and legacy EDN fallback.
+   Use get-pipeline-config instead for new code."
   [entity-id]
   (cfg/get-entity entity-id))
+
+(defn get-pipeline-config
+  "Get pipeline configuration by ID or construct from entity (backwards compat).
+
+   Args:
+     pipeline-id - Pipeline ID in format tenant:env:pipeline-name, OR
+     entity-id - (Backwards compat) Entity ID to convert to pipeline config
+
+   Returns: Pipeline config map with all properties"
+  [id]
+  (if (and id (str/includes? id ":"))
+    ;; New format: pipeline-id (tenant:env:pipeline-name)
+    (let [parsed (pipeline/parse-pipeline-id id)
+          db @(db/get-conn)
+          master-key (cfg/get :services :config :master-key)]
+      (pipeline/get-pipeline db
+                             (:tenant parsed)
+                             (:environment parsed)
+                             (:pipeline-name parsed)
+                             master-key))
+    ;; Backwards compat: entity-id - convert to entity config
+    (get-entity-by-id id)))
 
 ;; ===== RAG API Handler =====
 
 (defn api-rag-handler
   "Handle RAG API requests. Expects JSON body with 'query' field.
-  Optional fields: conversation-id, model, rerank-top-k, context-top-k"
+  Optional fields: conversation-id, model, rerank-top-k, context-top-k
+
+  Supports both pipeline-id (new) and entity-id (backwards compatibility)."
   [ring-req]
   (try
-    (let [entity-id (get ring-req :api-key/entity-id)
+    (let [;; Support both new pipeline-id and old entity-id for backwards compatibility
+          pipeline-id (or (get ring-req :api-key/pipeline-id)
+                          (get ring-req :api-key/entity-id))
           body (slurp (:body ring-req))
           params (json/parse-string body true)
 
@@ -46,46 +76,50 @@
           _ (when-not user-query
               (throw (ex-info "Missing required field: query" {:status 400})))
 
-          ;; Get entity configuration
-          entity-config (get-entity-by-id entity-id)
+          _ (when-not pipeline-id
+              (throw (ex-info "API key missing pipeline or entity ID" {:status 401})))
 
-          _ (when-not entity-config
-              (throw (ex-info (str "Entity not found: " entity-id) {:status 404})))
+          ;; Get pipeline configuration (works with both pipeline-id and entity-id)
+          config (get-pipeline-config pipeline-id)
+
+          _ (when-not config
+              (throw (ex-info (str "Pipeline or entity not found: " pipeline-id) {:status 404})))
 
           ;; Build RAG pipeline parameters
           convo-id (or (:conversation-id params) (nano-id))
           selected-model (or (:model params) "gpt-4o-2024-11-20")
 
-          ;; RAG params use 3-level precedence: API param > entity config > global default
-          ;; Entity config already includes global defaults via 6-level inheritance
+          ;; RAG params use 3-level precedence: API param > pipeline config > global default
+          ;; Pipeline config already includes global defaults via 8-level inheritance
           rag-params {:conversation-id convo-id
-                     :entity-id entity-id
+                     :entity-id pipeline-id  ; Keep for backwards compat in rag-pipeline
+                     :pipeline-id pipeline-id  ; New field
                      :original_user_query user-query
                      :translated_user_query user-query
                      :user_query_language_name "Norwegian"
                      :selected-model selected-model
                      ;; Rerank parameters
                      :rerankTopkChunks (or (:rerank-top-k params)
-                                           (:rerank-top-k entity-config))
+                                           (:rerank-top-k config))
                      :rerankMaxChunkLength (or (:rerank-max-chunk-length params)
-                                               (:rerank-max-chunk-length entity-config))
+                                               (:rerank-max-chunk-length config))
                      :rerankMaxLength (or (:rerank-max-length params)
-                                          (:rerank-max-total-length entity-config))
+                                          (:rerank-max-total-length config))
                      ;; Context parameters
                      :contextTopkChunks (or (:context-top-k params)
-                                            (:context-top-k entity-config))
+                                            (:context-top-k config))
                      :contextMaxChunkLength (or (:context-max-chunk-length params)
-                                                (:context-max-chunk-length entity-config))
+                                                (:context-max-chunk-length config))
                      :maxContextLength (or (:max-context-length params)
-                                           (:context-max-total-length entity-config))
+                                           (:context-max-total-length config))
                      ;; Collection names
-                     :docsCollectionName (:docs-collection entity-config)
-                     :chunksCollectionName (:chunks-collection entity-config)
-                     :phrasesCollectionName (:phrases-collection entity-config)
+                     :docsCollectionName (:docs-collection config)
+                     :chunksCollectionName (:chunks-collection config)
+                     :phrasesCollectionName (:phrases-collection config)
                      ;; Prompts (use new kebab-case property names)
-                     :promptRagQueryRelax (:prompt-query-relax entity-config)
-                     :promptRagGenerate (:prompt-rag-generate entity-config)
-                     :phrase-gen-prompt (:phrase-gen-prompt entity-config)
+                     :promptRagQueryRelax (:prompt-query-relax config)
+                     :promptRagGenerate (:prompt-rag-generate config)
+                     :phrase-gen-prompt (:phrase-gen-prompt config)
                      ;; Streaming
                      :stream_callback_msg1 nil
                      :stream_callback_msg2 nil
@@ -102,12 +136,12 @@
                         :model selected-model
                         :chunks-used (mapv (fn [chunk]
                                             {:chunk-id (:chunk_id chunk)
-                                             :doc-title (get-in chunk [(keyword (:docsCollectionName entity-config)) :title])
+                                             :doc-title (get-in chunk [(keyword (:docsCollectionName config)) :title])
                                              :doc-num (:doc_num chunk)
                                              :content-markdown (:content_markdown chunk)})
                                           (:chunks result))}]
 
-      (log/info "RAG API request successful" {:entity-id entity-id :conversation-id convo-id})
+      (log/info "RAG API request successful" {:pipeline-id pipeline-id :conversation-id convo-id})
 
       (-> (res/response (json/generate-string response-data))
           (res/status 200)
@@ -134,10 +168,14 @@
 (defn api-retrieve-handler
   "Handle retrieval-only API requests. Returns ranked chunks without LLM generation.
    Expects JSON body with 'query' field.
-   Optional fields: include_query_expansion (default true), top_k, filter"
+   Optional fields: include_query_expansion (default true), top_k, filter
+
+   Supports both pipeline-id (new) and entity-id (backwards compatibility)."
   [ring-req]
   (try
-    (let [entity-id (get ring-req :api-key/entity-id)
+    (let [;; Support both new pipeline-id and old entity-id for backwards compatibility
+          pipeline-id (or (get ring-req :api-key/pipeline-id)
+                          (get ring-req :api-key/entity-id))
           body (slurp (:body ring-req))
           params (json/parse-string body true)
 
@@ -146,13 +184,17 @@
           _ (when-not user-query
               (throw (ex-info "Missing required field: query" {:status 400})))
 
-          ;; Get entity configuration
-          entity-config (get-entity-by-id entity-id)
-          _ (when-not entity-config
-              (throw (ex-info (str "Entity not found: " entity-id) {:status 404})))
+          _ (when-not pipeline-id
+              (throw (ex-info "API key missing pipeline or entity ID" {:status 401})))
+
+          ;; Get pipeline configuration (works with both pipeline-id and entity-id)
+          config (get-pipeline-config pipeline-id)
+          _ (when-not config
+              (throw (ex-info (str "Pipeline or entity not found: " pipeline-id) {:status 404})))
 
           ;; Build retrieval params (subset of RAG params, no database needed)
-          retrieval-params {:entity-id entity-id
+          retrieval-params {:entity-id pipeline-id  ; Keep for backwards compat
+                            :pipeline-id pipeline-id  ; New field
                             :original_user_query user-query
                             :translated_user_query user-query
                             :include-query-expansion (get params :include_query_expansion true)
@@ -160,26 +202,26 @@
 
                             ;; Rerank parameters
                             :rerankTopkChunks (or (:top_k params)
-                                                  (:rerank-top-k entity-config)
+                                                  (:rerank-top-k config)
                                                   20)
-                            :rerankMaxChunkLength (or (:rerank-max-chunk-length entity-config) 4000)
-                            :rerankMaxLength (or (:rerank-max-total-length entity-config) 32000)
+                            :rerankMaxChunkLength (or (:rerank-max-chunk-length config) 4000)
+                            :rerankMaxLength (or (:rerank-max-total-length config) 32000)
 
                             ;; Context parameters (for rerank-chunks compatibility)
                             :contextTopkChunks (or (:top_k params)
-                                                   (:context-top-k entity-config)
+                                                   (:context-top-k config)
                                                    10)
-                            :contextMaxChunkLength (or (:context-max-chunk-length entity-config) 4000)
-                            :maxContextLength (or (:context-max-total-length entity-config) 32000)
+                            :contextMaxChunkLength (or (:context-max-chunk-length config) 4000)
+                            :maxContextLength (or (:context-max-total-length config) 32000)
 
                             ;; Collection names
-                            :docsCollectionName (:docs-collection entity-config)
-                            :chunksCollectionName (:chunks-collection entity-config)
-                            :phrasesCollectionName (:phrases-collection entity-config)
+                            :docsCollectionName (:docs-collection config)
+                            :chunksCollectionName (:chunks-collection config)
+                            :phrasesCollectionName (:phrases-collection config)
 
                             ;; Prompts
-                            :promptRagQueryRelax (:prompt-query-relax entity-config)
-                            :phrase-gen-prompt (:phrase-gen-prompt entity-config)
+                            :promptRagQueryRelax (:prompt-query-relax config)
+                            :phrase-gen-prompt (:phrase-gen-prompt config)
 
                             ;; Filter (optional)
                             :filter-by (when-let [filter-input (:filter params)]
@@ -847,6 +889,273 @@
           (res/status 500)
           (res/content-type "application/json")))))
 
+;; ===== Pipeline Management Handlers =====
+
+(defn list-pipelines-handler
+  "List all pipelines for a tenant/environment"
+  [ring-req]
+  (try
+    (let [tenant (get-in ring-req [:params "tenant"])
+          environment (get-in ring-req [:params "environment"])
+          conn (db/get-conn)
+          db @conn
+          master-key (cfg/get :services :config :master-key)
+          pipeline-names (pipeline/list-pipelines db tenant environment)
+
+          ;; Load full config for each pipeline
+          pipelines (mapv (fn [name]
+                           (pipeline/get-pipeline db tenant environment name master-key))
+                         pipeline-names)
+
+          response-data (mapv (fn [p]
+                               {:id (:id p)
+                                :name (:name p)
+                                :description (:description p)
+                                :sourceType (:source-type p)
+                                :tenant (:tenant p)
+                                :environment (:environment p)})
+                             pipelines)]
+
+      (-> (res/response (json/generate-string {:pipelines response-data}))
+          (res/status 200)
+          (res/content-type "application/json")))
+
+    (catch Exception e
+      (log/error e "Failed to list pipelines")
+      (-> (res/response (json/generate-string {:error "Failed to list pipelines"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn get-pipeline-handler
+  "Get a specific pipeline by ID"
+  [ring-req]
+  (try
+    (let [pipeline-id (get-in ring-req [:path-params :id])
+          parsed (pipeline/parse-pipeline-id pipeline-id)
+          conn (db/get-conn)
+          db @conn
+          master-key (cfg/get :services :config :master-key)
+          p (pipeline/get-pipeline db
+                                   (:tenant parsed)
+                                   (:environment parsed)
+                                   (:pipeline-name parsed)
+                                   master-key)]
+
+      (if p
+        (-> (res/response (json/generate-string {:pipeline p}))
+            (res/status 200)
+            (res/content-type "application/json"))
+        (-> (res/response (json/generate-string {:error "Pipeline not found"}))
+            (res/status 404)
+            (res/content-type "application/json"))))
+
+    (catch Exception e
+      (log/error e "Failed to get pipeline")
+      (-> (res/response (json/generate-string {:error "Failed to get pipeline"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn create-pipeline-handler
+  "Create a new pipeline"
+  [ring-req]
+  (try
+    (let [user-email (get-in ring-req [:headers "x-user-email"])
+          _ (when-not user-email
+              (throw (ex-info "Missing X-User-Email header" {:status 400})))
+
+          body (slurp (:body ring-req))
+          params (json/parse-string body true)
+
+          tenant (:tenant params)
+          environment (:environment params)
+          pipeline-name (:pipelineName params)
+          properties (into {} (map (fn [[k v]] [(keyword k) v]) (:properties params)))
+
+          conn (db/get-conn)
+          master-key (cfg/get :services :config :master-key)
+
+          pipeline-id (pipeline/create-pipeline! conn
+                                                {:tenant tenant
+                                                 :environment environment
+                                                 :pipeline-name pipeline-name
+                                                 :properties properties
+                                                 :master-key master-key})]
+
+      (log/info "Created pipeline" {:pipeline-id pipeline-id :user user-email})
+
+      (-> (res/response (json/generate-string {:pipelineId pipeline-id}))
+          (res/status 201)
+          (res/content-type "application/json")))
+
+    (catch clojure.lang.ExceptionInfo e
+      (let [data (ex-data e)
+            status (or (:status data) 500)]
+        (log/error e "Failed to create pipeline")
+        (-> (res/response (json/generate-string {:error (.getMessage e)}))
+            (res/status status)
+            (res/content-type "application/json"))))
+
+    (catch Exception e
+      (log/error e "Unexpected error creating pipeline")
+      (-> (res/response (json/generate-string {:error "Internal server error"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn update-pipeline-handler
+  "Update an existing pipeline"
+  [ring-req]
+  (try
+    (let [user-email (get-in ring-req [:headers "x-user-email"])
+          _ (when-not user-email
+              (throw (ex-info "Missing X-User-Email header" {:status 400})))
+
+          pipeline-id (get-in ring-req [:path-params :id])
+          parsed (pipeline/parse-pipeline-id pipeline-id)
+
+          body (slurp (:body ring-req))
+          params (json/parse-string body true)
+          properties (into {} (map (fn [[k v]] [(keyword k) v]) (:properties params)))
+
+          conn (db/get-conn)
+          master-key (cfg/get :services :config :master-key)
+
+          _ (pipeline/update-pipeline! conn
+                                      {:tenant (:tenant parsed)
+                                       :environment (:environment parsed)
+                                       :pipeline-name (:pipeline-name parsed)
+                                       :properties properties
+                                       :master-key master-key})]
+
+      (log/info "Updated pipeline" {:pipeline-id pipeline-id :user user-email})
+
+      (-> (res/response (json/generate-string {:success true}))
+          (res/status 200)
+          (res/content-type "application/json")))
+
+    (catch clojure.lang.ExceptionInfo e
+      (let [data (ex-data e)
+            status (or (:status data) 500)]
+        (log/error e "Failed to update pipeline")
+        (-> (res/response (json/generate-string {:error (.getMessage e)}))
+            (res/status status)
+            (res/content-type "application/json"))))
+
+    (catch Exception e
+      (log/error e "Unexpected error updating pipeline")
+      (-> (res/response (json/generate-string {:error "Internal server error"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn delete-pipeline-handler
+  "Delete a pipeline"
+  [ring-req]
+  (try
+    (let [user-email (get-in ring-req [:headers "x-user-email"])
+          _ (when-not user-email
+              (throw (ex-info "Missing X-User-Email header" {:status 400})))
+
+          pipeline-id (get-in ring-req [:path-params :id])
+          parsed (pipeline/parse-pipeline-id pipeline-id)
+
+          conn (db/get-conn)
+          _ (pipeline/soft-delete-pipeline! conn
+                                           (:tenant parsed)
+                                           (:environment parsed)
+                                           (:pipeline-name parsed))]
+
+      (log/info "Deleted pipeline" {:pipeline-id pipeline-id :user user-email})
+
+      (-> (res/response (json/generate-string {:success true}))
+          (res/status 200)
+          (res/content-type "application/json")))
+
+    (catch Exception e
+      (log/error e "Failed to delete pipeline")
+      (-> (res/response (json/generate-string {:error "Failed to delete pipeline"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn execute-pipeline-handler
+  "Execute a pipeline asynchronously"
+  [ring-req]
+  (try
+    (let [user-email (get-in ring-req [:headers "x-user-email"])
+          _ (when-not user-email
+              (throw (ex-info "Missing X-User-Email header" {:status 400})))
+
+          pipeline-id (get-in ring-req [:path-params :id])
+          parsed (pipeline/parse-pipeline-id pipeline-id)
+
+          conn (db/get-conn)
+          master-key (cfg/get :services :config :master-key)
+
+          ;; Import executor namespace
+          _ (require 'digdir.pipeline.executor)
+          execute-fn (resolve 'digdir.pipeline.executor/execute-pipeline-async!)
+
+          execution-id (execute-fn conn
+                                   (:tenant parsed)
+                                   (:environment parsed)
+                                   (:pipeline-name parsed)
+                                   master-key
+                                   user-email)]
+
+      (log/info "Started pipeline execution" {:pipeline-id pipeline-id :execution-id execution-id :user user-email})
+
+      (-> (res/response (json/generate-string {:executionId execution-id}))
+          (res/status 202)
+          (res/content-type "application/json")))
+
+    (catch clojure.lang.ExceptionInfo e
+      (let [data (ex-data e)
+            status (or (:status data) 500)]
+        (log/error e "Failed to execute pipeline")
+        (-> (res/response (json/generate-string {:error (.getMessage e)}))
+            (res/status status)
+            (res/content-type "application/json"))))
+
+    (catch Exception e
+      (log/error e "Unexpected error executing pipeline")
+      (-> (res/response (json/generate-string {:error "Internal server error"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn list-executions-handler
+  "List executions for a pipeline"
+  [ring-req]
+  (try
+    (let [pipeline-id (get-in ring-req [:path-params :id])
+          conn (db/get-conn)
+          db @conn
+
+          ;; Import executor namespace
+          _ (require 'digdir.pipeline.executor)
+          list-fn (resolve 'digdir.pipeline.executor/list-executions)
+
+          executions (list-fn db pipeline-id)
+
+          response-data (mapv (fn [e]
+                               {:id (:pipeline-execution/id e)
+                                :pipelineId (:pipeline-execution/pipeline-id e)
+                                :status (name (:pipeline-execution/status e))
+                                :startedAt (str (:pipeline-execution/started-at e))
+                                :completedAt (when-let [t (:pipeline-execution/completed-at e)] (str t))
+                                :documentsProcessed (:pipeline-execution/documents-processed e)
+                                :documentsFailed (:pipeline-execution/documents-failed e)
+                                :errorMessage (:pipeline-execution/error-message e)
+                                :startedBy (:pipeline-execution/started-by e)})
+                             executions)]
+
+      (-> (res/response (json/generate-string {:executions response-data}))
+          (res/status 200)
+          (res/content-type "application/json")))
+
+    (catch Exception e
+      (log/error e "Failed to list executions")
+      (-> (res/response (json/generate-string {:error "Failed to list executions"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
 ;; ===== Middleware =====
 
 (defn wrap-api-key-auth
@@ -856,7 +1165,10 @@
     (let [api-key (get-in request [:headers "x-api-key"])
           conn (db/get-conn)]
       (if-let [key-info (and api-key (api-keys/validate-api-key conn api-key))]
-        (handler (assoc request :api-key/entity-id (:entity-id key-info)))
+        ;; Include both entity-id (backwards compat) and pipeline-id (new)
+        (handler (assoc request
+                       :api-key/entity-id (:entity-id key-info)
+                       :api-key/pipeline-id (:pipeline-id key-info)))
         (-> (res/response (json/generate-string {:error "Invalid or missing API key"}))
             (res/status 401)
             (res/content-type "application/json"))))))
@@ -881,13 +1193,20 @@
    ["/config/api-keys/:key-id/revoke" {:post {:handler revoke-api-key-handler}}]])
 
 (def admin-routes
-  "API route definitions for JWT-authenticated admin operations (user management, permissions)"
+  "API route definitions for JWT-authenticated admin operations (user management, permissions, pipelines)"
   [["/api/users" {:get {:handler list-users-handler}
                   :post {:handler create-user-handler}}]
    ["/api/users/:id" {:get {:handler get-user-handler}
                       :delete {:handler delete-user-handler}}]
    ["/api/users/:id/permissions" {:put {:handler update-user-permissions-handler}}]
-   ["/api/permissions" {:get {:handler list-permissions-handler}}]])
+   ["/api/permissions" {:get {:handler list-permissions-handler}}]
+   ["/api/pipelines" {:get {:handler list-pipelines-handler}
+                      :post {:handler create-pipeline-handler}}]
+   ["/api/pipelines/:id" {:get {:handler get-pipeline-handler}
+                          :put {:handler update-pipeline-handler}
+                          :delete {:handler delete-pipeline-handler}}]
+   ["/api/pipelines/:id/execute" {:post {:handler execute-pipeline-handler}}]
+   ["/api/pipelines/:id/executions" {:get {:handler list-executions-handler}}]])
 
 (defn- json-not-found [_]
   (-> (res/not-found (json/generate-string {:error "API endpoint not found"}))

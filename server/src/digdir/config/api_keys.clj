@@ -45,6 +45,7 @@
            :tenants - Collection of tenant IDs this key has access to
            :environments - Collection of environments this key has access to
            :entities - Collection of entity IDs this key has access to
+           :pipelines - Collection of pipeline IDs this key has access to
            :scopes - Set of scopes #{:query :ingest :admin}, defaults to #{:query}
            :expires-at - Optional expiration timestamp (epoch ms)
            :user-email - Email of user creating the key (for audit)
@@ -53,7 +54,7 @@
     Map with :api-key-id and :api-key"
   ([conn api-key name created-by]
    (store-api-key conn api-key name created-by {}))
-  ([conn api-key name created-by {:keys [tenants environments entities scopes expires-at user-email]}]
+  ([conn api-key name created-by {:keys [tenants environments entities pipelines scopes expires-at user-email]}]
    (let [api-key-id (nano-id)
          now (.getTime (t/inst (t/now)))
          validated-scopes (or (seq (filter valid-scopes scopes)) [:query])
@@ -61,6 +62,7 @@
          tenants-vec (vec (or tenants []))
          environments-vec (vec (or environments []))
          entities-vec (vec (or entities []))
+         pipelines-vec (vec (or pipelines []))
          tx-data (cond-> {:api-key/id api-key-id
                           :api-key/key api-key
                           :api-key/name name
@@ -72,6 +74,7 @@
                    (seq tenants-vec) (assoc :api-key/tenants tenants-vec)
                    (seq environments-vec) (assoc :api-key/environments environments-vec)
                    (seq entities-vec) (assoc :api-key/entities entities-vec)
+                   (seq pipelines-vec) (assoc :api-key/pipelines pipelines-vec)
                    expires-at (assoc :api-key/expires-at expires-at))]
      (d/transact conn {:tx-data [tx-data]})
      ;; Audit log the creation
@@ -99,13 +102,14 @@
             :tenants - Collection of tenant IDs this key has access to
             :environments - Collection of environments this key has access to
             :entities - Collection of entity IDs this key has access to
+            :pipelines - Collection of pipeline IDs this key has access to
             :scopes - Collection of scopes (will be converted to set and validated)
             :expires-in-days - Optional number of days until expiration (nil for no expiration)
             :user-email - Email of user creating the key (for audit)
 
    Returns:
      Map with :api-key (plaintext, shown only once) and :name"
-  [conn key-name created-by {:keys [tenants environments entities scopes expires-in-days user-email]}]
+  [conn key-name created-by {:keys [tenants environments entities pipelines scopes expires-in-days user-email]}]
   (let [new-key (generate-api-key)
         expires-at (when (and expires-in-days (pos? expires-in-days))
                      (+ (System/currentTimeMillis)
@@ -117,6 +121,7 @@
                    {:tenants tenants
                     :environments environments
                     :entities entities
+                    :pipelines pipelines
                     :scopes (set scopes)
                     :expires-at expires-at
                     :user-email user-email})
@@ -133,7 +138,8 @@
     api-key - The API key to validate
 
   Returns:
-    Map with :tenants, :environments, :entities, :api-key-id, :name, :scopes if valid, nil otherwise
+    Map with :tenants, :environments, :entities, :pipelines, :api-key-id, :name, :scopes if valid, nil otherwise
+    Also includes :entity-id and :pipeline-id for backwards compatibility
 
   Validation checks:
   - Key exists in database
@@ -162,8 +168,11 @@
         {:tenants (vec (:api-key/tenants key-entity))
          :environments (vec (:api-key/environments key-entity))
          :entities (vec (:api-key/entities key-entity))
+         :pipelines (vec (:api-key/pipelines key-entity))
          ;; Backwards compatibility: include entity-id if set
          :entity-id (:api-key/entity-id key-entity)
+         ;; Backwards compatibility: include pipeline-id (first pipeline or nil)
+         :pipeline-id (first (:api-key/pipelines key-entity))
          :api-key-id (:api-key/id key-entity)
          :name (:api-key/name key-entity)
          :scopes (set (:api-key/scopes key-entity))}))))
@@ -246,6 +255,7 @@
                              :api-key/tenants
                              :api-key/environments
                              :api-key/entities
+                             :api-key/pipelines
                              :api-key/created
                              :api-key/revoked
                              :api-key/last-used
@@ -274,6 +284,7 @@
                                          :api-key/tenants
                                          :api-key/environments
                                          :api-key/entities
+                                         :api-key/pipelines
                                          :api-key/created
                                          :api-key/created-by
                                          :api-key/revoked
@@ -289,7 +300,8 @@
                (update :api-key/scopes vec)
                (update :api-key/tenants vec)
                (update :api-key/environments vec)
-               (update :api-key/entities vec))
+               (update :api-key/entities vec)
+               (update :api-key/pipelines vec))
           results)))
 
 (defn get-api-key-info
@@ -309,6 +321,7 @@
                             :api-key/tenants
                             :api-key/environments
                             :api-key/entities
+                            :api-key/pipelines
                             :api-key/created
                             :api-key/created-by
                             :api-key/revoked
@@ -328,12 +341,13 @@
   (def new-key (generate-api-key))
   ;; => "rag_a1b2c3d4..."
 
-  ;; Store it in the database with multi-tenant/environment/entity support
+  ;; Store it in the database with multi-tenant/environment/entity/pipeline support
   (def conn (db/get-conn))
   (def result (store-api-key conn new-key "Test API Key" "user-123"
                              {:tenants ["ka" "altinn"]
                               :environments ["prod" "test"]
                               :entities ["my-bot" "other-bot"]
+                              :pipelines ["ka:prod:main-pipeline"]
                               :scopes #{:query :ingest}}))
   ;; => {:api-key-id "abc123", :api-key "rag_a1b2c3d4..."}
 
@@ -342,13 +356,14 @@
                    {:tenants ["ka"]
                     :environments ["prod"]
                     :entities ["my-bot"]
+                    :pipelines ["ka:prod:main-pipeline"]
                     :scopes [:query]
                     :expires-in-days 30})
   ;; => {:api-key "rag_...", :name "My Key"}
 
   ;; Validate the key
   (validate-api-key conn new-key)
-  ;; => {:tenants ["ka" "altinn"], :environments ["prod" "test"], :entities ["my-bot"], ...}
+  ;; => {:tenants ["ka" "altinn"], :environments ["prod" "test"], :entities ["my-bot"], :pipelines ["ka:prod:main-pipeline"], :pipeline-id "ka:prod:main-pipeline", ...}
 
   ;; List keys for a user
   (list-api-keys conn "user-123")
