@@ -18,6 +18,7 @@
             [digdir.config.ui.permissions :refer [Permissions]]
             [digdir.config.ui.api-keys :refer [APIKeys]]
             [digdir.pipeline.ui.pipelines :refer [Pipelines]]
+            [digdir.pipeline.ui.skills :refer [SkillsUI]]
             [digdir.i18n :refer [t]]
             [digdir.ui.routing :as routing]
             #?(:clj [digdir.config.core :as cfg])
@@ -3121,7 +3122,8 @@
        (RoutedConfigTabButton (t :config/tab-audit) 1 active-tab set-active-tab!)
        (RoutedConfigTabButton (t :config/tab-permissions) 2 active-tab set-active-tab!)
        (RoutedConfigTabButton (t :nav/api-keys) 3 active-tab set-active-tab!)
-       (RoutedConfigTabButton "Pipelines" 4 active-tab set-active-tab!))
+       (RoutedConfigTabButton "Pipelines" 4 active-tab set-active-tab!)
+       (RoutedConfigTabButton "Skills" 5 active-tab set-active-tab!))
 
       ;; Tab content
       (case active-tab
@@ -3130,6 +3132,7 @@
         2 (Permissions)
         3 (APIKeys)
         4 (Pipelines)
+        5 (SkillsUI)
         (ConfigManagement))))))
 
 (e/defn Config []

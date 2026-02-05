@@ -50,7 +50,8 @@
                    {:id :audit :segment "audit"}
                    {:id :permissions :segment "permissions"}
                    {:id :api-keys :segment "api-keys"}
-                   {:id :pipelines :segment "pipelines"}]
+                   {:id :pipelines :segment "pipelines"}
+                   {:id :skills :segment "skills"}]
             :default :config}
 
    :import {:tabs [{:id :kudos :segment "kudos"}

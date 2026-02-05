@@ -3,6 +3,7 @@
 
   This namespace provides:
   - RAG query endpoint (/api/rag)
+  - Skills query endpoints (/api/skills/*)
   - Conversation management endpoints
   - API key management endpoints
   - User management endpoints
@@ -14,6 +15,7 @@
    [digdir.config.permissions :as perms]
    [digdir.pipeline.core :as pipeline]
    [digdir.pipeline.collections :as collections]
+   [digdir.pipeline.skills.api :as skills-api]
    [cheshire.core :as json]
    [clojure.tools.logging :as log]
    [clojure.string :as str]
@@ -1156,6 +1158,294 @@
           (res/status 500)
           (res/content-type "application/json")))))
 
+;; ===== Skills API Handlers =====
+
+(defn list-skills-handler
+  "List all available skills with their metadata"
+  [_ring-req]
+  (try
+    (let [skills (skills-api/list-skills)
+          response-data {:skills (mapv (fn [skill]
+                                         {:id (name (:skill-id skill))
+                                          :name (:name skill)
+                                          :description (:description skill)
+                                          :category (name (:category skill))
+                                          :inputs (mapv name (:inputs skill))
+                                          :outputs (mapv name (:outputs skill))})
+                                       skills)}]
+      (-> (res/response (json/generate-string response-data))
+          (res/status 200)
+          (res/content-type "application/json")))
+
+    (catch Exception e
+      (log/error e "Failed to list skills")
+      (-> (res/response (json/generate-string {:error "Failed to list skills"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn get-skill-handler
+  "Get information about a specific skill"
+  [ring-req]
+  (try
+    (let [skill-id-str (get-in ring-req [:path-params :id])
+          skill-id (keyword "builtin" skill-id-str)
+          skill-info (skills-api/get-skill-info skill-id)]
+
+      (if skill-info
+        (-> (res/response
+              (json/generate-string
+                {:skill {:id (name (:skill-id skill-info))
+                         :name (:name skill-info)
+                         :description (:description skill-info)
+                         :category (name (:category skill-info))
+                         :inputs (mapv name (:inputs skill-info))
+                         :outputs (mapv name (:outputs skill-info))
+                         :parameters (:parameters skill-info)}}))
+            (res/status 200)
+            (res/content-type "application/json"))
+        (-> (res/response (json/generate-string {:error "Skill not found"}))
+            (res/status 404)
+            (res/content-type "application/json"))))
+
+    (catch Exception e
+      (log/error e "Failed to get skill")
+      (-> (res/response (json/generate-string {:error "Failed to get skill"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn execute-skill-handler
+  "Execute a skill by ID.
+   Expects JSON body with 'inputs' and optional 'parameters' fields."
+  [ring-req]
+  (try
+    (let [pipeline-id (or (get ring-req :api-key/pipeline-id)
+                          (get ring-req :api-key/entity-id))
+          skill-id-str (get-in ring-req [:path-params :id])
+          skill-id (keyword "builtin" skill-id-str)
+
+          _ (when-not pipeline-id
+              (throw (ex-info "API key missing pipeline or entity ID" {:status 401})))
+
+          body (slurp (:body ring-req))
+          params (json/parse-string body true)
+
+          inputs (:inputs params)
+          _ (when-not inputs
+              (throw (ex-info "Missing required field: inputs" {:status 400})))
+
+          ;; Get pipeline configuration for context
+          config (get-pipeline-config pipeline-id)
+          _ (when-not config
+              (throw (ex-info (str "Pipeline or entity not found: " pipeline-id) {:status 404})))
+
+          ;; Build execution options
+          opts {:tenant (:tenant config)
+                :environment (:environment config)
+                :pipeline-config config
+                :parameters (:parameters params)}
+
+          ;; Execute the skill
+          result (skills-api/execute skill-id inputs opts)]
+
+      (log/info "Skill executed" {:skill-id skill-id :pipeline-id pipeline-id})
+
+      (if (:error result)
+        (-> (res/response (json/generate-string {:error (:error result)}))
+            (res/status 400)
+            (res/content-type "application/json"))
+        (-> (res/response (json/generate-string {:result result}))
+            (res/status 200)
+            (res/content-type "application/json"))))
+
+    (catch clojure.lang.ExceptionInfo e
+      (let [data (ex-data e)
+            status (or (:status data) 500)]
+        (log/error e "Skill execution failed")
+        (-> (res/response (json/generate-string {:error (.getMessage e)}))
+            (res/status status)
+            (res/content-type "application/json"))))
+
+    (catch Exception e
+      (log/error e "Unexpected error executing skill")
+      (-> (res/response (json/generate-string {:error "Internal server error"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn get-skill-tools-handler
+  "Get tool definitions for all skills (for agent invocation).
+   Returns OpenAI function calling compatible tool definitions."
+  [_ring-req]
+  (try
+    (let [tools (skills-api/get-all-tool-definitions)
+          response-data {:tools tools}]
+      (-> (res/response (json/generate-string response-data))
+          (res/status 200)
+          (res/content-type "application/json")))
+
+    (catch Exception e
+      (log/error e "Failed to get skill tools")
+      (-> (res/response (json/generate-string {:error "Failed to get skill tools"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn list-templates-handler
+  "List all available templates"
+  [_ring-req]
+  (try
+    (let [templates (skills-api/list-templates)
+          response-data {:templates (mapv (fn [t]
+                                            {:id (name (:template-id t))
+                                             :name (:name t)
+                                             :description (:description t)})
+                                          templates)}]
+      (-> (res/response (json/generate-string response-data))
+          (res/status 200)
+          (res/content-type "application/json")))
+
+    (catch Exception e
+      (log/error e "Failed to list templates")
+      (-> (res/response (json/generate-string {:error "Failed to list templates"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn get-template-handler
+  "Get information about a specific template"
+  [ring-req]
+  (try
+    (let [template-id-str (get-in ring-req [:path-params :id])
+          template-id (keyword "builtin" template-id-str)
+          template-info (skills-api/get-template-info template-id)]
+
+      (if template-info
+        (-> (res/response (json/generate-string {:template template-info}))
+            (res/status 200)
+            (res/content-type "application/json"))
+        (-> (res/response (json/generate-string {:error "Template not found"}))
+            (res/status 404)
+            (res/content-type "application/json"))))
+
+    (catch Exception e
+      (log/error e "Failed to get template")
+      (-> (res/response (json/generate-string {:error "Failed to get template"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn execute-template-handler
+  "Execute a template by ID.
+   Expects JSON body with 'inputs' and optional 'overrides' fields."
+  [ring-req]
+  (try
+    (let [pipeline-id (or (get ring-req :api-key/pipeline-id)
+                          (get ring-req :api-key/entity-id))
+          template-id-str (get-in ring-req [:path-params :id])
+          template-id (keyword "builtin" template-id-str)
+
+          _ (when-not pipeline-id
+              (throw (ex-info "API key missing pipeline or entity ID" {:status 401})))
+
+          body (slurp (:body ring-req))
+          params (json/parse-string body true)
+
+          inputs (:inputs params)
+          _ (when-not inputs
+              (throw (ex-info "Missing required field: inputs" {:status 400})))
+
+          ;; Get pipeline configuration for context
+          config (get-pipeline-config pipeline-id)
+          _ (when-not config
+              (throw (ex-info (str "Pipeline or entity not found: " pipeline-id) {:status 404})))
+
+          ;; Build execution options
+          opts {:tenant (:tenant config)
+                :environment (:environment config)
+                :overrides (:overrides params)}
+
+          ;; Execute the template
+          result (skills-api/run-template template-id inputs opts)]
+
+      (log/info "Template executed" {:template-id template-id :pipeline-id pipeline-id})
+
+      (if (:error result)
+        (-> (res/response (json/generate-string {:error (:error result)}))
+            (res/status 400)
+            (res/content-type "application/json"))
+        (-> (res/response (json/generate-string {:result result}))
+            (res/status 200)
+            (res/content-type "application/json"))))
+
+    (catch clojure.lang.ExceptionInfo e
+      (let [data (ex-data e)
+            status (or (:status data) 500)]
+        (log/error e "Template execution failed")
+        (-> (res/response (json/generate-string {:error (.getMessage e)}))
+            (res/status status)
+            (res/content-type "application/json"))))
+
+    (catch Exception e
+      (log/error e "Unexpected error executing template")
+      (-> (res/response (json/generate-string {:error "Internal server error"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn execute-graph-handler
+  "Execute a custom skill graph.
+   Expects JSON body with 'graph' and 'inputs' fields."
+  [ring-req]
+  (try
+    (let [pipeline-id (or (get ring-req :api-key/pipeline-id)
+                          (get ring-req :api-key/entity-id))
+
+          _ (when-not pipeline-id
+              (throw (ex-info "API key missing pipeline or entity ID" {:status 401})))
+
+          body (slurp (:body ring-req))
+          params (json/parse-string body true)
+
+          graph (:graph params)
+          inputs (:inputs params)
+
+          _ (when-not graph
+              (throw (ex-info "Missing required field: graph" {:status 400})))
+          _ (when-not inputs
+              (throw (ex-info "Missing required field: inputs" {:status 400})))
+
+          ;; Get pipeline configuration for context
+          config (get-pipeline-config pipeline-id)
+          _ (when-not config
+              (throw (ex-info (str "Pipeline or entity not found: " pipeline-id) {:status 404})))
+
+          ;; Build execution options
+          opts {:tenant (:tenant config)
+                :environment (:environment config)
+                :pipeline-config config}
+
+          ;; Execute the graph
+          result (skills-api/run-graph graph inputs opts)]
+
+      (log/info "Graph executed" {:pipeline-id pipeline-id})
+
+      (if (:error result)
+        (-> (res/response (json/generate-string {:error (:error result)}))
+            (res/status 400)
+            (res/content-type "application/json"))
+        (-> (res/response (json/generate-string {:result result}))
+            (res/status 200)
+            (res/content-type "application/json"))))
+
+    (catch clojure.lang.ExceptionInfo e
+      (let [data (ex-data e)
+            status (or (:status data) 500)]
+        (log/error e "Graph execution failed")
+        (-> (res/response (json/generate-string {:error (.getMessage e)}))
+            (res/status status)
+            (res/content-type "application/json"))))
+
+    (catch Exception e
+      (log/error e "Unexpected error executing graph")
+      (-> (res/response (json/generate-string {:error "Internal server error"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
 ;; ===== Middleware =====
 
 (defn wrap-api-key-auth
@@ -1184,7 +1474,19 @@
                        :post {:handler create-conversation-handler}}]
     ["/conversations/:id" {:get {:handler get-conversation-handler}
                            :put {:handler update-conversation-handler}
-                           :delete {:handler delete-conversation-handler}}]]])
+                           :delete {:handler delete-conversation-handler}}]
+    ;; Skills API
+    ["/skills" {:get {:handler list-skills-handler}}
+     ["/tools" {:get {:handler get-skill-tools-handler}}]
+     ["/:id" {:get {:handler get-skill-handler}}
+      ["/execute" {:post {:handler execute-skill-handler}}]]]
+    ;; Templates API
+    ["/templates" {:get {:handler list-templates-handler}}
+     ["/:id" {:get {:handler get-template-handler}}
+      ["/execute" {:post {:handler execute-template-handler}}]]]
+    ;; Graph API
+    ["/graphs"
+     ["/execute" {:post {:handler execute-graph-handler}}]]]])
 
 (def api-key-routes
   "API route definitions for JWT-authenticated API key management"

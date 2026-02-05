@@ -58,11 +58,11 @@ This document outlines the architecture for evolving the pipeline system to supp
 
 | Priority | Component | Status | Notes |
 |----------|-----------|--------|-------|
-| High | API Endpoint Integration | TODO | Wire skills into existing RAG routes |
-| Medium | UI - Skills Config | TODO | `server/src/digdir/pipeline/ui/skills.cljc` |
-| Medium | UI - Templates | TODO | `server/src/digdir/pipeline/ui/templates.cljc` |
-| Medium | Integration Tests | TODO | Tests with mocked services |
-| Low | Graph Optimizer | TODO | `server/src/digdir/pipeline/skills/graph/optimizer.clj` |
+| High | API Endpoint Integration | **DONE** | Skills endpoints added to `server/src/digdir/api/routes.clj` |
+| Medium | UI - Skills Config | **DONE** | `server/src/digdir/pipeline/ui/skills.cljc` |
+| Medium | UI - Templates | **DONE** | Included in skills.cljc as Templates tab |
+| Medium | Integration Tests | **DONE** | Tests in `test/digdir/pipeline/skills/` |
+| Low | Graph Optimizer | **DONE** | `server/src/digdir/pipeline/skills/graph/optimizer.clj` |
 
 ---
 
