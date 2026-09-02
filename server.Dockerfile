@@ -24,7 +24,24 @@ ARG VERSION
 ENV VERSION=$VERSION
 
 
-RUN clojure -X:build:prod uberjar :version "\"$VERSION\"" :build/jar-name "app.jar"
+# -Xss8m is load-bearing, not a precaution. Electric's macroexpander
+# (hyperfiddle.electric.impl.lang3/-expand-all) recurses once per form, and
+# `ConfigInheritanceEditor` (src/digdir/config/ui/inheritance.cljc:1031) is deep
+# enough to exhaust the JVM default. Measured in this base image:
+#
+#   ThreadStackSize   1024 (KB, default)  -> StackOverflowError during
+#                                            macroexpansion, shadow release
+#                                            fails, build.clj:35 assert trips
+#
+# The base image tag `clojure:tools-deps-trixie` FLOATS and currently resolves
+# to Temurin 25.0.4, while mise.toml pins the host toolchain to Java 24 — so a
+# host build and this build do not run the same JDK, and this failure appears
+# only in the container. Raising the stack fixes it independently of which JDK
+# the tag drifts to next; pinning the tag would be the separate, larger fix.
+#
+# Build stage only. The runtime CMD is untouched: the uberjar is already
+# compiled, so nothing at runtime needs the larger stack.
+RUN clojure -J-Xss8m -X:build:prod uberjar :version "\"$VERSION\"" :build/jar-name "app.jar"
 
 # ---------------------------------------------------------------------------
 # Runtime stage. Same base image on purpose: identical JDK, and the operator
