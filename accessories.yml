@@ -1,0 +1,115 @@
+# This here, I think is boilerplate
+service: accessories
+image: digdir-rag-deploy/accessories
+
+registry:
+  server: altinnaicontainers.azurecr.io
+  username: digdir-rag-deploy
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+builder:
+  remote: ssh://root@5.75.220.232 # kamal-1.kamal.digdir.cloud
+  arch: amd64
+  args:
+    BUILDKIT_PROGRESS: plain
+
+# Environment variables
+env:
+  clear:
+    # Configuration file
+    ENTITY_CONFIG_FILE: config/ka_prod.edn
+  secret:
+    # Database credentials
+    - ADH_POSTGRES_PWD
+    - ADH_POSTGRES_URL
+    - ADH_POSTGRES_USER
+    # API keys and passwords
+    - ADMIN_USER_EMAILS
+    - AZURE_OPENAI_API_KEY
+    - COLBERT_API_KEY
+    - OAI_OPENROUTER_API_KEY
+    - SCW_SECRET_KEY
+    - SCW_DEFAULT_PROJECT_ID
+    - TYPESENSE_API_KEY
+    - TYPESENSE_API_KEY_ADMIN
+    # System paths
+    - JAVA_HOME
+    - VIRTUAL_ENV
+    - KAMAL_REGISTRY_PASSWORD
+
+
+accessories:
+  typesense:
+    service: typesense
+    image: typesense/typesense:28.0
+    host: 5.75.220.232
+    port: 8108
+    directories:
+      - /var/lib/typesense:/data
+    env:
+      clear:
+        TYPESENSE_DATA_DIR: "/data"
+      secret:
+        - TYPESENSE_API_KEY
+        - TYPESENSE_API_KEY_ADMIN
+
+  # Dev environment accessories
+  typesense-dev:
+    service: typesense-dev
+    image: typesense/typesense:29.0
+    host: 5.75.220.232
+    port: 8308
+    directories:
+      - /var/typesense_dev/data:/data
+    env:
+      clear:
+        TYPESENSE_DATA_DIR: "/data"
+        TYPESENSE_API_PORT: "8308"
+      secret:
+        - TYPESENSE_API_KEY
+        - TYPESENSE_API_KEY_ADMIN
+
+  # Test environment accessories
+  typesense-test:
+    service: typesense-test
+    image: typesense/typesense:29.0
+    host: 5.75.220.232
+    port: "8208:8108"
+    directories:
+      - /var/typesense_test/data:/data
+    env:
+      clear:
+        TYPESENSE_DATA_DIR: "/data"
+      secret:
+        - TYPESENSE_API_KEY
+        - TYPESENSE_API_KEY_ADMIN
+
+  # Unused postgres services - Apps connect to external UbiCloud postgres instead
+  postgres:
+    service: postgres
+    image: postgres:16
+    host: 5.75.220.232
+    port: 5432
+    env:
+      secret:
+        - POSTGRES_PASSWORD
+      clear:
+        POSTGRES_USER: ka_test
+        POSTGRES_DB: ka_test_db
+    directories:
+      - data:/var/lib/postgresql/data
+
+  postgres-test:
+    service: postgres-test
+    image: postgres:16
+    host: 5.75.220.232
+    port: 5433
+    env:
+      secret:
+        - POSTGRES_PASSWORD
+      clear:
+        POSTGRES_USER: ka_test
+        POSTGRES_DB: ka_test_db
+    directories:
+      - /var/postgres_test/data:/var/lib/postgresql/data

@@ -1,0 +1,6 @@
+proxy:
+  host: test.rag.digdir.cloud
+
+volumes:
+  - "/opt/admin-test/cache:/app/cache"
+

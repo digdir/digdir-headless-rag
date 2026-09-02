@@ -1,0 +1,89 @@
+{:deps    {metosin/reitit-ring {:mvn/version "0.9.2"}
+           cheshire/cheshire {:mvn/version "6.1.0"}
+           com.hyperfiddle/electric       {:mvn/version "v3-alpha-00120400"}
+           org.clojure/clojure            {:mvn/version "1.12.4"}
+           org.clojure/clojurescript      {:mvn/version "1.11.121"}
+           org.clojure/tools.cli          {:mvn/version "1.2.245"}
+           org.clojure/tools.logging      {:mvn/version "1.3.0"}
+           org.clojure/data.xml           {:mvn/version "0.0.8"} ; for streaming XML processing in episerver-loading
+           ch.qos.logback/logback-classic {:mvn/version "1.4.14"}
+           ring/ring                      {:mvn/version "1.11.0"} ; to serve the app (1.12+ uses Jetty 12, incompatible with Electric)
+           ring-basic-authentication/ring-basic-authentication {:mvn/version "1.2.0"} ; for demo
+           
+           ;; Extra libraries we (Itonomi) standarise on
+           io.github.itonomi/komponentkassen          {:git/sha "3058f42c9e3897c74ccc7fcc2c52c096247eb576"}           
+           ;;     io.github.itonomi/komponentkassen          #_{:local/root "../komponentkassen"}
+           ;;     {:git/sha "7dcd8f123e89bf772b13804e55613f233bc9b5fa"}
+           io.github.weavejester/medley               {:git/sha "54f45abc16ecd30121d05ef52014af8c65d4635f"}
+           com.taoensso/encore                        {:mvn/version "3.159.0"}
+           io.github.jimpil/duratom                   {:git/sha "1573d330c2ab87f9fff45f688bc2f391552ed549"}
+           clj-http/clj-http                          {:mvn/version "3.13.1"}
+           com.taoensso/telemere                      {:mvn/version "1.2.0"}
+           io.github.metosin/malli                    {:git/sha "86660f2b7bc054de9ef4d1cecb92241970d0888e"}
+           hashp/hashp                                {:mvn/version "0.2.2"}
+           io.github.cgrand/xforms                    {:git/sha "78076f8cd078ebb336ed9047df873ebc2ecf3aa1"}
+           io.github.wkok/openai-clojure              {:git/sha "b53e728ea569033f6f7ca11b19f04b0b31654777"}
+           io.github.nextjournal/markdown             {:mvn/version "0.7.222"}
+           io.github.lambdaisland/deep-diff2          {:git/sha "7d5d947f42bafeeda5ca92334f6cda8ac66eb5d6"}
+           io.github.olavfosse/context                {:git/sha "024f3241e94944ce97ae7be21f266b8089c58229"}
+           funcool/lentes                             {:mvn/version "1.3.3"}
+           com.hyperfiddle/rcf                        {:mvn/version "20220926-202227"}
+           org.clojure/data.json                      {:mvn/version "2.5.1"}
+           tick/tick                                  {:mvn/version "1.0"}
+           io.github.arachne-framework/valuehash      {:git/sha "ff1d4b7f1260daf41c786a61cb45d02871b7baf9"}
+           io.replikativ/datahike                     {:mvn/version "0.6.1610"}
+           io.replikativ/datahike-jdbc                {:mvn/version "0.3.50"}
+           org.postgresql/postgresql                  {:mvn/version "42.7.8"}
+           nano-id/nano-id                            {:mvn/version "1.1.0"}
+           markdown-clj/markdown-clj                  {:mvn/version "1.12.4"}
+           jarohen/chime                              {:mvn/version "0.3.3"}
+           org.clj-commons/hickory                    {:mvn/version "0.7.7"}
+
+           ;; Libraries for the demo app
+           hiccup/hiccup                              {:mvn/version "2.0.0"}
+
+           ;; Integrations
+           io.github.runeanielsen/typesense-clj       {:mvn/version "0.1.147"}
+
+           com.itonomi/kindly-electric {:git/url "https://github.com/olavfosse-itonomi/kindly-electric"
+                                        :git/sha "1a51985e70411c28589439583bfc29d79d01d06d"}
+
+           ;; Dependencies from shared (for auth, api_keys, rag)
+           tech.unravel/litellm-clj {:git/url "https://github.com/olavfosse-itonomi/litellm-clj"
+                                     :git/sha "be1cf7aa0426fbb2799ba971b43374d8514d1f01"}
+           pandect/pandect {:mvn/version "1.0.2"}
+           buddy/buddy-sign {:mvn/version "3.5.351"}}
+ :jvm-opts ["-Djdk.attach.allowAttachSelf"
+            "-Dfile.encoding=UTF-8"
+            "-Dconsole.encoding=UTF-8"
+            "-Dclojure.spec.skip-macros=true"]
+ :paths   ["src" "resources"]
+ :aliases {:dev {:extra-paths ["src-dev"]
+                 :extra-deps {thheller/shadow-cljs {:mvn/version "2.26.2"}}}
+
+           :1.12-storm
+           {;; for disabling the official compiler
+            :classpath-overrides {org.clojure/clojure nil}
+            :extra-deps {com.github.flow-storm/clojure {:mvn/version "1.12.0-9"}
+                         com.github.flow-storm/flow-storm-dbg {:mvn/version "4.3.0"}}}
+
+           :prod {:extra-paths ["src-prod"]
+                  :extra-deps {com.google.javascript/closure-compiler-unshaded {:mvn/version "v20230802"}}} ; deps conflict
+           
+           :build ; use `clj -X:build build-client`, NOT -T!
+           {:extra-paths ["src-build"]
+            :ns-default  build
+            :extra-deps  {thheller/shadow-cljs          {:mvn/version "2.26.2"}
+                          io.github.clojure/tools.build {:mvn/version "0.10.11"}}}
+
+           :test {:extra-paths ["test"]
+                  :extra-deps {io.github.cognitect-labs/test-runner {:git/tag "v0.5.1" :git/sha "dfb30dd"}
+                               org.clojure/tools.namespace {:mvn/version "1.5.0"}}
+                  :main-opts ["-m" "cognitect.test-runner"]
+                  :jvm-opts ["-Dhyperfiddle.rcf.enable=true"
+                             "-Dhyperfiddle.rcf.generate-tests=true"]}
+
+           :clj-kondo {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2024.11.14"}}
+                       :main-opts ["-m" "clj-kondo.main"]}}
+ :mvn/repos
+ {"clojars" {:url "https://repo.clojars.org/" :snapshots {:enabled true :update :always}}}}

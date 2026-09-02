@@ -1,0 +1,106 @@
+{
+ ;; :name "<collection-name>"
+ "symbols_to_index" ["_"],
+ "token_separators" ["-" "/"],
+ "default_sorting_field" "doc_num",
+ "enable_nested_fields" false,
+ "fields"
+ [
+  ;; hash of url_without_anchor|git_branch
+  {"name" "doc_num", "facet" true, "sort" true, "type" "string"}
+  {"name" "url", "facet" true, "type" "string", "optional" true} ;; this field is missing in Kudos docs
+  #_{"name" "updated_at", "sort" true, "type" "int64"}
+  #_{"name" "uuid", "type" "string"}
+  #_{"name" "git_branch",
+   "facet" true,
+   "optional" true,
+   "sort" true,
+   "type" "string"}
+  
+  {"name" "title", "facet" true, "optional" true, "type" "string"}
+
+  {"name" "concerned_years"
+ "type" "int32[]"
+   "facet" true}
+  #_{"name" "isbn", "optional" true, "type" "string"}
+  #_{"name" "abstract", "optional" true, "type" "string"}
+  #_{"name" "language", "optional" true, "type" "string"}
+  #_{"name" "source_document_type",
+   "facet" true,
+   "optional" true,
+   "sort" true,
+   "type" "string"}
+  #_{"name" "source_document_url", "optional" true, "type" "string"}
+  #_{"name" "source_page_url", "optional" true, "type" "string"}
+  #_{"name" "source_published_at", "sort" true, "type" "string"}
+  #_{"name" "source_created_at",
+   "optional" true,
+   "sort" true,
+   "type" "string"}
+  #_{"name" "source_updated_at",
+   "optional" true,
+   "sort" true,
+   "type" "string"}
+  #_{"name" "kudos_published_at", "optional" true, "type" "string"}
+  #_{"name" "kudos_unpublishable_at", "optional" true, "type" "string"}
+  #_{"name" "department_short",
+   "facet" true,
+   "optional" true,
+   "type" "string[]"}
+  #_{"name" "department_long",
+   "facet" true,
+   "optional" true,
+   "type" "string[]"}
+  {"name" "orgs_short",
+   "facet" true,
+   "optional" true,
+   "type" "string[]"}
+  {"name" "orgs_long",
+   "facet" true,
+   "optional" true,
+   "type" "string[]"}
+  #_{"facet" true,
+   "name" "publisher_short",
+   "optional" true,
+   "type" "string"}
+  #_{"facet" true,
+   "name" "publisher_long",
+   "optional" true,
+   "type" "string"}
+  #_{"facet" true,
+   "name" "recipient_short",
+   "optional" true,
+   "type" "string"}
+  #_{"facet" true,
+   "name" "recipient_long",
+   "optional" true,
+   "type" "string"}
+  {"facet" true,
+   "name" "type",
+   "optional" true,
+   "sort" true,
+   "type" "string"}
+  #_{"facet" true,
+   "name" "owner_short",
+   "optional" true,
+   "type" "string"}
+  #_{"facet" true,
+   "name" "owner_long",
+   "optional" true,
+   "type" "string"}
+  #_{"name" "source_published_year",
+   "facet" true,
+   "sort" true,
+   "optional" true,
+   "type" "string"}
+  #_{"stem_dictionary" "",
+   "optional" true,
+   "index" true,
+   "sort" false,
+   "name" "concerns_years",
+   "locale" "",
+   "type" "string[]",
+   "infix" false,
+   "facet" true,
+   "store" true,
+   "stem" false}]}

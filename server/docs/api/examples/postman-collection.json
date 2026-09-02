@@ -1,0 +1,377 @@
+{
+  "info": {
+    "name": "Digdir RAG API",
+    "description": "Retrieval-Augmented Generation API for querying Norwegian government documents.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "X-API-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{api_key}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://admin.kunnskap.digdir.cloud",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "rag_your_api_key_here",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "RAG",
+      "description": "RAG and Retrieval endpoints",
+      "item": [
+        {
+          "name": "RAG Query - Simple",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Hva er Altinn?\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/rag",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rag"]
+            },
+            "description": "Simple RAG query with just a question"
+          }
+        },
+        {
+          "name": "RAG Query - With Options",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Hva er kravene for universell utforming?\",\n  \"model\": \"gpt-4o-2024-11-20\",\n  \"context-top-k\": 5,\n  \"rerank-top-k\": 20\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/rag",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rag"]
+            },
+            "description": "RAG query with custom model and parameters"
+          }
+        },
+        {
+          "name": "RAG Query - Continue Conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Kan du forklare mer om dette?\",\n  \"conversation-id\": \"YOUR_CONVERSATION_ID\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/rag",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rag"]
+            },
+            "description": "Continue an existing conversation"
+          }
+        },
+        {
+          "name": "Retrieve - Simple",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Hva er Altinn?\",\n  \"top_k\": 5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/retrieve",
+              "host": ["{{base_url}}"],
+              "path": ["api", "retrieve"]
+            },
+            "description": "Retrieve relevant chunks without LLM generation"
+          }
+        },
+        {
+          "name": "Retrieve - Without Query Expansion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"WCAG 2.1\",\n  \"top_k\": 10,\n  \"include_query_expansion\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/retrieve",
+              "host": ["{{base_url}}"],
+              "path": ["api", "retrieve"]
+            },
+            "description": "Fast retrieval without LLM query expansion"
+          }
+        },
+        {
+          "name": "Retrieve - With Filter",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"tilgjengelighet\",\n  \"top_k\": 5,\n  \"filter\": {\n    \"fields\": [\n      {\n        \"field\": \"owner_short\",\n        \"selected_options\": [\"Digdir\"],\n        \"value_type\": \"string\"\n      }\n    ]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/retrieve",
+              "host": ["{{base_url}}"],
+              "path": ["api", "retrieve"]
+            },
+            "description": "Retrieve with metadata filter"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Conversations",
+      "description": "Conversation management endpoints",
+      "item": [
+        {
+          "name": "List Conversations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/conversations?page_size=10&page_index=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "conversations"],
+              "query": [
+                {
+                  "key": "page_size",
+                  "value": "10"
+                },
+                {
+                  "key": "page_index",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Get paginated list of conversations"
+          }
+        },
+        {
+          "name": "Create Conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Email",
+                "value": "user@example.com"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"My New Conversation\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/conversations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "conversations"]
+            },
+            "description": "Create a new conversation"
+          }
+        },
+        {
+          "name": "Get Conversation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/conversations/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "conversations", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "YOUR_CONVERSATION_ID"
+                }
+              ]
+            },
+            "description": "Get a specific conversation with messages"
+          }
+        },
+        {
+          "name": "Update Conversation",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Title\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/conversations/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "conversations", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "YOUR_CONVERSATION_ID"
+                }
+              ]
+            },
+            "description": "Update conversation title"
+          }
+        },
+        {
+          "name": "Delete Conversation",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/conversations/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "conversations", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "YOUR_CONVERSATION_ID"
+                }
+              ]
+            },
+            "description": "Delete a conversation"
+          }
+        }
+      ]
+    },
+    {
+      "name": "API Keys (Admin)",
+      "description": "API key management - requires JWT auth",
+      "auth": {
+        "type": "noauth"
+      },
+      "item": [
+        {
+          "name": "List API Keys",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "auth-token={{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/keys",
+              "host": ["{{base_url}}"],
+              "path": ["api", "keys"]
+            },
+            "description": "List all API keys for the authenticated user"
+          }
+        },
+        {
+          "name": "Create API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "auth-token={{jwt_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Integration Key\",\n  \"entity-id\": \"YOUR_ENTITY_ID\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/keys",
+              "host": ["{{base_url}}"],
+              "path": ["api", "keys"]
+            },
+            "description": "Create a new API key"
+          }
+        },
+        {
+          "name": "Revoke API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "auth-token={{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/keys/:key-id/revoke",
+              "host": ["{{base_url}}"],
+              "path": ["api", "keys", ":key-id", "revoke"],
+              "variable": [
+                {
+                  "key": "key-id",
+                  "value": "YOUR_KEY_ID"
+                }
+              ]
+            },
+            "description": "Revoke an API key"
+          }
+        }
+      ]
+    }
+  ]
+}
