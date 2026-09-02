@@ -1,0 +1,36 @@
+{:id "setup",
+ :plane "control",
+ :name "Setup & Portability",
+ :note "Bootstrap + import/export",
+ :icon "setup",
+ :color "#e0a678",
+ :status "Control plane",
+ :summary
+ "Bootstraps complete tenants and moves versioned system configuration between environments.",
+ :description
+ "Setup workflows create a coherent first tenant, dataset, pipeline and runtime. Import/export serializes system entities in dependency order with validation and reporting for portable environments.",
+ :responsibilities
+ ["Bootstrap new environments and initial bindings"
+  "Export and import registered system entities"
+  "Validate dependency order, identities and migration reports"],
+ :files
+ ["server/src/digdir/setup/workflow.clj"
+  "server/src/digdir/import_export/system.clj"],
+ :input "Setup parameters or system archive",
+ :output "Materialized configuration topology",
+ :edges
+ [{:to "config",
+   :kind :call,
+   :target :call,
+   :label "Write initial configuration",
+   :witness
+   {:file "server/src/digdir/setup/workflow.clj",
+    :requires digdir.config.db}}
+  {:to "data",
+   :kind :call,
+   :target :call,
+   :label "Create the config database",
+   :via "Datahike connection opened during setup",
+   :unverified true}],
+ :keywords
+ "setup bootstrap import export portability migration environment archive topology"}

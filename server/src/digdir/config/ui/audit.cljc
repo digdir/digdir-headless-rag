@@ -148,14 +148,14 @@
      (StatCard "Updates" (get by-action :update 0) "#1e40af")
      (StatCard "Deletes" (get by-action :delete 0) "#991b1b"))))
 
-(e/defn AuditFilters [!tenant !environment !user-filter !path-filter]
+(e/defn AuditFilters [!tenant !tenant-config-key !user-filter !path-filter]
   (e/client
    (let [tenant (e/watch !tenant)
-         environment (e/watch !environment)
+         tenant-config-key (e/watch !tenant-config-key)
          user-filter (e/watch !user-filter)
          path-filter (e/watch !path-filter)
-         tenants ["" "ka" "altinn"]
-         environments ["" "prod" "staging" "test" "dev"]]
+         tenants (into [""] (e/server (audit/distinct-audit-tenants @(config-db/get-conn))))
+         tenant-config-keys (into [""] (e/server (audit/distinct-audit-tenant-config-keys @(config-db/get-conn))))]
      (dom/div
       (dom/props {:style {:display "flex"
                           :gap "1rem"
@@ -180,19 +180,19 @@
         (dom/On "change" #(reset! !tenant (let [v (.. % -target -value)]
                                             (when (seq v) v))) nil)))
 
-      ;; Environment filter
+      ;; Config Key filter
       (dom/div
        (dom/props {:style {:display "flex" :flex-direction "column" :gap "0.25rem"}})
        (dom/label
         (dom/props {:style {:font-size "0.75rem" :color "#6b7280"}})
-        (dom/text "Environment"))
+        (dom/text "Config Key"))
        (dom/select
-        (dom/props {:style filter-input-style :value (or environment "")})
-        (e/for [env (e/diff-by identity environments)]
+        (dom/props {:style filter-input-style :value (or tenant-config-key "")})
+        (e/for [env (e/diff-by identity tenant-config-keys)]
           (dom/option
-           (dom/props {:value env :selected (= env environment)})
-           (dom/text (if (empty? env) "All environments" env))))
-        (dom/On "change" #(reset! !environment (let [v (.. % -target -value)]
+           (dom/props {:value env :selected (= env tenant-config-key)})
+           (dom/text (if (empty? env) "All tenant-config-keys" env))))
+        (dom/On "change" #(reset! !tenant-config-key (let [v (.. % -target -value)]
                                                   (when (seq v) v))) nil)))
 
       ;; User filter
@@ -254,7 +254,7 @@
                          :margin-top "0.25rem"}})
      (when-let [tenant (:audit/tenant entry)]
        (dom/span (dom/text (str tenant " / "))))
-     (when-let [env (:audit/environment entry)]
+     (when-let [env (:audit/tenant-config-key entry)]
        (dom/span (dom/text env)))))
 
    ;; User
@@ -315,13 +315,13 @@
   (e/client
    (let [;; Filter state
          !tenant (atom nil)
-         !environment (atom nil)
+         !tenant-config-key (atom nil)
          !user-filter (atom nil)
          !path-filter (atom nil)
          !refresh-counter (atom 0)
 
          tenant (e/watch !tenant)
-         environment (e/watch !environment)
+         tenant-config-key (e/watch !tenant-config-key)
          user-filter (e/watch !user-filter)
          path-filter (e/watch !path-filter)
          refresh-counter (e/watch !refresh-counter)
@@ -329,7 +329,7 @@
          ;; Fetch data from server
          _ refresh-counter
          audit-data (e/server (get-audit-data {:tenant tenant
-                                               :environment environment
+                                               :tenant-config-key tenant-config-key
                                                :user-email user-filter
                                                :limit 100}))
          all-changes (:changes audit-data)
@@ -369,7 +369,7 @@
         (AuditStats stats))
 
       ;; Filters
-      (AuditFilters !tenant !environment !user-filter !path-filter)
+      (AuditFilters !tenant !tenant-config-key !user-filter !path-filter)
 
       ;; Results count
       (dom/div

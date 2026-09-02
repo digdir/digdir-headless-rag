@@ -85,7 +85,7 @@
                  (assoc perm
                         :parsed-attributes (parse-edn-str (:permission/attributes perm))
                         :parsed-tenants (parse-edn-str (:permission/tenants perm))
-                        :parsed-environments (parse-edn-str (:permission/environments perm))
+                        :parsed-tenant-config-keys (parse-edn-str (:permission/tenant-config-keys perm))
                         :parsed-actions (parse-edn-str (:permission/actions perm))
                         :user-count (count (perms/get-users-with-permission db (:permission/id perm)))
                         :formatted-created (format-timestamp (:permission/created-at perm))))
@@ -154,7 +154,7 @@
          is-selected (= (:permission/id perm) selected)
          attrs (:parsed-attributes perm)
          tenants (:parsed-tenants perm)
-         envs (:parsed-environments perm)
+         envs (:parsed-tenant-config-keys perm)
          actions (:parsed-actions perm)]
      (dom/div
       (dom/props {:style {:background (if is-selected "#eff6ff" "white")
@@ -208,7 +208,7 @@
        (dom/div
         (dom/props {:style {:margin-bottom "0.25rem"}})
         (AttrBadge "tenants" tenants "#e0e7ff")
-        (AttrBadge "environments" envs "#d1fae5"))
+        (AttrBadge "tenant-config-keys" envs "#d1fae5"))
 
        (when actions
          (dom/div

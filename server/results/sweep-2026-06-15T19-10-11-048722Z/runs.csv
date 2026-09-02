@@ -1,0 +1,233 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,answer-judge-verdict,answer-judge-score,answer-judge-rationale,answer-judge-model,task-difficulty,task-difficulty-rationale,recall-at-5,recall-at-10,recall-at-20,citation-recall,golden-in-search-pool?,golden-pool-rank,golden-in-display?,golden-display-rank,golden-read?,golden-features,pool-head,search-passes,issued-queries,insufficiency-fired?,refinement-corpus-grounded?,enrichment-hits,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,cached-tokens,llm-calls,reasoning-tokens,finish-reason,length-finish?,empty?,steps-executed,response,error
+6b53f2ed-981e-40b6-86a9-e9d3ba4b1c17,2026-06-15T19:11:35.826650Z,deployed,ue-broker-01-filoverforing-tilstander,0,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"dd56b73485fd6 R22.5 P3.7 h3.0 or1.7 L2169 3/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] +q | Basic concepts","d66fc9e336d8d R22.6 P2.5 h2.0 or1.2 L1613 0/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Broker",1,Altinn Formidling filoverføring statuser | Altinn Formidling transfer status | Altinn Formidling status fra start til sletting | Altinn Formidling file transfer lifecycle status | Formidling fil statuser,false,,33,2,1,1,218bee00be34;38aa10a64532,218bee00be34,218bee00be34,84576,5285,298,5583,0,2,64,tool_calls,false,false,3," Ifølge den endelige tilstandsmaskinen for Altinn Formidling kan en filoverføring gå gjennom følgende tilstander fra den startes til filen eventuelt er slettet [1]:
+
+- __Initialisert__
+- __Opplasting pågår__
+- __Sjekk av opplasting__
+- __Avbrutt__
+- __Publisert__
+- __Nedlastinger initiert__
+- __Overføring feilet__
+- __Alle bekreftet nedlastet__
+- __Slettet__
+
+Merk at ikke alle overføringer nødvendigvis gjennomløper alle tilstandene. For eksempel kan en overføring endes i tilstanden __Avbrutt__ så lenge ingen nedlasting har startet, eller i tilstanden __Overføring feilet__ dersom noe går galt under opplasting, behandling eller nedlasting [1]. Videre er __Slettet__ en mulig sluttilstand, men konseptet tillater også at filer blir liggende i _Altinn Broker File Store_ for andre formål enn en enkelt overføringsprosess; i slike tilfeller avsluttes prosessen etter opplasting og publisering, med egne prosesser for nedlasting og fjerning [1].",
+a14bc79f-8867-4d59-b62c-1553a833a993,2026-06-15T19:12:50.246370Z,deployed,ue-broker-01-filoverforing-tilstander,1,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"dd56b73485fd6 R20.8 P3.7 h3.0 or1.8 L2169 3/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] +q | Basic concepts","db35ba60edb88 R21.5 P4.8 h4.0 or2.0 L981 1/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] +q | About",1,Altinn Formidling filoverføring statuser livsløp | Altinn Formidling transfer statuses lifecycle | Altinn Formidling status fra start til sletting | Altinn Formidling file transfer status | Formidling filstatuser,false,,33,1,1,1,218bee00be34,218bee00be34,218bee00be34,74417,5332,276,5608,0,2,67,tool_calls,false,false,3," En filoverføring i Altinn Formidling kan gå gjennom følgende tilstander fra start til filen er slettet [1]:
+
+1. **Initialisert** – overføringsprosessen er initialisert av avsenderen.
+2. **Opplasting pågår** – store filer kan ta tid å laste opp, og Altinn Formidling holder styr på fremgangen.
+3. **Sjekk av opplasting** – opplastede filer valideres og sjekkes for virus.
+4. **Publisert** – filen er klar for nedlastinger.
+5. **Nedlastinger initiert** – en eller flere mottakere har startet nedlastingen.
+6. **Alle bekreftet nedlastet** – alle nødvendige mottakere har bekreftet nedlastingen.
+7. **Slettet** – den opplastede filen har blitt slettet, enten på forespørsel fra avsenderen eller etter avtalte kriterier for sanering.
+
+I tillegg kan følgende alternative tilstander inntreffe [1]:
+
+* **Avbrutt** – Altinn Formidling støtter avbrytelse så lenge ingen nedlastingsprosess har startet.
+* **Overføring feilet** – den samlede overføringsprosessen mislyktes, enten under opplasting, behandling av opplasting eller under nedlasting av en eller flere mottakere.
+
+Merk at ikke alle tilstander nødvendigvis gjennomløpes i hver enkelt overføring; «Avbrutt» og «Overføring feilet» er feil- eller avbruddstilstander, mens «Slettet» kan skje etter at alle nødvendige mottakere har bekreftet nedlastingen [1].",
+e2966a5a-cad3-49e0-82db-68509b6bab53,2026-06-15T19:14:44.188130Z,deployed,ue-studio-03-datamodell-filer,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d87044ee89679 R21.0 P3.6 h3.0 or1.2 L1094 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Data modeling",,1,genererte modellfiler app datamodell repo plassering | app data model generated files location repository | datamodell genererte filer app repo | model files generated app data model Altinn repo | hvor ligger modellfiler app datamodell,false,,63,5,3,1,3db5a48a99cd;e330142e8502;ae4d16c0c7ed;b088ac9af2de;2f6cee8d5f5e,3db5a48a99cd;e330142e8502;ae4d16c0c7ed,3db5a48a99cd,113939,5301,269,5570,0,2,39,tool_calls,false,false,3," For en app-datamodell finnes det fire modellfiler [1]:
+
+* **C# datamodell** – `<model>.cs`
+* **JSON schema** – `<model>.schema.json`
+* **XSD datamodell** – `<model>.XSD`
+* **JSON-metadata** – `<model>.metadata.json`
+
+Alle ligger i appens repository under mappen `App/models/` [1][2].
+
+Hvilke filer som faktisk genereres, avhenger av situasjonen:
+
+* Ved opplasting av en XSD-modell genereres `<model>.cs` og `<model>.schema.json` [2].
+* Når man klikker **Generer modeller** i datamodelleringsverktøyet, genereres både XSD- og C#-modellfiler [3].
+* JSON-metadatafilen (`<model>.metadata.json`) genereres ved behov av Altinn Studio for å lage `<model>.cs`, men den lagres **ikke** i applikasjonen [1].",
+6f9dfc45-8dfc-4fb1-92b7-f2327c6c07fa,2026-06-15T19:18:02.517489Z,deployed,ue-studio-03-datamodell-filer,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d87044ee89679 R23.5 P3.7 h3.0 or2.4 L1094 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Data modeling",,1,hvilke modellfiler genereres for en app-datamodell og hvor i repoet ligger de | modellfiler i xsd- og c#-format | app models | data model files for applications | datamodeller for applikasjoner | generer modeller verktøylinje,false,,110,3,1,1,ab3581cfc118;3db5a48a99cd;b088ac9af2de,3db5a48a99cd,3db5a48a99cd,198326,6809,376,7185,0,3,66,tool_calls,false,false,3," En app-datamodell har fire modellfiler, og de ligger i repoet under `App/models` i appens filstruktur i Altinn Studio repository [1].
+
+De fire filene er:
+
+* **C# datamodell** (`<model>.cs`) – brukes av backend/API-ene for å behandle og validere data [1].
+* **JSON schema** (`<model>.schema.json`) – brukes på klientsiden (frontend) for løpende validering, og det er denne filen man jobber med i datamodelleringsverktøyet [1].
+* **XSD datamodell** (`<model>.XSD`) – definerer hvilke elementer som kan brukes i et dokument; brukes ikke direkte av applikasjonen, men kan lastes opp eller ned [1].
+* **JSON-metadata** (`<model>.metadata.json`) – brukes av Altinn Studio for å generere `<model>.cs`-filen. Denne genereres kun ved behov og lagres **ikke** i applikasjonen [1].",
+8f856088-bad9-4359-8139-5136006a7163,2026-06-15T19:20:28.593264Z,deployed,ue-corr-03-system-til-system-nedlasting,0,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"dd8ceec8ede98 R20.3 P3.6 h3.0 or1.7 L2876 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Systemprovider",,1,meldinger med vedlegg Altinn innboks API | behandle vedlegg Altinn API integrasjon | stor mengde meldinger Altinn API | Altinn meldingstjeneste vedlegg | manuell innboks vs API Altinn,false,,71,4,3,1,939545886fa9;5f3606528ac4;d86b0c860b67;ddb524214c36,939545886fa9;5f3606528ac4;d86b0c860b67,939545886fa9,146073,5596,364,5960,0,2,94,tool_calls,false,false,3," Dere bør **integrere mot API**, ikke behandle meldingene manuelt i innboksen.
+
+For virksomheter som håndterer større volum av meldinger eller meldinger med omfattende vedlegg, anbefales det å benytte **system-til-system-integrasjon** fremfor manuell oppfølging i Altinns brukergrensesnitt [1]. **Innboksen i GUI** er primært egnet for manuell behandling i mindre skala, mens effektiv håndtering av større mengder meldinger forutsetter integrasjon [1].
+
+Ved å integrere sak-/arkivsystemet med Altinn via **Dialogporten** og tilhørende API-er kan virksomheten:
+
+- automatisk oppdage og hente nye meldinger,
+- laste ned meldinger og alle vedlegg maskinelt,
+- journalføre og arkivere direkte i eget system,
+- redusere manuelle operasjoner og risiko for feil [1].
+
+Altinn Melding har API-er som tillater integrasjon med andre systemer for sending og mottak av meldinger, og mulighet for automatisert meldingshåndtering via integrerte systemer [2]. For sluttbrukersystemer kreves det **maskin-til-maskin-integrasjon** [3].
+
+**For å komme i gang** må leverandører av sluttbrukersystemer følge **onboarding-prosessen** for å få tilgang til test- og produksjonsmiljø, og dere må be om tilgang til aktuelle **scopes** ved å kontakte servicedesk@altinn.no [1]. For testing kan dere også be servicedesk sende testmeldinger til en bestemt mottaker i testmiljøet [1].",
+21fb66f8-bf93-417b-81c2-fb075aa90008,2026-06-15T19:23:09.209864Z,deployed,ue-corr-03-system-til-system-nedlasting,1,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"dd8ceec8ede98 R21.8 P3.6 h3.0 or1.7 L2876 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Systemprovider",,1,bør vi behandle store mengder altinn-meldinger med vedlegg manuelt eller via api | tilgjengeliggjøring av melding i altinn 3 melding api | integrere seg med altinn api | håndtering av større mengder meldinger | altinn melding vedlegg api | manuell innboks altinn melding tjenesteeier,false,,98,6,1,1,939545886fa9;f52437f5574e;3260b6da8872;80838dddd2b5;b819ccefa671;f751303e1636,939545886fa9,939545886fa9,160614,6818,603,7421,0,3,134,tool_calls,false,false,3," Dere bør integrere mot API, ikke behandle meldingene manuelt i innboksen.
+
+For virksomheter som håndterer større volum av meldinger eller meldinger med omfattende vedlegg, anbefales det å benytte system-til-system-integrasjon fremfor manuell oppfølging i Altinns brukergrensesnitt [1]. Innboksen i GUI er primært egnet for manuell behandling i mindre skala, mens effektiv håndtering av større mengder meldinger forutsetter integrasjon [1].
+
+Ved å integrere sak-/arkivsystemet med Altinn via Dialogporten og tilhørende API-er kan virksomheten blant annet [1]:
+
+- automatisk oppdage og hente nye meldinger
+- laste ned meldinger og alle vedlegg maskinelt
+- journalføre og arkivere direkte i eget system
+- redusere manuelle operasjoner og risiko for feil
+
+Dette gir en arbeidsflyt der saksbehandling skjer i eget fagsystem, med Altinn som transport- og distribusjonskanal [1].",
+a43a5826-05c7-42da-9925-99ec76ec9604,2026-06-15T19:27:13.366294Z,deployed,ue-notif-05-umiddelbar-varsling-otp,0,public-docs,new,"altinn-notifications,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d5e8f2f62095c R24.0 P2.6 h2.0 or1.3 L1450 1/? ty:content+hypothetical-questions b[0.1,0.0,0.0,0.4,0.1,0.0] +q | Instant notifications",,1,sende engangskode otp varsel øyeblikkelig døgnet rundt ved altinn innlogging | altinn varsel sender varsler med otp ved innlogging | varsel på e-post og sms med engangskode ved altinn innlogging | one-time password otp sendes øyeblikkelig ved innlogging i altinn | instant notifications otp ved altinn innlogging | altinn varsel sender otp kode døgnet rundt ved pålogging,false,,109,3,3,1,046877b17d91;0c1240cde11a;f402534c7a05,046877b17d91;0c1240cde11a;f402534c7a05,046877b17d91,244154,6859,398,7257,0,3,67,tool_calls,false,false,3," Ja, det finnes en egen tjeneste for dette: **Umiddelbar varsling** i Altinn Varsling.
+
+- Den sender meldinger **øyeblikkelig** til **én mottaker** (e-post eller telefonnummer), og er nettopp ment for situasjoner der brukeren venter på informasjon for å komme videre, for eksempel en engangskode (OTP) ved innlogging [1][2].
+- For SMS gjør du en `POST` til `/future/orders/instant/sms` med blant annet `idempotencyId`, `phoneNumber` i internasjonalt format, `timeToLiveInSeconds` og `smsSettings.body` [3].
+- Varselet sendes umiddelbart til meldingsgatewayen og omgår køen [1].
+
+Det er likevel viktig å merke seg at tjenesten er **semisynkron**: API-et returnerer `201 Created` eller `200 OK` med sporingsinformasjon, men dette bekrefter bare at bestillingen ble registrert og akseptert – ikke at leveringen lyktes. Leveringsstatus må hentes asynkront via statusfeeden `/future/shipment/feed` eller ved å polle `/future/shipment/:id` [1].
+
+Et alternativ hvis du ikke trenger garanti for øyeblikkelig utsending, er vanlig varsling med `sendingTimePolicy: ""Anytime""` og utelatt `requestedSendTime`. Denne kombinasjonen tillater utsending hele døgnet og gir vanligvis SMS til brukeren i løpet av et par minutter [1]. For en OTP ved innlogging vil imidlertid **Umiddelbar varsling** være riktigste valg.",
+6c8a54d2-6d17-4722-9a3a-9c52e58dddf6,2026-06-15T19:30:36.927364Z,deployed,ue-notif-05-umiddelbar-varsling-otp,1,public-docs,new,"altinn-notifications,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"d5e8f2f62095c R20.0 P3.7 h3.0 or2.0 L1450 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Instant notifications","d5e8f2f62095c R22.1 P3.7 h3.0 or1.9 L406 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Instant notifications",1,engangskode OTP varsel øyeblikkelig | umiddelbar varsel døgnet rundt | send varsel umiddelbart Altinn | notification instant OTP Altinn | varslingstjeneste umiddelbar varsling,false,,66,7,5,1,0c1240cde11a;046877b17d91;c153b1747762;ac79c052a64e;6867b929f5ec;92386014f6a3;30e16cfa3f81,0c1240cde11a;046877b17d91;c153b1747762;ac79c052a64e;30e16cfa3f81,046877b17d91,203558,5529,312,5841,0,2,80,tool_calls,false,false,3," Ja, det finnes en egen funksjon kalt **umiddelbar varsling** i Altinn Varsling som er laget for dette formålet [1][2]. Den er egnet for tidskritiske meldinger som engangskoder (OTP) ved innlogging, og sender meldinger **øyeblikkelig** til **én mottaker** (e-postadresse eller telefonnummer) [2].
+
+Slik fungerer den:
+
+- API-kallet registrerer bestillingen og sender den umiddelbart til SMS- eller e-posttjenesten.
+- Varselet sendes til meldingsgatewayen umiddelbart og **omgår køen**.
+- API-et returnerer `201 Created` eller `200 OK` med sporingsinformasjon (`shipmentId` og `notificationOrderId`) [2].
+- For SMS-baserte umiddelbare varsler må du oppgi et obligatorisk `timeToLiveInSeconds`-felt, som angir hvor lenge SMS-gatewayen skal forsøke å levere meldingen [4].
+- Tjenesten støtter også **idempotens** via et obligatorisk `idempotencyId`-felt, slik at samme melding ikke sendes flere ganger ved gjentatte forespørsler [3].
+
+Endepunktene er [5]:
+
+| Endepunkt | Beskrivelse |
+|-----------|-------------|
+| `POST /future/orders/instant/sms` | Send umiddelbar SMS-varsling |
+| `POST /future/orders/instant/email` | Send umiddelbar e-postvarsling |
+
+**Merknad om «døgnet rundt»:** Kilden skiller mellom to mekanismer. For **vanlig varsling** nevnes det at du kan bruke `sendingTimePolicy: ""Anytime""` for å tillate utsending hele døgnet, og at dette vanligvis gir levering av SMS i løpet av et par minutter [2]. For **umiddelbar varsling** beskrives det at meldingen sendes øyeblikkelig og omgår køen [2], men kilden sier ikke eksplisitt om denne tjenesten bruker eller krever `sendingTimePolicy: ""Anytime""`. Siden umiddelbar varsling sendes umiddelbart ved bestilling, vil den trolig leveres uavhengig av tid på døgnet, men dette er ikke uttrykkelig bekreftet i kilden for denne tjenesten.",
+97682cab-d708-448a-adb3-d3724bc04991,2026-06-15T19:31:44.781652Z,deployed,ue-dialog-02-seen-log,0,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d7d5b35931f86 R20.3 P3.8 h3.0 or2.4 L1534 0/? ty:content+hypothetical-questions+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] +q | Seen log",,1,Dialogporten seen log betyr | Dialogporten seen log meaning | Dialogporten hva betyr sett logg | Dialogporten listing searching dialogs counts as seen | Dialogporten seen log list search | Dialogporten sett logg søk liste,false,,56,4,2,1,bf583073feb1;c8a40bf7035a;75c1088910ab;86c5c8bc181c,bf583073feb1;c8a40bf7035a,bf583073feb1,67852,5374,260,5634,0,2,49,tool_calls,false,false,3," In Dialogporten, a dialog being **""seen""** means that the **details of a particular dialog ID have been requested from the API** — i.e., a single dialog has been retrieved/opened [1]. It does **not** mean that the content has been read or understood, that attachments have been downloaded, or that any actions have been performed [1].
+
+**Listing or searching dialogs does not count.** The seen log is populated only by direct requests for a specific dialog; using the search or list API does not cause the seen log to be populated [1], and no ""seen"" events are emitted from search or list API requests [2].
+
+Seen log entries are recorded **per user per change** (per dialog revision): only the first access by a given user is recorded for a particular revision, but if the service owner updates the dialog, a new entry is created if the same user accesses it again [1].",
+3c5f8e07-2a54-424d-83bd-aaf488ae6136,2026-06-15T19:33:17.668673Z,deployed,ue-dialog-02-seen-log,1,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d7d5b35931f86 R27.3 P3.8 h3.0 or1.9 L1534 0/? ty:content+hypothetical-questions+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] +q | Seen log",,1,Dialogporten seen log | Dialogporten seen betyr | Dialogporten seenLog | Dialogporten dialog seen | Dialogporten listing searching seen | Dialogporten get dialog seen log | Dialogporten leselogg seen,false,,42,4,2,1,bf583073feb1;de7113ac2875;966cb430c2fa;c8a40bf7035a,bf583073feb1;c8a40bf7035a,bf583073feb1,92884,4931,272,5203,0,2,74,tool_calls,false,false,3," In Dialogporten, a dialog being **“seen”** means that a **particular dialog ID has been requested from the API**—i.e., the details of a single dialog have been retrieved [1]. It does **not** mean that the content has been read or understood, that attachments have been downloaded, or that any actions have been performed; for that kind of information you should use the activity log instead [1].
+
+**Listing or searching dialogs does not count.** Using the search or list API does **not** cause the seen log to be populated [1], and seen events are likewise not emitted as a result of search or list API requests [2].
+
+Additional details:
+
+- Seen log entries are recorded **per user per change/revision**. For any given revision of a dialog, only the **first access by a given user** is recorded [1].
+- If the service owner updates the dialog, a **new entry for the same user** can be created if the dialog is accessed again after the update [1].
+- GUIs normally use the seen log entries made after the latest update, but a full seen log is also available for correlation with the activity log and transmission entries [1].
+- Dialogporten also produces **seen events** when a dialog or dialog change is first seen—again, triggered by retrieving the details of a single dialog from the API [2].",
+3349e1cd-98e6-4584-92f2-8e4dfeb6c102,2026-06-15T19:35:11.801691Z,deployed,ue-authz-06-xacml-obligation-authlevel,0,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d0453a21f0b21 R25.8 P3.6 h3.0 or2.2 L1853 4/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Authorization",,1,XACML authentication level required | authentication level XACML policy Altinn | default authentication level XACML | RequiredAuthenticationLevel XACML | sikkerhetsnivå XACML policy,false,,30,4,3,1,e246b621f86c;1c958e251de5;fe6b6b04a08b;7edbd10a3604,e246b621f86c;1c958e251de5;fe6b6b04a08b,e246b621f86c,114130,4754,220,4974,0,2,53,tool_calls,false,false,3," You set the required authentication level as an **XACML obligation** in the policy file.
+
+The default required authentication level is **2** [1].
+
+To set it, add an `<xacml:ObligationExpressions>` block with an `<xacml:ObligationExpression>` where:
+
+- `FulfillOn=""Permit""`
+- `ObligationId=""urn:altinn:obligation:authenticationLevel1""`
+- the attribute assignment uses:
+  - `AttributeId=""urn:altinn:obligation1-assignment1""`
+  - `Category=""urn:altinn:minimum-authenticationlevel""`
+  - an integer `<xacml:AttributeValue>` for the desired level [1][2]
+
+Example for level 2 [1]:
+
+```xml
+<xacml:ObligationExpressions>
+  <xacml:ObligationExpression FulfillOn=""Permit"" ObligationId=""urn:altinn:obligation:authenticationLevel1"">
+    <xacml:AttributeAssignmentExpression AttributeId=""urn:altinn:obligation1-assignment1"" Category=""urn:altinn:minimum-authenticationlevel"">
+      <xacml:AttributeValue DataType=""http://www.w3.org/2001/XMLSchema#integer"">2</xacml:AttributeValue>
+    </xacml:AttributeAssignmentExpression>
+  </xacml:ObligationExpression>
+</xacml:ObligationExpressions>
+```
+
+If you set the required level to **4**, you must also define that service owners can interact through **level 3** authentication for Maskinporten, because Maskinporten is defined as level 3 [1]. In that case, add a second obligation with `ObligationId=""urn:altinn:obligation:authenticationLevel2""` and `Category=""urn:altinn:minimum-authenticationlevel-org""` set to `3` [3]:
+
+```xml
+<xacml:ObligationExpressions>
+  <xacml:ObligationExpression FulfillOn=""Permit"" ObligationId=""urn:altinn:obligation:authenticationLevel1"">
+    <xacml:AttributeAssignmentExpression AttributeId=""urn:altinn:obligation1-assignment1"" Category=""urn:altinn:minimum-authenticationlevel"">
+      <xacml:AttributeValue DataType=""http://www.w3.org/2001/XMLSchema#integer"">4</xacml:AttributeValue>
+    </xacml:AttributeAssignmentExpression>
+  </xacml:ObligationExpression>
+  <xacml:ObligationExpression FulfillOn=""Permit"" ObligationId=""urn:altinn:obligation:authenticationLevel2"">
+    <xacml:AttributeAssignmentExpression AttributeId=""urn:altinn:obligation2-assignment2"" Category=""urn:altinn:minimum-authenticationlevel-org"">
+      <xacml:AttributeValue DataType=""http://www.w3.org/2001/XMLSchema#integer"">3</xacml:AttributeValue>
+    </xacml:AttributeAssignmentExpression>
+  </xacml:ObligationExpression>
+</xacml:ObligationExpressions>
+```",
+c4f793a1-d306-48d0-bf23-340686ea9df9,2026-06-15T19:36:40.594752Z,deployed,ue-authz-06-xacml-obligation-authlevel,1,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d0453a21f0b21 R25.9 P3.7 h3.0 or2.2 L1853 4/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Authorization",,1,XACML required authentication level policy | authentication level XACML Altinn default | påloggingsnivå XACML policy | RequiredAuthenticationLevel XACML | XACML policy authentication level obligation,false,,31,4,3,1,e246b621f86c;1c958e251de5;fe6b6b04a08b;726e34c888e9,e246b621f86c;1c958e251de5;fe6b6b04a08b,e246b621f86c,88791,4752,333,5085,0,2,160,tool_calls,false,false,3," You set the required authentication level as an **obligation** in the XACML policy file. Specifically, you add an `ObligationExpression` with `ObligationId=""urn:altinn:obligation:authenticationLevel1""`, and use an `AttributeAssignmentExpression` with `Category=""urn:altinn:minimum-authenticationlevel""` containing the desired integer value [1][2].
+
+Example for authentication level 2:
+
+```xml
+<xacml:ObligationExpressions>
+  <xacml:ObligationExpression FulfillOn=""Permit"" ObligationId=""urn:altinn:obligation:authenticationLevel1"">
+    <xacml:AttributeAssignmentExpression AttributeId=""urn:altinn:obligation1-assignment1"" Category=""urn:altinn:minimum-authenticationlevel"">
+      <xacml:AttributeValue DataType=""http://www.w3.org/2001/XMLSchema#integer"">2</xacml:AttributeValue>
+    </xacml:AttributeAssignmentExpression>
+  </xacml:ObligationExpression>
+</xacml:ObligationExpressions>
+```
+
+The default required authentication level is **2** [1][2].
+
+If you set the required level to **4**, you must also define that the service owner can interact with it through **level 3** authentication for Maskinporten, because Maskinporten is defined as level 3 [1][3].",
+fee788e1-4853-4c0d-ac1d-a6491785caad,2026-06-15T19:39:59.096490Z,deployed,ue-sys-01-leverandorstyrt-og-forhold,0,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,5,true,5,false,"d3ec63e860edb R19.5 P3.5 h3.0 or0.4 L683 3/? ty:content+hypothetical-questions+metadata b[0.0,0.0,0.0,0.4,0.1,0.0] +q | System user","dbe9fa427d5de R21.3 P4.7 h4.0 or1.3 L1140 1/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] +q | Accept request ;; dbe9fa427d5de R21.2 P4.7 h4.0 or1.8 L1189 2/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] +q | Accept request ;; d038548f6792f R20.2 P4.7 h4.0 or1.7 L1839 3/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.0,0.0] +q | System user ;; d516f1b421108 R20.0 P2.4 h2.0 or0.4 L965 8/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Userscenarios",2,systembruker forespørsel godkjenne noen tilganger | kunde godkjenne deler av systembruker forespørsel | systemleverandør ber om flere tilganger systembruker | systembruker samtykke delegering velge tilganger | godkjenne systembruker forespørsel Altinn 3 | godkjenne deler av systemtilgang forespørsel | velge bort tilganger systembruker forespørsel | systembruker forespørsel delvis godkjenning | kan ikke godkjenne enkelte tilganger systembruker | systemtilgang godkjent avvist ikke delvis,false,false,99,8,3,1,fa145325016c;43c07a4ee38a;e7d3339b3277;dfdef4d32ba5;0e2400bef6e5;034ec7c15f79;2bdacefbb352;fce5267c66c9,fa145325016c;0e2400bef6e5;034ec7c15f79,16049c347d69,198498,32001,826,32827,0,5,59,tool_calls,false,false,3," Basert på kildene er det ikke beskrevet at kunden kan godkjenne bare noen av de forespurte tilgangene. Godkjenningen fremstår som en samlet avgjørelse for hele forespørselen.
+
+I veiledningen for egen systemtilgang står det at den som skal godkjenne, må ha «de forespurte fullmaktene» [2], og at brukeren enten godkjenner eller avviser forespørselen [1][2]. Hvis vedkommende ikke har de nødvendige fullmaktene, kan forespørselen videresendes til en annen bruker med tilstrekkelige rettigheter [3]. Dette tyder på at godkjenningen er «alt eller ingenting» – man godtar eller avslår hele pakken med tilganger som leverandøren har bedt om.
+
+Kildene sier imidlertid ikke eksplisitt om det finnes en funksjon for delvis godkjenning, så det er en viss usikkerhet rundt dette. Hvis du trenger et endelig svar på om delvis godkjenning er teknisk mulig, bør du sjekke med Altinn eller teste i grensesnittet.",
+524f9666-6fee-41ea-abb3-94f1778e9bfe,2026-06-15T19:41:46.154278Z,deployed,ue-sys-01-leverandorstyrt-og-forhold,1,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,5,true,5,true,"d3ec63e860edb R22.2 P3.5 h3.0 or0.6 L683 3/? ty:content+hypothetical-questions+metadata b[0.0,0.0,0.0,0.4,0.0,0.0] +q | System user","d516f1b421108 R23.0 P3.6 h3.0 or1.7 L919 12/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Userscenarios ;; d516f1b421108 R22.7 P2.4 h2.0 or0.9 L965 8/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Userscenarios ;; dbe9fa427d5de R22.4 P3.3 h3.0 or0.8 L1189 2/? ty:hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.1,0.1,0.0] +q | Accept request ;; d3ec63e860edb R22.2 P2.4 h2.0 or0.8 L763 2/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | System user",1,systembruker forespørsel godkjenne tilganger | systembruker request approve permissions | systemleverandør be om tilganger systembruker | godkjenne bare noen tilganger systembruker | systembruker delegering tilganger kunde godkjenne,false,,41,5,2,1,fa145325016c;0e2400bef6e5;23a4cf26e313;16049c347d69;8991fa2a7cb5,0e2400bef6e5;16049c347d69,16049c347d69,107055,5769,331,6100,0,2,58,tool_calls,false,false,3," Nei, kunden kan ikke godkjenne bare noen av tilgangene.
+
+Ved en leverandørstyrt systembruker-forespørsel gjelder det et **«OG-forhold»**. Det betyr at sluttbrukeren må ha myndighet til å delegere **samtlige** tilganger som leverandøren etterspør. Hvis brukeren mangler myndighet til én enkelt av tilgangene, kan ikke forespørselen godkjennes i sin helhet [2].
+
+For en systemtilgang for **eget system** må den innloggede brukeren i tillegg ha rollen **Tilgangsstyrer** i organisasjonen og ha de forespurte fullmaktene [1].",
+c247d2bc-6dca-4004-8e89-00040208d3e5,2026-06-15T19:50:20.103657Z,deployed,ue-api-04-instances-get-no-list,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d69ccc279de8b R20.8 P3.6 h3.0 or0.9 L1444 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Instances",,2,fetch metadata for a single app instance and list all instances | get instance endpoint | get instance | specific instance metadata | download instance metadata | instance metadata will provide a list of data elements | GET {basePath}/{instanceOwnerPartyId}/{instanceGuid} | instances active endpoint GET | Storage API query instances endpoint | altinn app API get instance metadata endpoint,true,false,149,5,3,1,9bce844fa9ba;6bbfb3935810;70d7cc550746;b1040a899047;9eac3d570118,9bce844fa9ba;70d7cc550746;9eac3d570118,9bce844fa9ba,513946,59324,912,60236,0,10,114,tool_calls,false,false,3," Based on the Altinn documentation I retrieved:
+
+## Fetch metadata for a single app instance
+
+Use the **Get instance** endpoint on the **App API**:
+
+```http
+GET {org}/{appname}/instances/{instanceOwnerPartyId}/{instanceGuid}
+```
+
+This downloads the instance metadata document for a specific instance. You need to know:
+
+- `instanceOwnerPartyId` — the party id of the instance owner
+- `instanceGuid` — the guid of the instance
+
+The documentation notes that external systems working with an instance across multiple sessions should store these values (or the full URL) to avoid having to look them up repeatedly. [Source: Instances (App API)](https://docs.altinn.studio/en/api/apps/instances/)
+
+## Is there an endpoint to list all instances?
+
+**Not in the App API.** The App API does **not** have a general endpoint for listing all instances.
+
+However, the App API has a related endpoint for listing **active instances** for a specific instance owner:
+
+```http
+GET {org}/{appname}/instances/{instanceOwnerPartyId}/active
+```
+
+This returns a simplified list that can be used to decide whether to create a new instance or continue an existing one. The response objects contain `id`, `lastChanged`, and `lastChangedBy` (where `lastChangedBy` is a name, not an id). [Source: Instances (App API) — Get active instances](https://docs.altinn.studio/en/api/apps/instances/)
+
+For broader queries across instances, use the **Storage API in the Platform**, which has a **Query instances** endpoint:
+
+```http
+GET https://{hostname}/storage/api/v1/instances
+```
+
+This supports many query parameters such as `org`, `appId`, `process.currentTask`, `process.isComplete`, `instanceOwner.partyId`, `lastChanged`, `created`, `status.isArchived`, `status.isSoftDeleted`, `status.isHardDeleted`, `size`, and more. Application owners must include `org` or `appId` and need the scope `altinn:instances.read`; end users must include `instanceOwner.partyId`. [Source: Instances (Storage API)](https://docs.altinn.studio/en/api/storage/instances/)",
+8d03bdff-eda6-4e0a-a8bd-215ea69c8068,2026-06-15T19:51:13.703862Z,deployed,ue-api-04-instances-get-no-list,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"d69ccc279de8b R20.1 P3.6 h3.0 or1.5 L1444 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Instances","df37862b10fdc R20.2 P3.7 h3.0 or2.1 L1400 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Instances",1,fetch metadata single app instance endpoint | list all instances endpoint Altinn | get instance metadata API | instances query endpoint Altinn Apps | Altinn Storage instances API single instance metadata,false,,77,2,1,1,b1040a899047;9bce844fa9ba,9bce844fa9ba,9bce844fa9ba,53597,4450,208,4658,0,2,50,tool_calls,false,false,3," To fetch the metadata document for a single app instance, send a GET request to the instance endpoint:
+
+```http
+GET {org}/{appname}/instances/{instanceOwnerPartyId}/{instanceGuid}
+```
+
+Here, `{org}/{appname}/instances` is the **basePath**, and you must know the owner party ID and the instance GUID for the active instance [1].
+
+There is **no endpoint in the App API for listing instances**. For that purpose, you should use the query endpoint in the **Storage API in the Platform** instead [1].",

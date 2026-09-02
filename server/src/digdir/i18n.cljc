@@ -3,7 +3,8 @@
 
    This namespace provides translation functions and loads UI text strings
    from resources/i18n/base.edn. Currently supports Norwegian (nb) and English (en)."
-  (:require #?@(:clj [[clojure.java.io :as io]
+  (:require [clojure.string :as str]
+            #?@(:clj [[clojure.java.io :as io]
                       [clojure.edn :as edn]])
             #?@(:cljs [[goog.string :as gstring]
                        [goog.string.format]])))
@@ -31,15 +32,66 @@
   #?(:clj (delay (load-translations-clj))
      :cljs (atom {:nb {}})))
 
-(defn load-translations-cljs!
-  "Load translations on the client side. Should be called with translations from server.
-   No-op on the server side."
-  [trans]
-  #?(:cljs (reset! translations trans)
-     :clj nil))
+(def supported-languages #{:en :nb})
 
-;; Current language (can be made dynamic in the future)
-(def ^:private current-lang :en)
+(defn normalize-language
+  "Normalize a language value to a supported keyword, defaulting to English."
+  [lang]
+  (let [lang-kw (cond
+                  (keyword? lang) lang
+                  (string? lang) (some-> lang str/trim str/lower-case keyword)
+                  :else nil)]
+    (if (contains? supported-languages lang-kw) lang-kw :en)))
+
+#?(:clj
+   (def ^:dynamic *current-language* :en))
+
+;; The client installs the persisted locale before rendering translated UI.
+;; Keeping this atom available in both builds lets shared .cljc components
+;; refer to one stable var while the server uses the dynamic binding above.
+(defonce !current-language (atom :en))
+
+(defn current-language
+  "Return the currently active language."
+  []
+  #?(:clj (normalize-language *current-language*)
+     :cljs (normalize-language @!current-language)))
+
+#?(:cljs
+   (defn set-language-cljs!
+     "Set the active client-side language."
+     [lang]
+     (reset! !current-language (normalize-language lang)))
+   :clj
+   (defn set-language-cljs!
+     [_]
+     nil))
+
+#?(:cljs
+   (defn load-translations-cljs!
+     "Load translations on the client side from the server-provided map."
+     [trans]
+     ;; Avoid invalidating the UI when Electric sends the same map again.
+     (when (not= trans @translations)
+       (reset! translations trans))
+     (boolean (seq trans)))
+   :clj
+   (defn load-translations-cljs!
+     [_]
+     true))
+
+(defn translate
+  "Translate a key in an explicitly requested language."
+  [lang k & args]
+  (let [trans #?(:clj @translations :cljs @translations)
+        lang (normalize-language lang)
+        translation (get-in trans [lang k])]
+    (if translation
+      (if (seq args)
+        #?(:clj (apply format translation args)
+           :cljs (apply gstring/format translation args))
+        translation)
+      (str k))))
 
 (defn t
   "Translate a key to the current language.
@@ -58,14 +110,7 @@
    Returns:
      Translated string, or the key as a string if translation not found"
   [k & args]
-  (let [trans #?(:clj @translations :cljs @translations)
-        translation (get-in trans [current-lang k])]
-    (if translation
-      (if (seq args)
-        #?(:clj (apply format translation args)
-           :cljs (apply gstring/format translation args))
-        translation)
-      (str k))))
+  (apply translate (current-language) k args))
 
 (defn t-exists?
   "Check if a translation key exists for the current language.
@@ -77,7 +122,7 @@
      Boolean indicating if translation exists"
   [k]
   (let [trans #?(:clj @translations :cljs @translations)]
-    (contains? (get trans current-lang) k)))
+    (contains? (get trans (current-language)) k)))
 
 ;; Convenience functions for commonly used patterns
 (defn t-count

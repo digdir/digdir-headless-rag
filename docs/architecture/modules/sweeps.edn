@@ -1,0 +1,36 @@
+{:id "sweeps",
+ :plane "operations",
+ :name "Sweeps & Evaluation",
+ :note "Quality feedback loop",
+ :icon "chart",
+ :color "#a78bfa",
+ :status "Operations",
+ :summary
+ "Measures retrieval and answer quality across repeatable evaluation cases.",
+ :description
+ "Evaluation sweeps run configured question sets through the system, score outputs with judges and compare parameter or model variants. The dashboard exposes progress and results for iterative improvement.",
+ :responsibilities
+ ["Run repeatable retrieval and answer evaluations"
+  "Judge groundedness, completeness and relevance"
+  "Compare configurations and surface regressions"],
+ :files
+ ["server/src/digdir/sweep/judge.clj"
+  "server/src/digdir/sweep/dashboard.cljc"],
+ :input "Evaluation set + runtime variant",
+ :output "Scores, diagnostics and comparison results",
+ :edges
+ [{:to "skills",
+   :kind :call,
+   :target :http,
+   :label "Drive configurations through the agent loop",
+   :via "sweep runner invokes the same entrypoint the API uses",
+   :unverified true}
+  {:to "rag",
+   :kind :call,
+   :target :http,
+   :label "Retrieval-only scoring runs",
+   :via
+   "v3-score calls the retrieval path directly, bypassing the agent loop",
+   :unverified true}],
+ :keywords
+ "sweep evaluation eval judge quality benchmark dashboard regression research"}

@@ -1,9 +1,8 @@
 (ns digdir.docs.episerver-test
   "Tests for digdir.docs.episerver namespace."
-  (:require [clojure.test :refer [deftest testing is are]]
+  (:require [clojure.test :refer [deftest testing is ]]
             [clojure.string :as str]
-            [digdir.docs.episerver :as episerver]
-            [digdir.docs.test-fixtures :as fixtures]))
+            [digdir.docs.episerver :as episerver]))
 
 ;; ============================================================================
 ;; HTML Stripping Tests

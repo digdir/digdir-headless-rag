@@ -1,0 +1,100 @@
+name: digdir-rag-e2e
+
+services:
+  digdir-rag:
+    # The dev server image. Built from this repo's Dockerfile or pulled
+    # if already cached. Listens on port 8080 inside the network.
+    #
+    # E2E_API_KEY triggers boot-time auto-seed in
+    # digdir.e2e.seed/maybe-seed! — built-in agents land in the DB and
+    # an API key with this exact plaintext is stored, so MCPO can talk
+    # to /api/mcp without an out-of-band seed step.
+    build:
+      context: ../..
+      dockerfile: server.Dockerfile
+    image: digdir-rag-server:e2e
+    container_name: digdir-rag-e2e
+    env_file:
+      - .env
+    environment:
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      DATAHIKE_FILE_PATH: /var/lib/digdir/db
+      DIGDIR_RAG_DEBUG: ${DIGDIR_RAG_DEBUG:-false}
+      # E2E-only debug scaffolds. The first flag enables
+      # /api/debug/last-invocation + /api/debug/agent-resolution
+      # (both are no-ops in production where it stays unset). The
+      # second is the X-Debug-Api-Key value Playwright sends to read
+      # those endpoints. Defaults are safe for local; override in .env.
+      DIGDIR_DEBUG_LAST_INVOCATION: ${DIGDIR_DEBUG_LAST_INVOCATION:-true}
+      RAG_DEBUG_API_KEY: ${RAG_DEBUG_API_KEY:-e2e-debug-key}
+    volumes:
+      - digdir-db:/var/lib/digdir
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/up"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  mcpo:
+    # MCPO acts as the bridge: it speaks Streamable-HTTP MCP to our
+    # /api/mcp endpoint and exposes the discovered tools as OpenAPI
+    # for Open WebUI to consume.
+    #
+    # config.json.template carries `${E2E_API_KEY}` literally; the
+    # entrypoint substitutes it from the container's env (provided via
+    # env_file: .env) before exec'ing MCPO. docker-compose only does
+    # env-var substitution inside the YAML itself, never in mounted
+    # files — hence the shell-side substitution here.
+    image: ghcr.io/open-webui/mcpo:latest
+    container_name: digdir-rag-mcpo-e2e
+    depends_on:
+      digdir-rag:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./mcpo/config.json.template:/app/config.json.template:ro
+    entrypoint:
+      - sh
+      - -c
+      - |
+        sed "s|\$${E2E_API_KEY}|$$E2E_API_KEY|g" \
+          /app/config.json.template > /tmp/config.json
+        exec mcpo --config /tmp/config.json --host 0.0.0.0 --port 8765
+    ports:
+      - "8765:8765"
+    healthcheck:
+      # MCPO's image ships curl but not wget.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8765/openapi.json"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:0.6.18
+    container_name: digdir-rag-openwebui-e2e
+    depends_on:
+      mcpo:
+        condition: service_healthy
+    environment:
+      # Wire Open WebUI's tool discovery to MCPO's OpenAPI surface.
+      # The user is auto-created on first boot.
+      OPENAPI_SERVERS: '[{"url":"http://mcpo:8765","label":"digdir-rag"}]'
+      # Disable the LLM auth flow for the deterministic test run.
+      WEBUI_AUTH: "false"
+      # Skip the welcome wizard.
+      DEFAULT_USER_ROLE: "admin"
+    ports:
+      # Host 3030 instead of 3000 — 3000 commonly collides with local
+      # node dev servers. Override via OPENWEBUI_PORT env in .env if
+      # 3030 is also taken.
+      - "${OPENWEBUI_PORT:-3030}:8080"
+    volumes:
+      - open-webui-data:/app/backend/data
+
+volumes:
+  digdir-db:
+  open-webui-data:

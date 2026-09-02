@@ -1,0 +1,87 @@
+{
+  "input" : {
+    "properties" : {
+      "dataset" : {
+        "type" : "string"
+      },
+      "filters" : {
+        "additionalProperties" : {
+          "type" : "string"
+        },
+        "type" : "object"
+      },
+      "question" : {
+        "type" : "string"
+      },
+      "strategies" : {
+        "items" : {
+          "enum" : [ "keyword", "vector", "phrase" ],
+          "type" : "string"
+        },
+        "type" : "array"
+      },
+      "tenant" : {
+        "type" : "string"
+      },
+      "top-k" : {
+        "maximum" : 100,
+        "minimum" : 1,
+        "type" : "integer"
+      }
+    },
+    "required" : [ "question", "dataset", "tenant" ],
+    "type" : "object"
+  },
+  "module" : "rag",
+  "output" : {
+    "properties" : {
+      "answer" : {
+        "type" : "string"
+      },
+      "citations" : {
+        "items" : {
+          "properties" : {
+            "chunk_id" : {
+              "type" : "string"
+            },
+            "chunk_index" : {
+              "type" : "integer"
+            },
+            "content_length" : {
+              "type" : "integer"
+            },
+            "doc_num" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "total_chunks" : {
+              "type" : "integer"
+            },
+            "url" : {
+              "type" : "string"
+            }
+          },
+          "required" : [ "chunk_id", "doc_num", "chunk_index", "content_length", "total_chunks" ],
+          "type" : "object"
+        },
+        "type" : "array"
+      },
+      "usage" : {
+        "properties" : {
+          "completion_tokens" : {
+            "type" : "integer"
+          },
+          "prompt_tokens" : {
+            "type" : "integer"
+          }
+        },
+        "required" : [ "prompt_tokens", "completion_tokens" ],
+        "type" : "object"
+      }
+    },
+    "required" : [ "answer", "citations" ],
+    "type" : "object"
+  }
+}

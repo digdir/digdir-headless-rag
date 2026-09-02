@@ -1,0 +1,58 @@
+;; snippet-AB × read-hi INTERACTION SCREEN — does the read-budget sweet spot add
+;; anything ON TOP of the deployed snippet-AB+guard default?
+;;
+;; Hypothesis: snippet-AB gives better read SELECTION (reads fewer/righter chunks,
+;; n-ret 3.1->1.8); read-hi (max-read-operations 10 / max-read-content-length
+;; 24000, the Lever-2 sweet spot) gives more BUDGET to keep what it picks. Risk of
+;; null: if snippet-AB already sits under the default budget, read-hi won't bind.
+;;
+;; Both arms = the deployed default set EXPLICITLY (snippet variant +
+;; search-snippets + no-tool-call-retry + enriched-HQ), so the ONLY delta is the
+;; read budget. control == the current default; readhi adds the budget keys
+;; (sweepable via the resolve-budget-limits-from-skill-params lift).
+;;
+;; 8-Q Sweep-1 subset × N=3 × 2 = 48 runs, conc 1, judge? false (gpt-5.5 via
+;; bb sweep-judge after; restore config). Run with the agent-run OPENAI_* env.
+;; Primary: does read-hi move read behavior (n-ret / golden-read) AND effQ on top
+;; of snippet-AB? Null on read-behavior -> stop (budget doesn't bind). Signal ->
+;; full-42 confirm.
+{:configs
+ [{:id "snippet-AB"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true
+                     :no-tool-call-retry true}}}
+  {:id "snippet-AB+read-hi"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true
+                     :no-tool-call-retry true
+                     :max-read-operations 10
+                     :max-read-content-length 24000}}}]
+ :repeats 3
+ :judge? false
+ :order :interleaved
+ :concurrency 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-03-store-filer-virusskann"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-dialog-01-aktivitetslogg"
+                          "ue-events-01-abonnement-filtre"
+                          "ue-corr-02-transmission-group-dialog"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-sys-03-brukerstyrt-vs-leverandorstyrt"}}}

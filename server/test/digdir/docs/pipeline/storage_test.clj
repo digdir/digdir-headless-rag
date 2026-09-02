@@ -1,6 +1,6 @@
 (ns digdir.docs.pipeline.storage-test
   "Tests for digdir.docs.pipeline.storage - TypeSense storage operations."
-  (:require [clojure.test :refer [deftest testing is are]]
+  (:require [clojure.test :refer [deftest testing is ]]
             [clojure.string :as str]
             [digdir.docs.pipeline.storage :as storage]
             [typesense.client :as ts]))
@@ -120,16 +120,18 @@
       (is (= "/docs/test.md" (:url (first result)))))))
 
 (deftest prepare-chunks-selects-fields
-  (testing "Selects only required fields"
+  (testing "Selects only required fields including content_length"
     (let [chunks [{:chunk_id "c1"
                    :doc_num "d1"
                    :chunk_index 0
                    :content_markdown "content"
+                   :content_length 7
                    :metadata "{}"
                    :url "/test.md"
                    :extra-field "should-be-removed"}]
           result (storage/prepare-chunks chunks :url identity)]
-      (is (not (contains? (first result) :extra-field))))))
+      (is (not (contains? (first result) :extra-field)))
+      (is (= 7 (:content_length (first result)))))))
 
 ;; ============================================================================
 ;; extract-phrases Tests
@@ -194,3 +196,139 @@
                                     {:type :typesense.client/server-error})))]
       (is (thrown? clojure.lang.ExceptionInfo
                    (storage/create-collection! {:name "test_coll"}))))))
+
+;; ============================================================================
+;; Orphan-cleanup Tests
+;; ============================================================================
+
+(deftest delete-orphan-chunks-builds-correct-filter
+  (testing "delete-orphan-chunks! issues delete-documents! filtered on :id (catches legacy auto-id rows)"
+    (let [captured (atom nil)]
+      (with-redefs [ts/delete-documents! (fn [_settings coll opts]
+                                           (reset! captured {:coll coll :opts opts})
+                                           {:num_deleted 3})]
+        (storage/delete-orphan-chunks! "chunks_coll" "doc-A" ["c1" "c2" "c3"])
+        (is (= "chunks_coll" (:coll @captured)))
+        (is (= "doc_num:=doc-A && id:!=[c1,c2,c3]"
+               (get-in @captured [:opts :filter_by])))))))
+
+(deftest delete-orphan-chunks-noop-on-empty-ids
+  (testing "delete-orphan-chunks! is a no-op when current-chunk-ids is empty"
+    (let [called? (atom false)]
+      (with-redefs [ts/delete-documents! (fn [& _] (reset! called? true) nil)]
+        (storage/delete-orphan-chunks! "chunks_coll" "doc-A" [])
+        (storage/delete-orphan-chunks! "chunks_coll" "doc-A" nil)
+        (is (false? @called?)
+            "must not issue a delete when keep-set is empty — would wipe the doc's chunks")))))
+
+(deftest delete-orphan-chunks-noop-on-blank-doc-num
+  (testing "delete-orphan-chunks! is a no-op when doc-num is blank"
+    (let [called? (atom false)]
+      (with-redefs [ts/delete-documents! (fn [& _] (reset! called? true) nil)]
+        (storage/delete-orphan-chunks! "chunks_coll" nil ["c1"])
+        (storage/delete-orphan-chunks! "chunks_coll" "" ["c1"])
+        (is (false? @called?))))))
+
+(deftest delete-orphan-phrases-builds-correct-filter
+  (testing "delete-orphan-phrases! issues delete filtered on :id (catches legacy auto-id rows)"
+    (let [captured (atom nil)]
+      (with-redefs [ts/delete-documents! (fn [_settings coll opts]
+                                           (reset! captured {:coll coll :opts opts}))]
+        (storage/delete-orphan-phrases! "phrases_coll" "doc-B" ["p1" "p2"])
+        (is (= "phrases_coll" (:coll @captured)))
+        (is (= "doc_num:=doc-B && id:!=[p1,p2]"
+               (get-in @captured [:opts :filter_by])))))))
+
+(deftest store-complete-document-issues-upserts-then-deletes-orphans
+  (testing "store-complete-document! calls upserts then orphan deletes with :id-based keep-sets"
+    (let [calls (atom [])
+          fake-doc {:id "doc1"
+                    :doc_num "dn1"
+                    :chunks [{:chunk_id "c1" :content_markdown "x"
+                              :search-phrases ["p1" "p2"]}
+                             {:chunk_id "c2" :content_markdown "y"
+                              :search-phrases ["p3"]}]}
+          prepare-doc-fn (fn [_ d] (select-keys d [:id :doc_num :total_chunks]))
+          ;; Real prepare-chunks would set :id := :chunk_id. Mimic that here
+          ;; so the test exercises the real :id keep-set passed to deletes.
+          prepare-chunks-fn (fn [chunks] (mapv #(assoc % :id (:chunk_id %)) chunks))]
+      (with-redefs [storage/coll-ids (fn [_] ["docs_c" "chunks_c" "phrases_c"])
+                    storage/upsert-document!   (fn [coll _doc]
+                                                 (swap! calls conj [:upsert-doc coll]))
+                    storage/store-chunks!      (fn [coll chunks]
+                                                 (swap! calls conj [:upsert-chunks coll (count chunks)
+                                                                    :chunk-ids (mapv :id chunks)]))
+                    storage/store-phrases!     (fn [coll phrases _id]
+                                                 (swap! calls conj [:upsert-phrases coll (count phrases)
+                                                                    :phrase-ids (mapv :id phrases)]))
+                    storage/delete-orphan-chunks!  (fn [coll doc-num keep-ids]
+                                                     (swap! calls conj [:del-orphan-chunks coll doc-num keep-ids]))
+                    storage/delete-orphan-phrases! (fn [coll doc-num keep-ids]
+                                                     (swap! calls conj [:del-orphan-phrases coll doc-num keep-ids]))]
+        (storage/store-complete-document! {} fake-doc prepare-doc-fn prepare-chunks-fn)
+        (let [phrase-ids-from-upsert (->> @calls (filter #(= (first %) :upsert-phrases)) first (drop-while #(not= % :phrase-ids)) second)]
+          (is (= [[:upsert-doc      "docs_c"]
+                  [:upsert-chunks   "chunks_c" 2 :chunk-ids ["c1" "c2"]]
+                  [:del-orphan-chunks  "chunks_c"  "dn1" ["c1" "c2"]]
+                  [:upsert-phrases  "phrases_c" 3 :phrase-ids phrase-ids-from-upsert]
+                  [:del-orphan-phrases "phrases_c" "dn1" phrase-ids-from-upsert]]
+                 @calls)
+              "deletes use :id keep-sets — chunk-ids from chunks, hash-ids from phrases"))))))
+
+(deftest prepare-chunks-pins-id-to-chunk-id
+  (testing "prepare-chunks sets :id := :chunk_id so Typesense upsert is keyed correctly"
+    (let [chunks [{:chunk_id "c1" :doc_num "d1" :chunk_index 0
+                   :content_markdown "x" :metadata "{}" :url "/a"}
+                  {:chunk_id "c2" :doc_num "d1" :chunk_index 1
+                   :content_markdown "y" :metadata "{}" :url "/a"}]
+          prepared (storage/prepare-chunks chunks :url identity)]
+      (is (= ["c1" "c2"] (mapv :id prepared))
+          "every prepared chunk has :id equal to its :chunk_id")
+      (is (= ["c1" "c2"] (mapv :chunk_id prepared))
+          ":chunk_id is also preserved (used as a facet/sort field)"))))
+
+(deftest store-chunks-enforces-id-when-upstream-prepare-omits-it
+  (testing "store-chunks! sets :id := :chunk_id even if the prepare-fn dropped :id"
+    (let [captured (atom nil)
+          ;; Simulates a per-pipeline prepare-chunks like prepare-website-chunks
+          ;; that select-keys's away :id.
+          chunks-without-id [{:chunk_id "c1" :doc_num "d1" :content_markdown "x"}
+                             {:chunk_id "c2" :doc_num "d1" :content_markdown "y"}]]
+      (with-redefs [ts/upsert-documents! (fn [_settings _coll docs]
+                                           (reset! captured docs))]
+        (storage/store-chunks! "chunks_coll" chunks-without-id)
+        (is (= ["c1" "c2"] (mapv :id @captured))
+            "store-chunks! must enforce :id := :chunk_id at the storage boundary")))))
+
+(deftest store-phrases-enforces-id-when-upstream-omits-it
+  (testing "store-phrases! sets :id deterministically even if upstream dropped :id"
+    (let [captured (atom nil)
+          phrases-without-id [{:chunk_id "c1" :doc_num "d1" :search_phrase "alpha"}
+                              {:chunk_id "c1" :doc_num "d1" :search_phrase "beta"}]]
+      (with-redefs [ts/upsert-documents! (fn [_settings _coll docs]
+                                           (reset! captured docs))]
+        (storage/store-phrases! "phrases_coll" phrases-without-id "doc1")
+        (is (every? :id @captured)
+            ":id must be set on every phrase row")
+        (is (apply distinct? (map :id @captured))
+            "different (chunk, phrase) pairs → different ids")
+        ;; Determinism: storing the same phrases again yields the same ids
+        (let [captured2 (atom nil)]
+          (with-redefs [ts/upsert-documents! (fn [_ _ docs] (reset! captured2 docs))]
+            (storage/store-phrases! "phrases_coll" phrases-without-id "doc1")
+            (is (= (mapv :id @captured) (mapv :id @captured2)))))))))
+
+(deftest extract-phrases-pins-deterministic-id
+  (testing "extract-phrases sets :id := sha256-short-hash(chunk_id|phrase)"
+    (let [chunks [{:chunk_id "cA" :search-phrases ["hello" "world"]}
+                  {:chunk_id "cB" :search-phrases ["hello"]}]
+          phrases (storage/extract-phrases chunks "dn1")]
+      (is (= 3 (count phrases)))
+      ;; :id is a function of (chunk_id, phrase) — same pair → same id
+      (let [id-by-pair (into {} (map (juxt (juxt :chunk_id :search_phrase) :id)) phrases)]
+        (is (apply distinct? (vals id-by-pair))
+            "different (chunk_id, phrase) pairs get different ids")
+        ;; Re-running extract-phrases produces the same ids (deterministic)
+        (let [phrases2 (storage/extract-phrases chunks "dn1")]
+          (is (= (mapv :id phrases) (mapv :id phrases2))
+              "phrase ids are deterministic across runs"))))))

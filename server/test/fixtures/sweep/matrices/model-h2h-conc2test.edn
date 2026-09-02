@@ -1,0 +1,13 @@
+;; Concurrency-2 timing probe on GB10 (control loaded). 4 Q, N=1, conc 2.
+{:configs
+ [{:id "deployed"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval {:enrichment-types [:hypothetical-questions]
+                         :enrichment-search-targets {:hypothetical-questions "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true}}}]
+ :repeats 1 :judge? false :order :interleaved :concurrency 2
+ :max-clarification-rounds 1 :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-corr-02-transmission-group-dialog" "ue-events-01-abonnement-filtre" "ue-api-04-instances-get-no-list" "ue-sys-03-brukerstyrt-vs-leverandorstyrt"}}}

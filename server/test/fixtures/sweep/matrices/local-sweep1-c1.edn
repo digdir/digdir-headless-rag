@@ -1,0 +1,47 @@
+;; LOCAL Sweep-1 RE-SCREEN at concurrency 1 (the Sweep-1 corrections).
+;;
+;; Identical cells to local-sweep1-agentcfg.edn (2×2 prompt×budget × same 8 Q, N=1)
+;; so it's directly A/B-comparable to the contaminated concurrency-2 run
+;; (results/sweep-2026-06-05T20-00-09-448075Z). Two fixes under test together:
+;;   1. concurrency 1 — removes the two-simultaneous-big-prefill GPU thrash that
+;;      pushed 4/32 runs past the 600s cap (timeout-empties).
+;;   2. finalize empty-recovery (graphs.clj) — the non-exhausted finalize path now
+;;      recovers a blank :finalized? response via the guarded best-answer-now
+;;      fallback, killing the ~28% complete-but-empty runs.
+;; Expectation: empty-rate collapses vs the prior 25–62%; prompt/budget signal
+;; becomes interpretable. If clean, follow up with an N=3 confirm on the winner.
+;;
+;; Run with the agent-run OPENAI_* env (preserve_thinking + recommended thinking
+;; sampling). judge? false → judge separately via `bb sweep-judge`.
+{:configs
+ [{:id "default-prompt+default-budget"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :default
+   :skill-params {}}
+  {:id "adapted-prompt+default-budget"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted
+   :skill-params {}}
+  {:id "default-prompt+reduced-budget"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :default
+   :skill-params #:builtin{:rerank {:context-top-k 6 :max-context-length 5000}}}
+  {:id "adapted-prompt+reduced-budget"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted
+   :skill-params #:builtin{:rerank {:context-top-k 6 :max-context-length 5000}}}]
+ :repeats 1
+ :judge? false
+ :order :interleaved
+ :concurrency 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-03-store-filer-virusskann"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-dialog-01-aktivitetslogg"
+                          "ue-events-01-abonnement-filtre"
+                          "ue-corr-02-transmission-group-dialog"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-sys-03-brukerstyrt-vs-leverandorstyrt"}}}

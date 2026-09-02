@@ -211,3 +211,57 @@ The codebase follows a consistent pattern for Electric components:
 2. **e/fn for content**: Use `(e/fn [] ...)` for dynamic content blocks
 3. **Atoms for local state**: Use atoms with `!` prefix for local component state
 4. **e/watch for reactivity**: Use `(e/watch !atom)` to make components reactive to state changes
+
+## Retrieval evaluation harnesses
+
+Two complementary tools for measuring retrieval quality. They answer different
+questions; keep both, use whichever fits the task.
+
+### `bb v3-score` — fast retrieval-only inner loop
+
+- **Where:** `server/src-dev/digdir/sweep/v3_cites.clj`, driven by the
+  `v3-score` task in `bb.edn`.
+- **What:** scores the retrieval skill (or the debug endpoint) against the
+  7-question v3-baseline ground truth. Reports chunk-level recall@10/@30 and
+  doc-level recall@10/@30.
+- **Bypasses the agent loop entirely.** Calls the retrieval pipeline directly
+  via the debug endpoint — fast (~30s per run), tight feedback loop.
+- **Use when:** you changed something in the retrieval skill (a knob, a
+  scoring change, a new strategy) and want to know if chunk/doc recall
+  moved. 3-run replicates give a noise band.
+- **Example flag set used during slice 23:**
+  ```bash
+  bb v3-score --rerank-with-colbert true \
+              --expand-queries 8 \
+              --user-intent-first-pass true \
+              --server-side-union true
+  ```
+
+### Sweep runner — end-to-end agent attribution
+
+- **Where:** `server/src-dev/digdir/sweep/runner.clj`, matrices under
+  `server/test/fixtures/sweep/matrices/`.
+- **What:** drives the cartesian product of `{config × question × repeat}`
+  through `invoke-with-clarification-loop` — i.e., the **full agent loop**,
+  not just retrieval. Captures real per-run cost (`:prompt-tokens`,
+  `:completion-tokens`, `:llm-calls`) and Filter-4 stage decomposition
+  (`:golden-in-search-pool?`, `:golden-in-display?`, `:golden-read?`)
+  in `runs.csv`.
+- **Use when:** you need to attribute an agent-end-to-end recall problem
+  to a specific stage (retrieval / display / agent-read / rerank-trim),
+  or sweep a parameter matrix to find a config that survives across many
+  question×repeat combos.
+- **Slower:** hundreds of runs per matrix; budget a long lunch or overnight.
+
+### Rule of thumb
+
+- "Did this retrieval change move the chunk/doc baseline?" → **`bb v3-score`**.
+- "Is agent recall limited by retrieval / display / read / trim?" → **sweep runner**.
+- "Noise band on a single config?" → `bb v3-score` 3-run replicates.
+- "What config survives 270 question×repeat combos?" → sweep matrix.
+
+Pre-existing matrices (`baseline-v0`, `round-1..9`) live in
+`server/test/fixtures/sweep/matrices/`; archived per-run CSVs of rounds 4–9
+remain recoverable via `git show 4c46f34` if you need the raw research log
+(they were intentionally dropped from the merged history to keep the repo
+diff small).

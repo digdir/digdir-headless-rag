@@ -1,0 +1,23 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,recall-at-5,recall-at-10,recall-at-20,citation-recall,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,steps-executed,response,error
+6edac09f-be88-4bee-ae1b-58212041c437,2026-05-22T15:03:27.799958Z,ctop-80,altinn-systemuser-api-model,0,public-docs,exploratory-rerank,"altinn-systemuser,exact-lookup,simple",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,7,2,1,e6f7545a1adc;fffd1547fdeb;6f4a1ef342c8;74fc02526720;a79a59ed2586;fd72a28afd94;1071f704051a,74fc02526720;1071f704051a,6d8a6a851332,19106,,,,3,"Datamodellen for en **system user** i Altinn ser ut til å være en modell for å lese system user-informasjon, der Altinn oppretter en **unik identifikator** når system useren blir opprettet, og der det også finnes et **brukervennlig navn** som leverandøren oppgir ved opprettelse. Hvis den opprettes via portalen, settes dette navnet som standard til systemnavnet. [1]
+
+Det som er tydelig fra kildene, er også at modellen inneholder informasjon om **system user-org** og **system user-system** i en system user token, altså hvem system useren er knyttet til og hvilket system den gjelder for. [2]
+
+Samtidig er utdraget i kildene avkortet, så den fullstendige datamodellen er ikke helt synlig her. Det betyr at jeg bare kan bekrefte de delene som faktisk fremgår av teksten:  
+- **unik identifikator** …",
+fdbd4484-3fa9-460a-bfcc-607622f68aac,2026-05-22T15:03:41.307653Z,ctop-80,altinn-authorization-regler,0,public-docs,exploratory-rerank,"exact-lookup,altinn-authorization,hard",complete,0,false,chunks+answer,false,0.0,0.0,0.0,0.0,6,6,1,14d29a52b3e3;548c3bf390b6;295f615f2c0d;e71360b09497;808e5f6f8202;7c5e87028e37,14d29a52b3e3;548c3bf390b6;295f615f2c0d;e71360b09497;808e5f6f8202;7c5e87028e37,86a29a595367,13507,,,,3,"I den viste konteksten blir **tilgangsregler** ikke definert eksplisitt som et eget begrep. Det som beskrives er at Dialogporten bruker **Altinn Autorisering / Altinn Authorization** for alle autorisasjonsbeslutninger, og at dette skjer via to mekanismer: **Authorized Parties API** for listevisninger og **PDP API** for detaljvisninger med finmasket autorisering av handlinger og overføringer [1][2][3][4][5][6].
+
+Hvis du mener **tilgangsregler** i betydningen hvilke rettigheter som gir tilgang, sier kilden at Dialogporten vedlikeholder en oversikt over hvilke **roller/tilgangspakker** som gir rettigheter til hver ressurs [2][5]. Men selve uttrykket **“tilgangsregler”** er ikke definert nærmere i utdraget [1][4].",
+f3528b31-e33c-44d1-b504-7b86fcf604ca,2026-05-22T15:03:53.154639Z,ctop-80,altinn-broker-rest-usage,0,public-docs,exploratory-rerank,"simple,navigational,altinn-broker",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,1,1,1,702ec5c8ecd5,702ec5c8ecd5,0f3807200a65,11846,,,,3,"For å bruke **Altinn Broker med REST-API**, viser kilden til **OpenAPI (swagger) for Formidling** som dokumentasjon for API-et [1]. Siden spørsmålet er litt underspesifisert, er den nærmeste og eksplisitte kilden her **Formidlingstjenesten / Formidling** i Altinn 3 Broker [1].
+
+Du kan starte her: **OpenAPI (swagger) for Formidling**: `/nb/api/broker/spec/` [1].
+
+Hvis du vil, kan jeg også hjelpe deg med å finne:
+- hvordan du autentiserer mot API-et,
+- hvilke endepunkter som finnes,
+- eller et konkret REST-eksempel.",
+74271311-10c1-4b50-9af3-582fc27b69d3,2026-05-22T15:04:15.035008Z,ctop-80,altinn-studio-grouping-repeating-edit,0,public-docs,exploratory-rerank,"simple,altinn-studio,navigational",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,6,1,1,6ffccfc7fd2a;bc2e044238be;ace59cbcb651;dcc20b21ec7c;a458dd169020;8c7a8757bae6,8c7a8757bae6,3685015c0f1c,21879,,,,3,"I Altinn Studio v8 redigerer du en **repeterende gruppe** ved å bruke komponenten **Group**. Den har blant annet egenskapene **Group id**, **Repeating group**, **Link to data model** og **Number of repetitions**. [1]
+
+Hvis du mener selve oppsettet i designer, viser kilden bare at **Group** har en egen properties editor, men den beskriver ikke trinn-for-trinn hvordan du redigerer den. [1]
+
+Hvis du vil, kan jeg også forklare forskjellen mellom **Group** og vanlige feltkomponenter i Altinn Studio v8.",

@@ -1,0 +1,6 @@
+[{:event :request/started :request-id "req-6" :query "Hard question"}
+ {:event :response/insufficient-context}
+ {:event :response/fallback-used}
+ {:event :request/retry}
+ {:event :response/chunk :delta "Fallback answer"}
+ {:event :response/finalized :diagnostics {}}]

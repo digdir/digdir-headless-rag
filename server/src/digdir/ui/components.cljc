@@ -107,7 +107,8 @@
   []
   (e/server (map #(-> %
                       (update :msg_ force)
-                       ;; TODO: teach electric to transfer time and error values otw
+                      ;; Instants and the Throwable in :error have no wire
+                      ;; encoding in Electric, so they go over as strings.
                       (update :inst str)
                       (update :end-inst str)
                       (update :error str))
@@ -120,7 +121,8 @@
   (e/server (sequence
              (map #(-> %
                        (update :msg_ force)
-                       ;; TODO: teach electric to transfer time and error values otw
+                       ;; Instants and the Throwable in :error have no wire
+                       ;; encoding in Electric, so they go over as strings.
                        (update :inst str)
                        (update :end-inst str)
                        (update :error str)))
@@ -143,7 +145,7 @@
 
 ;; =========Admin Header Bar=========
 
-(e/defn StatusBar [ts-settings user-email]
+(e/defn StatusBar [ts-settings user-email user-language]
   (e/client
    (dom/div
     (dom/props {:style {:display "flex"
@@ -192,5 +194,22 @@
            (dom/props {:style {:color (if (:ok health-data) "#16a34a" "#dc2626")
                                :font-weight "500"}})
            (dom/text (if (:ok health-data) "Healthy" "Unhealthy")))))))
+    ;; System Atlas — a PLAIN LINK, deliberately not a routed tab. The Atlas is a
+    ;; static page served from the classpath by wrap-resource, not an Electric
+    ;; route, so a full navigation is the correct behaviour and there is no
+    ;; route-config segment to add. (routing.cljc listens for popstate only, not
+    ;; clicks, so the anchor is not intercepted.) It sits behind admin auth like
+    ;; the rest of the console: .html is not in wrap-admin-auth's static-extension
+    ;; bypass, so an unauthenticated request is redirected to /auth.
+    (dom/a
+     (dom/props {:href "/system-explorer.html"
+                 :target "_blank"
+                 :rel "noopener"
+                 :style {:margin-left "auto"
+                         :color "#475569"
+                         :text-decoration "none"
+                         :font-weight "600"
+                         :cursor "pointer"}})
+     (dom/text "System Atlas ↗"))
     ;; Profile menu (pushed to right with margin-left: auto)
-    (ProfileMenu user-email))))
+    (ProfileMenu user-email user-language))))

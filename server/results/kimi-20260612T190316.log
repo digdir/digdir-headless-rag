@@ -1,0 +1,69 @@
+[06-12 19:03:16] === Kimi K2.6 sweep (model-h2h-smoke.edn) ===
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+{:result :unchanged, :tenant "digdir", :root :platform, :tenant-config-key "default", :path "services.azure-openai.use-azure-openai-api", :marker "./local-db/dh_bb_dev_model_headtohead_v1/.config-changed"}
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+{:result :updated, :tenant "digdir", :root :platform, :tenant-config-key "default", :path "services.azure-openai.model-name", :marker "./local-db/dh_bb_dev_model_headtohead_v1/.config-changed"}
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+WARNING: parse-long already refers to: #'clojure.core/parse-long in namespace: taoensso.carmine, being replaced by: #'taoensso.carmine/parse-long
+WARNING: parse-double already refers to: #'clojure.core/parse-double in namespace: taoensso.carmine, being replaced by: #'taoensso.carmine/parse-double
+2026-06-12T17:04:03.868870Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1075,11] :sweep.runner/start {:configs 1, :questions 3, :repeats 1, :total 3, :run-timeout-ms 600000, :out-dir "results/sweep-2026-06-12T17-04-03-681613Z"}
+2026-06-12T17:04:03.878658Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1104,21] :sweep.runner/run-begin {:config-id "deployed", :question-id "ue-broker-01-filoverforing-tilstander", :repeat 0}
+2026-06-12T17:13:06.037105Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1093,27] :sweep.runner/run-end {:run-id "9aa7f2f4-3d31-4a02-8def-616ec6aa4f39", :status "complete", :elapsed-ms 542148, :answer-hit? true, :recall-10 1.0, :progress "1/3"}
+2026-06-12T17:13:06.039756Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1104,21] :sweep.runner/run-begin {:config-id "deployed", :question-id "ue-studio-03-datamodell-filer", :repeat 0}
+query-planner LLM call failed after retries: clj-http: status 404 — falling back to raw query
+2026-06-12T17:23:06.067815Z WARN LOG bdb-dd-m4.local digdir.sweep.runner[742,20] :sweep.runner/run-timeout {:run-id "b2ea481d-a50d-4982-8813-a11a53923fa7", :config-id "deployed", :question-id "ue-studio-03-datamodell-filer", :timeout-ms 600000}
+2026-06-12T17:23:06.073344Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1093,27] :sweep.runner/run-end {:run-id "b2ea481d-a50d-4982-8813-a11a53923fa7", :status "timeout", :elapsed-ms 600031, :answer-hit? false, :recall-10 0.0, :progress "2/3"}
+2026-06-12T17:23:06.075703Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1104,21] :sweep.runner/run-begin {:config-id "deployed", :question-id "ue-authz-05-xacml-policy-regelstruktur", :repeat 0}
+query-planner LLM call failed after retries: clj-http: status 404 — falling back to raw query
+2026-06-12T17:33:06.017703Z WARN LOG bdb-dd-m4.local digdir.sweep.runner[742,20] :sweep.runner/run-timeout {:run-id "e33f15d2-eb9f-4b3d-a2c1-c22fd64ff8c3", :config-id "deployed", :question-id "ue-authz-05-xacml-policy-regelstruktur", :timeout-ms 600000}
+2026-06-12T17:33:06.021582Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1093,27] :sweep.runner/run-end {:run-id "e33f15d2-eb9f-4b3d-a2c1-c22fd64ff8c3", :status "timeout", :elapsed-ms 599945, :answer-hit? false, :recall-10 0.0, :progress "3/3"}
+2026-06-12T17:33:06.024858Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1139,5] :sweep.runner/done {:out-dir "results/sweep-2026-06-12T17-04-03-681613Z", :rows-written 3, :csv "results/sweep-2026-06-12T17-04-03-681613Z/runs.csv"}
+{:rows [{:response " Ifølge den endelige tilstandsmaskinen for Altinn Formidling [1] kan en filoverføring passere følgende tilstander fra initialisering til filen eventuelt slettes:\n\nI hovedflyten frem til sletting:\n* **Initialisert**\n* **Opplasting pågår**\n* **Sjekk av opplasting**\n* **Publisert**\n* **Nedlastinger initiert**\n* **Alle bekreftet nedlastet**\n* **Slettet**\n\nDen samme tilstandsmaskinen [1] inneholder imidlertid også alternative tilstander som representerer avbrudd eller feil, og som dermed inntreffer i stedet for den videre veien mot «Slettet»:\n* **Avbrutt** – overføringen kan avbrytes så lenge ingen nedlastingsprosess har startet [1].\n* **Overføring feilet** – den samlede prosessen kan mislykkes enten under opplasting, behandling av opplasting eller under nedlasting av en eller flere mottakere [1].\n\nDet er en viss tvetydighet knyttet til spørsmålets ordlyd «fra den blir startet til filen er slettet»: Kilden [1] beskriver en tilstandsmaskin med forgreninger, ikke én enkelt lineær sekvens. Videre presiserer kilden at konseptet tillater at filer forblir i *Altinn Broker File Store* etter publisering, og at prosessen i slike tilfeller avsluttes etter «Publisert» uten å nå verken «Alle bekreftet nedlastet» eller «Slettet» [1]. Dermed når ikke alle filoverføringer tilstanden «Slettet».", :terminal-clarification? false, :finish-reason "tool_calls", :golden-in-display? true, :question-id "ue-broker-01-filoverforing-tilstander", :empty? false, :llm-calls 2, :citation-recall 1.0, :completion-tokens 422, :insufficiency-fired? false, :recall-at-10 1.0, :config-id "deployed", :clarification-rounds 0, :question-tags "altinn-broker,hard", :cached-tokens 0, :golden-features "dd56b73485fd6 R22.5 P3.7 h3.0 or1.5 L2169 3/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] +q | Basic concepts", :response-chars 1294, :source "new", :search-passes 1, :n-retrieved 1, :reasoning-tokens 0, :golden-in-search-pool? true, :golden-pool-rank 2, :golden-read? true, :grounding-mode :chunks+answer, :answer-substring-hit? true, :retrieved-chunk-ids "218bee00be34", :enrichment-hits 33, :n-expected 1, :status "complete", :recall-at-20 1.0, :refinement-corpus-grounded? nil, :n-cited 1, :prompt-tokens 5389, :pool-head "d66fc9e336d8d R22.6 P2.4 h2.0 or1.0 L1613 0/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Broker", :repeat 0, :error nil, :cited-chunk-ids "218bee00be34", :expected-chunk-ids "218bee00be34", :elapsed-ms 542148, :issued-queries "Altinn Formidling filoverføring statuser | Altinn Formidling status fra start til sletting | Altinn Formidling file transfer status | Altinn Formidling fil status livsløp | Altinn Formidling transfer lifecycle status", :timestamp "2026-06-12T17:13:06.036177Z", :total-tokens 5811, :run-id "9aa7f2f4-3d31-4a02-8def-616ec6aa4f39", :golden-display-rank 2, :steps-executed 3, :dataset "public-docs", :length-finish? false, :recall-at-5 1.0} {:response "", :terminal-clarification? false, :finish-reason nil, :golden-in-display? false, :question-id "ue-studio-03-datamodell-filer", :empty? true, :llm-calls nil, :citation-recall 0.0, :completion-tokens nil, :insufficiency-fired? false, :recall-at-10 0.0, :config-id "deployed", :clarification-rounds 0, :question-tags "altinn-studio,hard", :cached-tokens nil, :golden-features nil, :response-chars 0, :source "new", :search-passes 0, :n-retrieved 0, :reasoning-tokens nil, :golden-in-search-pool? false, :golden-pool-rank nil, :golden-read? false, :grounding-mode :chunks+answer, :answer-substring-hit? false, :retrieved-chunk-ids "", :enrichment-hits 0, :n-expected 1, :status "timeout", :recall-at-20 0.0, :refinement-corpus-grounded? nil, :n-cited 0, :prompt-tokens nil, :pool-head "", :repeat 0, :error "exceeded 600000ms", :cited-chunk-ids "", :expected-chunk-ids "3db5a48a99cd", :elapsed-ms 600031, :issued-queries "", :timestamp "2026-06-12T17:23:06.072400Z", :total-tokens nil, :run-id "b2ea481d-a50d-4982-8813-a11a53923fa7", :golden-display-rank nil, :steps-executed nil, :dataset "public-docs", :length-finish? nil, :recall-at-5 0.0} {:response "", :terminal-clarification? false, :finish-reason nil, :golden-in-display? false, :question-id "ue-authz-05-xacml-policy-regelstruktur", :empty? true, :llm-calls nil, :citation-recall 0.0, :completion-tokens nil, :insufficiency-fired? false, :recall-at-10 0.0, :config-id "deployed", :clarification-rounds 0, :question-tags "altinn-authorization,hard", :cached-tokens nil, :golden-features nil, :response-chars 0, :source "new", :search-passes 0, :n-retrieved 0, :reasoning-tokens nil, :golden-in-search-pool? false, :golden-pool-rank nil, :golden-read? false, :grounding-mode :chunks+answer, :answer-substring-hit? false, :retrieved-chunk-ids "", :enrichment-hits 0, :n-expected 1, :status "timeout", :recall-at-20 0.0, :refinement-corpus-grounded? nil, :n-cited 0, :prompt-tokens nil, :pool-head "", :repeat 0, :error "exceeded 600000ms", :cited-chunk-ids "", :expected-chunk-ids "c28fc018e0d0", :elapsed-ms 599945, :issued-queries "", :timestamp "2026-06-12T17:33:06.021135Z", :total-tokens nil, :run-id "e33f15d2-eb9f-4b3d-a2c1-c22fd64ff8c3", :golden-display-rank nil, :steps-executed nil, :dataset "public-docs", :length-finish? nil, :recall-at-5 0.0}], :out-dir "results/sweep-2026-06-12T17-04-03-681613Z", :csv-path "results/sweep-2026-06-12T17-04-03-681613Z/runs.csv"}
+[06-12 19:33:06] sweep done -> sweep-2026-06-12T17-04-03-681613Z
+[06-12 19:33:06] judging (gpt-5.5, azure-on)
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+{:result :updated, :tenant "digdir", :root :platform, :tenant-config-key "default", :path "services.azure-openai.use-azure-openai-api", :marker "./local-db/dh_bb_dev_model_headtohead_v1/.config-changed"}
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+{:result :unchanged, :tenant "digdir", :root :platform, :tenant-config-key "default", :path "services.judge.model", :marker "./local-db/dh_bb_dev_model_headtohead_v1/.config-changed"}
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+WARNING: parse-long already refers to: #'clojure.core/parse-long in namespace: taoensso.carmine, being replaced by: #'taoensso.carmine/parse-long
+WARNING: parse-double already refers to: #'clojure.core/parse-double in namespace: taoensso.carmine, being replaced by: #'taoensso.carmine/parse-double
+2026-06-12T17:34:00.895100Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1333,5] :sweep.runner/judge-pass-done {:judged 1, :skipped 2, :truncated 0, :out-path "results/sweep-2026-06-12T17-04-03-681613Z/runs-judged.csv"}
+{:judged 1, :skipped 2, :truncated 0, :out-path results/sweep-2026-06-12T17-04-03-681613Z/runs-judged.csv}
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+{:result :updated, :tenant "digdir", :root :platform, :tenant-config-key "default", :path "services.azure-openai.use-azure-openai-api", :marker "./local-db/dh_bb_dev_model_headtohead_v1/.config-changed"}
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+{:result :updated, :tenant "digdir", :root :platform, :tenant-config-key "default", :path "services.azure-openai.model-name", :marker "./local-db/dh_bb_dev_model_headtohead_v1/.config-changed"}
+[06-12 19:34:13] === Kimi COMPLETE -> sweep-2026-06-12T17-04-03-681613Z (judged) ===

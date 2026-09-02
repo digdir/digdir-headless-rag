@@ -1,0 +1,58 @@
+;; LEVER 1 SCREEN — auto-read-top-k ∈ {0,3,5} (close-pool-to-read-gap-plan.md).
+;;
+;; Attacks the display→read leak: the golden is in the display window ~0.71 but
+;; the agent only READS it ~0.55. `auto-read-top-k` (tools.clj, already wired via
+;; :skill-params {:builtin/agent {:auto-read-top-k K}}, default 0) force-reads the
+;; top-K reranked chunks into the workspace regardless of the LLM's selective read.
+;;
+;; Control (autoread-0) == the enrichment A/B's `enriched-hq` arm EXACTLY (same
+;; enrichment collection + the PERSISTED qwen-adapted prompt, which both arms
+;; inherit via prod-base merge — so this isolates ONLY the auto-read lever).
+;;
+;; 8-Q Sweep-1 diverse subset × N=3 × 3 configs = 72 runs, concurrency 1 (big
+;; agent prefills don't batch). judge? false → cloud gpt-5.5 via `bb sweep-judge`
+;; after. Run with the agent-run OPENAI_* env (preserve_thinking + recommended
+;; thinking sampling). Primary metric: Filter-4 read-rate + recall@10; secondary:
+;; effQ, wall-clock (auto-read inflates prefill), empty/timeout.
+{:configs
+ [{:id "autoread-0"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}}}
+  {:id "autoread-3"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:auto-read-top-k 3}}}
+  {:id "autoread-5"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:auto-read-top-k 5}}}]
+ :repeats 3
+ :judge? false
+ :order :interleaved
+ :concurrency 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-03-store-filer-virusskann"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-dialog-01-aktivitetslogg"
+                          "ue-events-01-abonnement-filtre"
+                          "ue-corr-02-transmission-group-dialog"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-sys-03-brukerstyrt-vs-leverandorstyrt"}}}

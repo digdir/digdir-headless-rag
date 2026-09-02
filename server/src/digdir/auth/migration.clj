@@ -9,9 +9,9 @@
             [clojure.string :as str]
             [nano-id.core :refer [nano-id]]
             [digdir.data.db :as db]
+            [digdir.config.core :as config-core]
             [digdir.config.db :as config-db]
-            [digdir.config.permissions :as perms]
-            [digdir.config.accessor :as cfg]))
+            [digdir.config.permissions :as perms]))
 
 (defn get-admin-emails-from-env
   "Get admin emails from ADMIN_USER_EMAILS environment variable."
@@ -28,9 +28,9 @@
        db))
 
 (defn get-allowed-domains-from-config
-  "Get allowed domains from config file."
+  "Get allowed domains from AUTH_APPROVED_DOMAINS env var."
   []
-  (set (cfg/get :services :auth :approved-domains)))
+  (config-core/auth-approved-domains))
 
 (defn get-all-users
   "Get all users from the database."
@@ -59,6 +59,7 @@
   (let [user-id (nano-id)]
     (d/transact conn [{:user/id user-id
                        :user/email email
+                       :user/preferred-language "en"
                        :user/created (str (java.time.Instant/now))
                        :user/created-by created-by}])
     user-id))

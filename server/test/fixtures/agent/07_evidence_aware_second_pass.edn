@@ -1,0 +1,64 @@
+{:description "Evidence-aware second pass: insufficient first pass, targeted re-search, read new evidence, succeed on second pass"
+ :query "Hvor mange årsverk hadde Digdir i 2022?"
+ :max-iterations 12
+
+ :llm-responses
+ [;; Iteration 0: broad search
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg starter med et bredt søk."
+                        :tool_calls [{:id "call_s1"
+                                      :type "function"
+                                      :function {:name "search"
+                                                 :arguments "{\"queries\":[\"årsverk Digdir 2022\"]}"}}]}}]}
+  ;; Iteration 1: read first candidate
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg leser det mest lovende funnet."
+                        :tool_calls [{:id "call_r1"
+                                      :type "function"
+                                      :function {:name "read_chunks"
+                                                 :arguments "{\"chunk_ids\":[\"c1\"]}"}}]}}]}
+  ;; Iteration 2: rerank current evidence
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg rangerer det jeg har lest."
+                        :tool_calls [{:id "call_rr1"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 3: generate, but evidence is insufficient
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg prøver å svare ut fra dagens kontekst."
+                        :tool_calls [{:id "call_g1"
+                                      :type "function"
+                                      :function {:name "generate_response"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 4: follow evidence-aware re-search guidance
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg gjør et mer målrettet søk i årsrapporten."
+                        :tool_calls [{:id "call_s2"
+                                      :type "function"
+                                      :function {:name "search"
+                                                 :arguments "{\"queries\":[\"digdir årsrapport 2022 årsverk\",\"digdir årsverk 2022 oppgitt tall\"]}"}}]}}]}
+  ;; Iteration 5: read new evidence
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg leser den nye årsrapport-kandidaten."
+                        :tool_calls [{:id "call_r2"
+                                      :type "function"
+                                      :function {:name "read_chunks"
+                                                 :arguments "{\"chunk_ids\":[\"c2\"]}"}}]}}]}
+  ;; Iteration 6: rerank again
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg reranker med den nye evidensen."
+                        :tool_calls [{:id "call_rr2"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 7: generate succeeds
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Nå har jeg nok evidens til å svare."
+                        :tool_calls [{:id "call_g2"
+                                      :type "function"
+                                      :function {:name "generate_response"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Final response
+  {:choices [{:finish_reason "stop"
+              :message {:content "Digdir hadde 326 utførte årsverk i 2022 [1]."}}]}]}

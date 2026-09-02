@@ -1,3 +1,12 @@
+# Deploy host. Override with DIGDIR_DEPLOY_HOST to stand up a second
+# environment without editing this file; bb.edn's port-forward tasks read the
+# same variable, so the two cannot drift. Unset = today's host, so current
+# deploys are unchanged.
+#
+# The assignment sits on a comment line on purpose: Kamal expands ERB before
+# parsing YAML, so this still binds, while a plain YAML reader sees only a
+# comment and the file stays valid YAML for editors and linters.
+# <% deploy_host = ENV.fetch("DIGDIR_DEPLOY_HOST", "5.75.220.232") %>
 # Name of your application. Used to uniquely configure containers.
 service: digdir-headless-rag
 
@@ -9,7 +18,7 @@ image: digdir-rag-deploy/digdir-headless-rag
 # Deploy to these servers.
 servers:
   web:
-    - 5.75.220.232
+    - <%= deploy_host %>
 
 # Enable SSL auto certification via Let's Encrypt and allow for multiple apps on a single web server.
 # Remove this section when using multiple web servers and ensure you terminate SSL at your load balancer.
@@ -29,28 +38,34 @@ registry:
   server: altinnaicontainers.azurecr.io
   username: digdir-rag-deploy
 
-  # Always use an access token rather than real password (pulled from .kamal/secrets).
+  # Always use an access token rather than real password (pulled from .kamal/secrets or .kamal/secrets-common).
   password:
     - KAMAL_REGISTRY_PASSWORD
 
 # Configure builder setup.
 builder:
-  remote: ssh://root@5.75.220.232 
+  remote: ssh://root@<%= deploy_host %>
   arch: amd64
   dockerfile: server.Dockerfile
   args:
     VERSION: <%= `git rev-parse HEAD`.strip %>
+    # Build time, not deploy time — see render-built-at in digdir.ui.deployment
+    # for why deploy time cannot be baked into an image at all.
+    BUILD_TIMESTAMP: <%= Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ') %>
     BUILDKIT_PROGRESS: plain
 
 # Environment variables
 env:
   secret:
+    - ADH_POSTGRES_TABLE
     - ADH_POSTGRES_PWD
     - ADH_POSTGRES_URL
     - ADH_POSTGRES_USER
-    - SCW_SECRET_KEY
-    - SCW_DEFAULT_PROJECT_ID
-    - KAMAL_REGISTRY_PASSWORD
+    - ADMIN_USER_EMAILS
+    - CONFIG_MASTER_KEY
+    - JWT_SECRET
+    - AUTH_SECURE_COOKIES
+    - RATE_LIMIT_TRUST_X_FORWARDED_FOR
 
 
 # Aliases are triggered with "bin/kamal <alias>". You can overwrite arguments on invocation:
@@ -66,7 +81,10 @@ aliases:
 
 # Use a persistent storage volume.
 volumes:
-  - "/opt/admin/cache:/app/cache"
+  # Service-specific host path so we don't share cache state with other apps
+  # also deployed to this host (e.g. electric3-app-template-web mounts
+  # /opt/admin/cache, the previous default).
+  - "/opt/digdir-headless-rag/cache:/app/cache"
 
 # Bridge fingerprinted assets, like JS and CSS, between versions to avoid
 # hitting 404 on in-flight requests. Combines all files from new and old

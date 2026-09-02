@@ -80,6 +80,7 @@
    "optional" true,
    "sort" true,
    "type" "string"}
+  {"name" "total_chunks", "type" "int32", "sort" true, "optional" true}
   #_{"facet" true,
    "name" "owner_short",
    "optional" true,
@@ -93,14 +94,44 @@
    "sort" true,
    "optional" true,
    "type" "string"}
-  #_{"stem_dictionary" "",
-   "optional" true,
-   "index" true,
-   "sort" false,
-   "name" "concerns_years",
-   "locale" "",
-   "type" "string[]",
-   "infix" false,
-   "facet" true,
-   "store" true,
-   "stem" false}]}
+  ;; ---------------------------------------------------------------------
+  ;; Retrieval record (#308 option C). Whether a document's file could be
+  ;; fetched, as a fact you can query rather than an absence you must infer.
+  ;;
+  ;; ABSENT MEANS THIS PIPELINE HAS RECORDED NO OBSERVATION. It is a statement
+  ;; about our records, not about the document — every document in the corpus
+  ;; predates these fields, so all of them read absent until a run reaches
+  ;; them. ABSENT IS NOT ZERO, and that was measured rather than assumed: on a
+  ;; throwaway collection a filter of consecutive_retrieval_failures:=0 matched
+  ;; only the document holding zero, and :>=0 also excluded the absent one. An
+  ;; absent field matches NO numeric filter, so "never observed" is not
+  ;; directly filterable — it is the total minus those matching :>=0.
+  ;;
+  ;; The counter is the length of the CURRENT contiguous run of failures. It
+  ;; resets to 0 on a success while the two failure timestamps are RETAINED, so
+  ;; a closed episode stays legible; the counter is what tells you whether the
+  ;; episode is open. Full state table in digdir.docs.retrieval-record.
+  ;;
+  ;; All four are optional and carried forward explicitly by prepare-doc,
+  ;; because action=upsert replaces the whole document and would otherwise
+  ;; destroy them on every run.
+  {"name" "last_retrieval_success_at", "type" "int64", "sort" true, "optional" true}
+  {"name" "first_retrieval_failure_at", "type" "int64", "sort" true, "optional" true}
+  {"name" "last_retrieval_failure_at", "type" "int64", "sort" true, "optional" true}
+  {"name" "consecutive_retrieval_failures", "type" "int32", "facet" true, "sort" true, "optional" true}
+  ;; Lifetime attempts, kept alongside the streak because they answer
+  ;; different questions: the streak says whether the file is unreachable
+  ;; NOW, this says how many runs have touched the document at all.
+  ;; ⚠️ It STARTS AT 1 ON THE FIRST OBSERVATION AFTER THIS LANDS and cannot
+  ;; be reconstructed for the existing corpus, so it means attempts SINCE
+  ;; INSTRUMENTATION, not attempts ever. Neither field gives lifetime
+  ;; FAILURES — do not compute that from these two.
+  {"name" "retrieval_attempts", "type" "int32", "sort" true, "optional" true}
+  ;; ---------------------------------------------------------------------
+  ;; A disabled "concerns_years" string[] field was removed here (#252). It was
+  ;; the same concept as concerned_years above, MISSPELLED and differently
+  ;; typed, and because it spelled out every available option while the live
+  ;; field states three, it was the most complete example in this file - so the
+  ;; next person adding a field was more likely to copy the dead wrong one
+  ;; precisely because it looked more thorough.
+  ]}

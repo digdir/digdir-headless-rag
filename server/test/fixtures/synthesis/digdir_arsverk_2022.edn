@@ -1,0 +1,51 @@
+{:query "Hvor mange årsverk hadde Digdir i 2022?"
+ :table-chunk-id "15a66d5ec5c5"
+ :prose-chunk-id "6a80d6499075"
+ :cases
+ [{:id :table-only
+   :description "Only the decisive Hovudtal table chunk is provided"
+   :expected-citation "15a66d5ec5c5"
+   :context-docs
+   [{:metadata {:source "15a66d5ec5c5"}
+     :page_content "Title: Årsrapport Digitaliseringsdirektoratet 2022\nHeader 1: Hovudtal\n\n| Nøkkeltal årsrekneskapen | 2018 | 2019 | 2020 | 2021 | 2022 |\n| Tal tilsette | | | 371 | 349 | 367 |\n| Tal avtalte årsverk | | | 361 | 338 | 356 |\n| Tal utførte årsverk | 308 | 306 | 330 | 311 | 326 |\n| Lønsutgifter per årsverk | 875983 | 932805 | 949142 | 979491 | 970798 |"}]}
+
+  {:id :mixed-table-first
+   :description "The decisive table is first, followed by confounding prose about ansatte/turnover"
+   :expected-citation "15a66d5ec5c5"
+   :context-docs
+   [{:metadata {:source "15a66d5ec5c5"}
+     :page_content "Title: Årsrapport Digitaliseringsdirektoratet 2022\nHeader 1: Hovudtal\n\n| Nøkkeltal årsrekneskapen | 2018 | 2019 | 2020 | 2021 | 2022 |\n| Tal tilsette | | | 371 | 349 | 367 |\n| Tal avtalte årsverk | | | 361 | 338 | 356 |\n| Tal utførte årsverk | 308 | 306 | 330 | 311 | 326 |"}
+    {:metadata {:source "792beec82d38"}
+     :page_content "Title: Årsrapport Digitaliseringsdirektoratet 2022\nHeader 1: Faste ansatte i Digdir 31.12.2022\nHeader 2: Forklaring\n\nTurnovertallet for Digdir i 2022 er beregnet ut fra antall ansatte pr. 31.12.2022. Turnover er 9,9 prosent. Tabellen viser faste ansatte per 31.12.2022, men oppgir ikke talet for utførte årsverk."}]}
+
+  {:id :mixed-colbert-order
+   :description "Approximate live ColBERT order from the trace, with the decisive table chunk last"
+   :expected-citation "15a66d5ec5c5"
+   :context-docs
+   [{:metadata {:source "792beec82d38"}
+     :page_content "Title: Årsrapport Digitaliseringsdirektoratet 2022\nHeader 1: Faste ansatte i Digdir 31.12.2022\nHeader 2: Forklaring\n\nTurnovertallet for Digdir i 2022 er beregnet ut fra antall ansatte pr. 31.12.2022. Turnover er 9,9 prosent. Figuren viser faste ansatte, ikke utførte årsverk."}
+    {:metadata {:source "0b6c1a24b8b0"}
+     :page_content "Title: Årsrapport Digitaliseringsdirektoratet 2022\n\nDigdir rapporterer på fellesføringer, konsulentbruk og ressursbruk. Dette avsnittet omtaler ressursbruk, men inneholder ikke talet for utførte årsverk i 2022."}
+    {:metadata {:source "773e27c82490"}
+     :page_content "Title: Årsrapport Digitaliseringsdirektoratet 2022\n\nSaman for ein enklare digital kvardag. Innhald og frontmatter utan konkret tal for utførte årsverk."}
+    {:metadata {:source "7902de4bf19e"}
+     :page_content "Title: Årsrapport Digitaliseringsdirektoratet 2022\nHeader 1: Universell utforming\nHeader 4: Ressursbruk fordelt på verksemdsområder\n\nDette avsnittet omtaler verksemd og ressursbruk, men ikkje talet for utførte årsverk i 2022."}
+    {:metadata {:source "15a66d5ec5c5"}
+     :page_content "Title: Årsrapport Digitaliseringsdirektoratet 2022\nHeader 1: Hovudtal\n\n| Nøkkeltal årsrekneskapen | 2018 | 2019 | 2020 | 2021 | 2022 |\n| Tal tilsette | | | 371 | 349 | 367 |\n| Tal avtalte årsverk | | | 361 | 338 | 356 |\n| Tal utførte årsverk | 308 | 306 | 330 | 311 | 326 |"}]}
+  {:id :prose-only
+   :description "Only the decisive HR prose chunk is provided"
+   :expected-citation "6a80d6499075"
+   :context-docs
+   [{:metadata {:source "6a80d6499075"}
+     :page_content "Title: Årsrapport Digitaliseringsdirektoratet 2022\nHeader 1: Styring og kontroll i virksomheten\nHeader 2: Bærekraft\nHeader 4: HR\n\nDigdir besto 31.12.2022 av 326 utførte årsverk fordelt på 345 faste og 15 midlertidige stillinger. I utførte årsverk medregner vi reisetid, overtid og annet betalt merarbeid."}]}
+
+  {:id :prose-with-confounder
+   :description "Direct prose evidence for 326 utførte årsverk, plus nearby ansatte/turnover confounders"
+   :expected-citation "6a80d6499075"
+   :context-docs
+   [{:metadata {:source "792beec82d38"}
+     :page_content "Title: Årsrapport Digitaliseringsdirektoratet 2022\nHeader 1: Faste ansatte i Digdir 31.12.2022\nHeader 2: Forklaring\n\nTurnovertallet for Digdir i 2022 er beregnet ut fra antall ansatte pr. 31.12.2022. Turnover er 9,9 prosent. Figuren viser faste ansatte, ikke utførte årsverk."}
+    {:metadata {:source "a1d207d3b73c"}
+     :page_content "Title: Årsrapport Digitaliseringsdirektoratet 2022\n\nI 2022 rekrutterte vi 56 faste og 41 midlertidige stillinger. Dette avsnittet omtaler ansatte og stillinger, men oppgir ikke utførte årsverk."}
+    {:metadata {:source "6a80d6499075"}
+     :page_content "Title: Årsrapport Digitaliseringsdirektoratet 2022\nHeader 1: Styring og kontroll i virksomheten\nHeader 2: Bærekraft\nHeader 4: HR\n\nDigdir besto 31.12.2022 av 326 utførte årsverk fordelt på 345 faste og 15 midlertidige stillinger. I utførte årsverk medregner vi reisetid, overtid og annet betalt merarbeid."}]}]}

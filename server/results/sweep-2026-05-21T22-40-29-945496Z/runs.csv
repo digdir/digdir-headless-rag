@@ -1,0 +1,21 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,recall-at-5,recall-at-10,recall-at-20,n-retrieved,n-expected,retrieved-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,steps-executed,response,error
+effdc395-d03e-42e5-8690-bf5654e1810c,2026-05-21T22:40:46.127699Z,bundled-default,altinn-dialogporten-about,0,public-docs,public-docs-smoke,"altinn-dialogporten,exact-lookup,simple",complete,0,false,chunks+answer,false,0.0,0.0,0.0,0,1,,9f75a7784e9b,16179,,,,3,"The search only surfaced generic documentation pages because the user’s question is missing. I should not guess an answer. I’ll stop here and ask the user to provide the actual question so I can search and answer it properly.
+I’m missing the actual question text, so I can’t answer accurately yet.
+
+Please send the question you want answered, and I’ll search the documentation and respond with evidence-based details.",
+e3983ba6-ee95-49e0-b36a-2bb2e5bfd1be,2026-05-21T22:40:51.414729Z,bundled-default,altinn-correspondence-post-published,0,public-docs,exploratory-rerank,"altinn-correspondence,simple,factual",complete,0,false,chunks+answer,false,0.0,0.0,0.0,0,1,,068a1c1b7fa5,5286,,,,3,"I don’t yet have the user’s actual question, so I need to inspect the corpus a bit and wait for the prompt content. Since the message is empty, there’s nothing specific to search for yet.
+I’m ready to help, but your message was empty.  
+Please send the question or topic you want me to research.",
+999ed391-312a-467b-80df-c255c996dba4,2026-05-21T22:40:56.591846Z,faithful-default,altinn-dialogporten-about,0,public-docs,public-docs-smoke,"altinn-dialogporten,exact-lookup,simple",complete,0,false,chunks+answer,false,0.0,0.0,0.0,0,1,,9f75a7784e9b,5176,,,,3,"I don’t yet have the user’s actual question, so I need to inspect the corpus for likely topic matches only after I know what to look for. Since there’s no question text in the prompt, I should pause rather than guess and risk searching the wrong thing.
+I’m ready to help, but I don’t see an actual question in your message.
+
+Please send the question or topic you want me to research, and I’ll search the document corpus and answer it.",
+91aa738a-4158-4065-8af0-9d582d119231,2026-05-21T22:41:40.857603Z,faithful-default,altinn-correspondence-post-published,0,public-docs,exploratory-rerank,"altinn-correspondence,simple,factual",complete,0,false,chunks+answer,false,0.0,0.0,0.0,0,1,,068a1c1b7fa5,44265,,,,3,"I’m missing the actual user question in the conversation, so I can’t answer it reliably yet.
+
+What I did find is that the corpus contains Altinn-related docs on topics like:
+- API authentication and Maskinporten
+- Broker API scopes
+- Dialogporten authorized parties
+- Altinn Studio External API
+
+If you send the specific question, I can look it up and answer it from the docs.",

@@ -1,0 +1,27 @@
+;; Focused single-case fixture for stability-batch eval on the
+;; "Når ble Altinn 3 lansert?" query.
+;;
+;; current-budget and relaxed-budget are intentionally identical: the
+;; benchmark runs each case under both budgets, so each invocation of
+;; `bb agent-budget-benchmark` yields 2 runs of the same query. Five
+;; invocations per :graph-variant gives n=10 per variant — enough to
+;; tell signal from LLM nondeterminism on a single query.
+;;
+;; Golden chunk: 8e22ae4b88b1 (in the /nb/community/about/ doc),
+;; quote: "Første versjon av Altinn 3 kom i juni 2020, og de første
+;;         applikasjonene på løsningen ble satt i produksjon 19. juni 2020."
+;;
+;; Answer pattern matches "juni 2020" or "19. juni 2020" — a correct
+;; answer must contain the launch month/year.
+{:cases
+ [{:id                      "altinn3-lansert-when"
+   :query                   "Når ble Altinn 3 lansert?"
+   :expected-answer-pattern "(?i)juni\\s*2020"
+   :golden-chunk-ids        ["8e22ae4b88b1"]
+   :budget-dimension        :read-chars
+   :current-budget          {:max-search-passes 4
+                             :max-read-operations 6
+                             :max-read-content-length 12000}
+   :relaxed-budget          {:max-search-passes 4
+                             :max-read-operations 6
+                             :max-read-content-length 12000}}]}

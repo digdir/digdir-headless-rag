@@ -1,6 +1,6 @@
 (ns digdir.docs.chunking-test
   "Tests for document chunking functionality."
-  (:require [clojure.test :refer [deftest testing is are]]
+  (:require [clojure.test :refer [deftest testing is ]]
             [clojure.string :as str]
             [digdir.rag.chunking :as chunking]
             [digdir.docs.test-fixtures :as fixtures]))
@@ -36,7 +36,7 @@
           chunks (chunking/split-into-chunks-by-headers config [doc])
           metadata-values (map :metadata chunks)]
       ;; Some chunks should have metadata
-      (is (some #(not (empty? %)) metadata-values)))))
+      (is (some #(seq %) metadata-values)))))
 
 (deftest chunks-by-headers-no-headers
   (testing "Document without headers produces single chunk"
@@ -164,3 +164,58 @@
       (is (pos? (count chunks)))
       (let [all-content (str/join " " (map :page-content chunks))]
         (is (str/includes? all-content "Ærlighet"))))))
+
+;; ============================================================================
+;; #452 — concatenation must not discard header metadata
+;; ============================================================================
+
+(def ^:private short-then-long-doc
+  "A document whose first sections fall under `:chunks/minimum-length`, so
+   `concatenate-too-small-chunks` glues them to the following section.
+
+   In header-based chunking every chunk IS a section at concatenation time, so
+   EVERY concatenation crosses a heading boundary — there is no other kind. That
+   is the function's job, not a defect, and this fixture exists to exercise it
+   rather than to prevent it."
+  {:page-content (str "# Title\n\n## Alpha\n\nshort\n\n## Beta\n\n"
+                      "This section is long enough to exceed the minimum length on its own, "
+                      "padded out with filler text so that it comfortably clears three hundred "
+                      "and thirty three characters in total. Adding more words here to be "
+                      "certain we are over the threshold.\n")})
+
+(deftest concatenated-chunks-keep-their-header-metadata
+  (testing "#452 — a chunk produced by concatenation carries headers, not {}"
+    ;; ⚠️ THE ORIGINAL DEFECT WAS A THREADING BUG, NOT A CHUNKING ONE.
+    ;; `(->> … (filter seq) first (or {}))` expands to
+    ;; `(or {} (first (filter seq …)))`, and an EMPTY MAP IS TRUTHY in Clojure —
+    ;; so the fallback returned before the value it guarded was considered, and
+    ;; every concatenated chunk carried `{}`. The headers were lost entirely,
+    ;; not merely misattributed to one section of several.
+    ;;
+    ;; Asserting NON-EMPTY rather than a specific header map: which headers a
+    ;; merged chunk should carry — the first section's, or a union — is an open
+    ;; design question (#452). That it must carry SOME is not.
+    (let [chunks (chunking/split-into-chunks-by-headers
+                   {:chunks/minimum-length 333} [short-then-long-doc])]
+      (is (= 1 (count chunks))
+          "the fixture must actually trigger concatenation, or this test proves nothing")
+      (is (seq (:metadata (first chunks)))
+          (str "a concatenated chunk carries empty metadata, so its headers were "
+               "discarded. Check that the fallback in concatenate-too-small-chunks "
+               "has not been threaded back into `->>`, where `(or {})` always wins."))
+      (is (contains? (:metadata (first chunks)) "Header 1")
+          "the top-level header must survive concatenation"))))
+
+(deftest concatenation-still-happens
+  (testing "#452 — the fix must not have stopped concatenation, only fixed its metadata"
+    ;; Guarding the thing the fix could plausibly have broken. "Do not glue
+    ;; across headings" would disable this function entirely in header-based
+    ;; chunking, since every chunk is a section at that point.
+    (let [glued (chunking/split-into-chunks-by-headers
+                  {:chunks/minimum-length 333} [short-then-long-doc])
+          unglued (chunking/split-into-chunks-by-headers
+                    {:chunks/minimum-length 0} [short-then-long-doc])]
+      (is (< (count glued) (count unglued))
+          (str "concatenation produced no fewer chunks than not concatenating, so it "
+               "is no longer merging undersized sections — which is what the "
+               "minimum-length knob exists to do")))))

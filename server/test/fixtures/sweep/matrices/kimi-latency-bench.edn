@@ -1,0 +1,33 @@
+;; conc-1 LATENCY BENCHMARK — true per-query end-to-end latency without the conc-48
+;; batching/queueing confound. Deployed snippet-AB config (real deployed query path).
+;; 8 questions spanning short→long answers, N=2, CONCURRENCY 1 (strictly sequential).
+;; judge? false — this measures LATENCY/tokens, not quality (quality already established).
+;; Run per model via scripts/kimi-latency-bench.sh; analyze healthy runs' elapsed-ms.
+{:configs
+ [{:id "deployed"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true
+                     :no-tool-call-retry true}}}]
+ :repeats 2
+ :judge? false
+ :order :interleaved
+ :concurrency 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 1800000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter
+ {:ids #{"ue-broker-01-filoverforing-tilstander"
+         "ue-studio-03-datamodell-filer"
+         "ue-authz-06-xacml-obligation-authlevel"
+         "ue-api-04-instances-get-no-list"
+         "ue-dialog-02-seen-log"
+         "ue-corr-03-system-til-system-nedlasting"
+         "ue-sys-01-leverandorstyrt-og-forhold"
+         "ue-notif-05-umiddelbar-varsling-otp"}}}

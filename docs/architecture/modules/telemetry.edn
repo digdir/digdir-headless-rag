@@ -1,0 +1,45 @@
+{:id "telemetry",
+ :plane "operations",
+ :name "Telemetry & Utilities",
+ :note "Logs · status · diagnostics",
+ :icon "pulse",
+ :color "#b095ef",
+ :status "Operations",
+ :summary
+ "Provides structured logging, live health and shared operational diagnostics.",
+ :description
+ "Cross-cutting utilities instrument execution with structured Telemere events, expose live status polling and support diagnostic tooling. This is the operational connective tissue used across every plane.",
+ :responsibilities
+ ["Emit structured, redacted application events"
+  "Track live pipeline and Playground status"
+  "Provide common diagnostics and operational helpers"],
+ :files
+ ["server/src/digdir/util/logging.clj"
+  "server/src/digdir/playground/status.cljc"
+  "server/src/digdir/tools/namespace_decomposition.clj"],
+ :input "Runtime events + health signals",
+ :output "Logs, status and diagnostics",
+ :edges
+ [{:to "skills",
+   :kind :call,
+   :target :call,
+   :label "Spans and structured events from skill runs",
+   :via
+   "INHERITED FROM THE PRE-#399 CANVAS AND UNSUPPORTED: digdir.util.logging has no requirers, and the direction is likely inverted — modules emit to telemetry rather than telemetry calling them",
+   :unverified true}
+  {:to "pipeline",
+   :kind :call,
+   :target :call,
+   :label "Ingestion run telemetry",
+   :via
+   "INHERITED AND UNSUPPORTED, see the note on telemetry -> skills",
+   :unverified true}
+  {:to "playground",
+   :kind :call,
+   :target :call,
+   :label "Playground run status",
+   :via
+   "INHERITED AND UNSUPPORTED, see the note on telemetry -> skills",
+   :unverified true}],
+ :keywords
+ "telemetry logging status diagnostics observability telementry health operations utilities"}

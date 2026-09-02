@@ -1,0 +1,44 @@
+;; NO-TOOL-CALL GUARD SMOKE — does re-prompting actually recover a real search,
+;; or just elicit more scaffolding? (Gate before the full A/B.)
+;;
+;; The 3 highest never-searched-rate questions from the full-42 confirm:
+;;   authz-03 (snippet-AB 3/3 never-searched), api-06 (control 2/3), events-03
+;;   (control 2/3). x {guard-off, guard-on} x N=4 = 24 runs, conc 1, judge? false.
+;;
+;; Both arms set snippet-AB EXPLICITLY (variant + search-snippets) so the smoke is
+;; reproducible regardless of the persisted promotion. Only delta = the guard flag.
+;; Inspect agent-side: never-searched rate (search-passes=0) off vs on, and whether
+;; guard-on runs that re-prompted show passes>=1 + a non-scaffold response.
+;; Run with the agent-run OPENAI_* env.
+{:configs
+ [{:id "guard-off"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true}}}
+  {:id "guard-on"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true
+                     :no-tool-call-retry true}}}]
+ :repeats 4
+ :judge? false
+ :order :interleaved
+ :concurrency 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-authz-03-validere-samtykketoken"
+                          "ue-api-06-app-openapi-swagger-spec"
+                          "ue-events-03-polling-vs-webhook"}}}

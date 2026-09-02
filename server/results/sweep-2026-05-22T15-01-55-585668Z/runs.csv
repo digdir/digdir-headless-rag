@@ -1,0 +1,19 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,recall-at-5,recall-at-10,recall-at-20,citation-recall,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,steps-executed,response,error
+79d93408-664d-4813-bb28-22e61faf3d2f,2026-05-22T15:02:17.676618Z,smoke-ctop-10,altinn-broker-getting-started,0,public-docs,public-docs-smoke,"simple,navigational,altinn-broker",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,10,6,1,c050af21d82e;bc169ad3ed4b;68bb403c3395;6a7d541f9b8b;a6b5678aa6e5;be9e02a668a7;d03f96e6fc68;94f0fa820e54;753bfeab7314;4918ffcef015,c050af21d82e;bc169ad3ed4b;68bb403c3395;6a7d541f9b8b;be9e02a668a7;d03f96e6fc68,9584a6e89afc,22087,,,,3,"For å komme i gang med **Altinn Broker under overgangen til Altinn 3**, må du følge disse stegene: [1]
+
+1. **Ha en eksisterende Altinn 2 Broker Service.** [1]  
+2. **Opprett eller ha en tilsvarende Altinn 3 Broker Resource.** Du kan starte med Altinn Broker her, og ressursen må konfigureres for overgangsløsningen. [1][5]  
+3. **Be om en transition setup** fra Altinn 2-tjenesten til Altinn 3-ressursen. [1]  
+4. **Sett opp Broker-komponenten** ved å initialisere service owner i Broker Config Store og konfigurere den aktuelle ressursen via API. [4]  
+5. **Konfigurer ressursen for overgangsløsningen** slik at den ligner mest mulig på Altinn 2-tjenesten. Typiske verdier er:  
+   - `MaxFileTransferSize = ""1073741824""` [2]  
+   - `FileTransferTimeToLive = ""30D""` eller tilsvarende TTL fra Altinn 2…",
+17f142cb-583a-4561-ad39-afd5f01b081d,2026-05-22T15:02:36.742588Z,smoke-ctop-80,altinn-broker-getting-started,0,public-docs,public-docs-smoke,"simple,navigational,altinn-broker",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,11,2,1,18dd59e10823;c050af21d82e;bc169ad3ed4b;02448e8b52b3;a1fcc9aae0fa;a6b5678aa6e5;be9e02a668a7;0a36ce72e13b;94f0fa820e54;f9ee273be3a9;753bfeab7314,c050af21d82e;bc169ad3ed4b,9584a6e89afc,19065,,,,3,"For å komme i gang med **Altinn Broker under overgangen til Altinn 3**, må en tjenesteeier følge disse stegene: [1]
+
+1. Ha en eksisterende **Altinn 2 Broker Service**. [1]  
+2. Ha eller opprett en tilsvarende **Altinn 3 Broker Resource**. [1]  
+3. Be om en **transition setup** fra Altinn 2-tjenesten til Altinn 3-ressursen. [1]  
+4. Gå live med overgangsløsningen og oppfordre brukere til å migrere til **Altinn Broker**. [1]  
+5. Når alle brukere har migrert, kan Altinn 2 Broker Service avvikles. [1]
+
+For å konfigurere ressursen slik at den fungerer som en overgangsløsning, bør du sette verdier basert på den eksisterende Altinn 2-tjenesten, blant annet: **MaxFileTransferSize**, **FileTransferTimeToLive**, **PurgeFileTransferAfterAllRecipientsConfirmed** og **PurgeFileTransferGracePeriod**. […",

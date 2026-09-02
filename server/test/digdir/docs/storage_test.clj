@@ -1,11 +1,10 @@
 (ns digdir.docs.storage-test
   "Tests for TypeSense storage operations.
    Uses mocked TypeSense client."
-  (:require [clojure.test :refer [deftest testing is are use-fixtures]]
+  (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [clojure.string :as str]
             [digdir.docs.website :as website]
             [digdir.docs.folder :as folder]
-            [digdir.docs.test-fixtures :as fixtures]
             [typesense.client :as ts]))
 
 ;; ============================================================================
@@ -187,7 +186,7 @@
   (testing "Schemas reference correct collections"
     (let [config {:store/coll-prefix "test_"}
           coll-ids (website/coll-ids config)
-          [docs-coll chunks-coll phrases-coll] coll-ids
+          [docs-coll _chunks-coll _phrases-coll] coll-ids
           chunks-schema (website/website-chunks-schema coll-ids)
           doc-num-field (first (filter #(= "doc_num" (:name %)) (:fields chunks-schema)))]
       (is (= (str docs-coll ".doc_num") (:reference doc-num-field))))))

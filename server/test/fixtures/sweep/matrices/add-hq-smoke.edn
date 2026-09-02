@@ -1,0 +1,10 @@
+;; HQ wiring smoke: confirm enriched-hq arm reads the grown HQ collection (enrichment-hits>0).
+{:configs
+ [{:id "off" :skill-graph-id :builtin/agent-rag-graph-bundled :skill-params {}}
+  {:id "enriched-hq" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:enrichment-types [:hypothetical-questions]
+                                       :enrichment-search-targets {:hypothetical-questions "website_enrichment_hypothetical_questions_grown_v1"}}}}]
+ :repeats 1 :judge? false :order :interleaved
+ :max-clarification-rounds 1 :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-03-store-filer-virusskann" "ue-sys-02-systembrukertoken-pdp-autorisasjon" "ue-studio-02-pdf-service-task"}}}

@@ -1,0 +1,59 @@
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+{:result :updated, :tenant "digdir", :root :platform, :tenant-config-key "default", :path "services.azure-openai.use-azure-openai-api", :marker "./local-db/dh_bb_dev_model_headtohead_v1/.config-changed"}
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+{:result :unchanged, :tenant "digdir", :root :platform, :tenant-config-key "default", :path "services.judge.model", :marker "./local-db/dh_bb_dev_model_headtohead_v1/.config-changed"}
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+WARNING: parse-long already refers to: #'clojure.core/parse-long in namespace: taoensso.carmine, being replaced by: #'taoensso.carmine/parse-long
+WARNING: parse-double already refers to: #'clojure.core/parse-double in namespace: taoensso.carmine, being replaced by: #'taoensso.carmine/parse-double
+2026-06-12T15:54:58.583025Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 10, :total 236}
+2026-06-12T15:57:12.498274Z WARN LOG bdb-dd-m4.local digdir.sweep.runner[672,25] :sweep.runner/judge-timeout {:question-id "wg-studio-01-page-settings-properties", :timeout-ms 120000}
+2026-06-12T15:58:03.015063Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 20, :total 236}
+2026-06-12T15:59:24.779757Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 30, :total 236}
+2026-06-12T16:01:13.588325Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 40, :total 236}
+2026-06-12T16:02:50.951778Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 50, :total 236}
+2026-06-12T16:04:08.125454Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 60, :total 236}
+2026-06-12T16:05:50.853865Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 70, :total 236}
+2026-06-12T16:07:19.016230Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 80, :total 236}
+2026-06-12T16:09:04.865946Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 90, :total 236}
+2026-06-12T16:10:39.526940Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 100, :total 236}
+2026-06-12T16:12:30.045053Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 110, :total 236}
+2026-06-12T16:13:56.946312Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 120, :total 236}
+2026-06-12T16:16:47.506505Z WARN LOG bdb-dd-m4.local digdir.sweep.runner[672,25] :sweep.runner/judge-timeout {:question-id "wg-api-01-instances-query-params-en", :timeout-ms 120000}
+2026-06-12T16:17:16.924559Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 130, :total 236}
+2026-06-12T16:18:48.780942Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 140, :total 236}
+2026-06-12T16:20:14.112959Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 150, :total 236}
+2026-06-12T16:21:59.850729Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 160, :total 236}
+2026-06-12T16:23:18.839187Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 170, :total 236}
+2026-06-12T16:24:58.556481Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 180, :total 236}
+2026-06-12T16:26:38.449365Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 190, :total 236}
+2026-06-12T16:28:25.547305Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 200, :total 236}
+2026-06-12T16:29:55.209755Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 210, :total 236}
+2026-06-12T16:31:35.366130Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 220, :total 236}
+2026-06-12T16:33:19.890482Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1323,25] :sweep.runner/judge-pass-progress {:judged 230, :total 236}
+2026-06-12T16:34:14.119168Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1333,5] :sweep.runner/judge-pass-done {:judged 236, :skipped 0, :truncated 0, :out-path "results/sweep-2026-06-12T07-26-40-452436Z/runs-judged.csv"}
+{:judged 236, :skipped 0, :truncated 0, :out-path results/sweep-2026-06-12T07-26-40-452436Z/runs-judged.csv}
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+{:result :updated, :tenant "digdir", :root :platform, :tenant-config-key "default", :path "services.azure-openai.use-azure-openai-api", :marker "./local-db/dh_bb_dev_model_headtohead_v1/.config-changed"}
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+{:result :unchanged, :tenant "digdir", :root :platform, :tenant-config-key "default", :path "services.azure-openai.model-name", :marker "./local-db/dh_bb_dev_model_headtohead_v1/.config-changed"}
+=== REJUDGE2 DONE ===

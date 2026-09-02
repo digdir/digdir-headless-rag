@@ -1,0 +1,36 @@
+{:id "scope",
+ :plane "control",
+ :name "Execution Scope",
+ :note "Request-local context",
+ :icon "scope",
+ :color "#e6bb70",
+ :status "Cross-cutting",
+ :summary
+ "Carries the explicit tenant, dataset, agent and node identity through execution.",
+ :description
+ "Execution scope prevents ambient defaults from silently choosing the wrong tenant or dataset. It normalizes request-local identity once and makes it available to skill nodes and lower-level services.",
+ :responsibilities
+ ["Normalize tenant, dataset, agent and node identity"
+  "Bind explicit request-local execution context"
+  "Reject ambiguous or missing scope at boundaries"],
+ :files
+ ["server/src/digdir/execution/scope.clj"
+  "server/src/digdir/api/context.clj"],
+ :input "Principal scopes + request arguments",
+ :output "Canonical execution context",
+ :edges
+ [{:to "config",
+   :kind :call,
+   :target :call,
+   :label "Resolve effective settings for a scope",
+   :witness
+   {:file "server/src/digdir/execution/scope.clj",
+    :requires digdir.config.db}}
+  {:to "skills",
+   :kind :call,
+   :target :call,
+   :label "Skill selection permitted for the scope",
+   :via "skill ids resolved from agent policy at invocation",
+   :unverified true}],
+ :keywords
+ "execution scope tenant dataset agent node context request identity"}

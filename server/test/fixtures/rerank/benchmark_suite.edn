@@ -1,0 +1,31 @@
+{:cases
+ [{:id "digdir-arsverk-2022-base"
+   :query "Hvor mange årsverk hadde Digdir i 2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "digdir-arsverk-2022-antall"
+   :query "Hva var antall årsverk i Digdir i 2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "digdir-arsverk-2022-digitaliseringsdirektoratet"
+   :query "Hvor mange årsverk hadde Digitaliseringsdirektoratet i 2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "digdir-arsverk-2022-utforte"
+   :query "Hvor mange utførte årsverk hadde Digdir per 31.12.2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "digdir-arsverk-2022-stillinger"
+   :query "Hvor mange årsverk og stillinger hadde Digdir i 2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "digdir-arsverk-2022-bemanning"
+   :query "Hva var bemanningen i Digdir i 2022 målt i årsverk?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "digdir-arsverk-2022-hr"
+   :query "Hva sier HR-delen i årsrapporten om antall årsverk i Digdir 2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "digdir-arsverk-2022-larlinger"
+   :query "Hvor mange årsverk hadde Digdir i 2022, og hvor mange lærlinger hadde de?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "digdir-arsverk-2022-english-fte"
+   :query "How many FTEs did Digdir have in 2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "digdir-arsverk-2022-reisetid-overtid"
+   :query "Hvor mange utførte årsverk hadde Digdir i 2022 når reisetid og overtid er inkludert?"
+   :golden-chunk-ids ["6a80d6499075"]}]}

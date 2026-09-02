@@ -1,0 +1,105 @@
+;; Round 4 — merge-function and retrieval-pool tuning
+;;
+;; Designed from Arc A diagnostic (plans/proposed/stuck-domains-diagnostic.md).
+;; The diagnostic showed:
+;;   F1 — metadata/content strategies return 0 hits for stuck-domain goldens;
+;;        only the phrase strategy ever surfaces them.
+;;   F2 — the merge function actively *degrades* phrase rank as content/metadata
+;;        candidates flow in (broker-rest-usage: phrase rank 15 stable, merged
+;;        rank goes 17→52→91 as retrieve-top-k grows 30→60→100).
+;;   F3 — three distinct failure modes split across 5 stuck-domain questions.
+;;
+;; Round 4 tests three remediations isolated and stacked, all on the Round-3
+;; winner (prompt-minimal). It's not pure OFAT — the stacked cell combines
+;; all three knobs — but each baseline-vs-singlechange cell is a clean OFAT.
+;;
+;; Cells (5):
+;;   r4-control       — Round-3 prompt-minimal config exactly. Reproducibility
+;;                      anchor; expected to match Round-3 baseline within SE.
+;;   r4-phrase-only   — zero out content + metadata weights. Tests F1: if those
+;;                      strategies contribute nothing useful for stuck domains,
+;;                      killing them shouldn't hurt and should lift the merge-
+;;                      diluted cells (broker-rest, studio-datamodeling).
+;;   r4-capped-noise  — keep all three strategies but cap content/metadata at 1
+;;                      while letting phrase contribute up to 5 chunks. Tests
+;;                      F2: limits noise flow without erasing the strategies.
+;;   r4-deep-retrieve — bump retrieve-top-k 30 → 100. Tests whether phrase-
+;;                      buried goldens (systemuser-api-model at rank 49)
+;;                      become findable at all. Note this only matters if
+;;                      rerank can then promote rank-49 into top-10 — needs
+;;                      stacking with rerank-input-top-k to actually move recall.
+;;   r4-stacked       — all three combined. Tests compounding.
+;;
+;; All cells inherit prompt-minimal and rerank top-k=20 (Round-2/3 winner).
+;;
+;; Filter: chunks+answer rows only (n=18). Recall is the signal.
+;; Repeats: 3 — Round-3 confirmed the agent-loop variance demands it.
+;;
+;; Expected wall-clock:
+;;   r4-control / phrase-only / capped-noise ~25-30s mean × 18 × 3 ≈ 25 min each
+;;   r4-deep-retrieve / r4-stacked may be slightly slower (more rerank work
+;;     when retrieve-top-k surfaces a wider pool) — estimate +30%, so ~35 min
+;;   total: ~2.5 hours
+;;
+;; Drive from REPL:
+;;   (digdir.sweep.runner/run-from-files
+;;     {:matrix-path "test/fixtures/sweep/matrices/round-4-merge-tuning.edn"})
+
+{:configs
+ [{:id "r4-control"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 1.0
+                                           :phrase 2.0
+                                           :metadata 0.2}}
+    :builtin/rerank    {:top-k 20}}}
+
+  {:id "r4-phrase-only"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 0.0
+                                           :phrase 1.0
+                                           :metadata 0.0}}
+    :builtin/rerank    {:top-k 20}}}
+
+  {:id "r4-capped-noise"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 1.0
+                                           :phrase 2.0
+                                           :metadata 0.2}
+                        :strategy-contribution-caps {:phrase 5
+                                                     :content 1
+                                                     :metadata 1}}
+    :builtin/rerank    {:top-k 20}}}
+
+  {:id "r4-deep-retrieve"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 1.0
+                                           :phrase 2.0
+                                           :metadata 0.2}
+                        :retrieve-top-k 100}
+    :builtin/rerank    {:top-k 20}}}
+
+  {:id "r4-stacked"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 0.0
+                                           :phrase 1.0
+                                           :metadata 0.0}
+                        :strategy-contribution-caps {:phrase 5
+                                                     :content 0
+                                                     :metadata 0}
+                        :retrieve-top-k 100}
+    :builtin/rerank    {:top-k 20}}}]
+
+ :repeats 3
+ :max-clarification-rounds 2
+
+ :execution-scope
+ {:tenant "digdir"
+  :dataset-config-key "default"
+  :agent-id "builtin/agent-rag-agent"}
+
+ :question-filter {:grounding-modes #{:chunks+answer}}}

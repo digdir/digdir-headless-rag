@@ -2,5 +2,5 @@ proxy:
   host: test.rag.digdir.cloud
 
 volumes:
-  - "/opt/admin-test/cache:/app/cache"
+  - "/opt/digdir-headless-rag-test/cache:/app/cache"
 

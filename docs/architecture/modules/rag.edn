@@ -1,0 +1,82 @@
+{:id "rag",
+ :plane "runtime",
+ :name "RAG Core",
+ :note "Retrieve · rerank · synthesize",
+ :icon "rag",
+ :color "#4ad3bb",
+ :status "Core runtime",
+ :summary
+ "Turns a question into grounded context and an answer with citations.",
+ :description
+ "The RAG core plans and relaxes queries, injects metadata filters, runs multi-strategy retrieval, merges candidates, optionally applies ColBERT reranking and synthesizes a cited response.",
+ :responsibilities
+ ["Plan, filter and relax retrieval queries"
+  "Merge and rerank candidate passages"
+  "Synthesize grounded answers with source metadata"],
+ :files
+ ["server/src/digdir/rag/retrieval.clj"
+  "server/src/digdir/rag/rerank.clj"
+  "server/src/digdir/rag/synthesis.clj"],
+ :input "Question + dataset configuration",
+ :output "Ranked context + cited answer",
+
+ ;; Outgoing edges. :kind is what the call IS TODAY, :target is what it should
+ ;; become. The set where they differ is the migration plan, and the tool renders
+ ;; exactly that set — so :kind must be measured, never assumed from the name.
+ ;;
+ ;; Both edges below are ALREADY :http. `digdir.rag.typesense` builds an
+ ;; http:// URI and the LLM client is a remote provider, so modelling them as
+ ;; in-process calls would list two COMPLETED migrations as work to do.
+ :edges
+ [{:to "typesense"
+   :label "Multi-strategy search, filtered by dataset scope"
+   :kind :http
+   :target :http
+   :witness {:file "server/src/digdir/rag/retrieval.clj"
+             :requires digdir.rag.typesense}}
+  {:to "llm"
+   :label "Synthesis and rerank completions"
+   :kind :http
+   :target :http
+   :witness {:file "server/src/digdir/rag/synthesis.clj"
+             :requires digdir.llm.client}}
+  {:to "config"
+   :label "Resolved retrieval settings for the tenant"
+   :kind :call
+   :target :call
+   :witness {:file "server/src/digdir/rag/rerank.clj"
+             :requires digdir.config.accessor}}
+  {:to "data"
+   :label "Dataset and document metadata"
+   :kind :call
+   :target :call
+   :witness {:file "server/src/digdir/rag/retrieval.clj"
+             :requires digdir.data.db}}],
+
+ ;; Authored as malli, emitted to JSON Schema by `bb atlas-schemas`. This is the
+ ;; contract a service call into RAG would carry if `api -> rag` became :http.
+ :contract
+ {:input
+  [:map
+   [:question :string]
+   [:dataset :string]
+   [:tenant :string]
+   [:top-k {:optional true} [:int {:min 1 :max 100}]]
+   [:filters {:optional true} [:map-of :string :string]]
+   [:strategies {:optional true} [:vector [:enum "keyword" "vector" "phrase"]]]]
+  :output
+  [:map
+   [:answer :string]
+   [:citations
+    [:vector [:map
+              [:chunk_id :string]
+              [:doc_num :string]
+              [:chunk_index :int]
+              [:content_length :int]
+              [:total_chunks :int]
+              [:title {:optional true} :string]
+              [:url {:optional true} :string]]]]
+   [:usage {:optional true} [:map [:prompt_tokens :int] [:completion_tokens :int]]]]},
+
+ :keywords
+ "rag retrieval auto filter query relaxation merge rerank colbert synthesis citations answer"}

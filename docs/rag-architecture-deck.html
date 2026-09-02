@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digdir RAG-as-a-Service — Architecture, Challenges & Lessons</title>
+<style>
+  :root{
+    --bg:#0e131a; --bg2:#131a24; --surface:#1a2330; --surface2:#212d3c;
+    --line:#2c3a4d; --text:#e9eef4; --muted:#93a1b3; --faint:#64748b;
+    --accent:#4ea1d3;   /* blue — architecture */
+    --pos:#43b581;      /* green — wins / after */
+    --warn:#e0a458;     /* amber — before / problems */
+    --bad:#e0705f;      /* red — bugs / regressions */
+    --violet:#a389e0;   /* purple — research */
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;overflow:hidden}
+
+  .deck{position:fixed;inset:0}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;
+    padding:4.5vh 6vw 7vh;opacity:0;transition:opacity .25s ease}
+  .slide.active{display:flex;opacity:1}
+  .slide.pad-tight{padding-top:3.5vh}
+
+  /* ---- typography ---- */
+  h1{font-size:clamp(30px,4.6vw,60px);line-height:1.05;letter-spacing:-.02em;font-weight:750}
+  h2{font-size:clamp(22px,3.2vw,40px);line-height:1.1;letter-spacing:-.015em;font-weight:720;margin-bottom:.5em}
+  h2 .eyebrow{display:block;font-size:.42em;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--accent);font-weight:700;margin-bottom:.7em}
+  h3{font-size:clamp(15px,1.5vw,20px);font-weight:680;margin-bottom:.35em}
+  p,li{font-size:clamp(14px,1.45vw,19px);line-height:1.5;color:var(--text)}
+  .lead{font-size:clamp(16px,1.9vw,26px);color:var(--muted);line-height:1.4;max-width:60ch}
+  .muted{color:var(--muted)}
+  .faint{color:var(--faint)}
+  strong{color:#fff;font-weight:680}
+  code,.mono{font-family:var(--mono);font-size:.86em;color:#bcd3e6;
+    background:rgba(78,161,211,.10);padding:.08em .38em;border-radius:5px;border:1px solid rgba(78,161,211,.16)}
+
+  .content{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:2.2vh}
+  ul{list-style:none;display:flex;flex-direction:column;gap:1.05em}
+  ul li{position:relative;padding-left:1.5em}
+  ul li::before{content:"";position:absolute;left:0;top:.62em;width:.5em;height:.5em;
+    border-radius:2px;background:var(--accent);transform:rotate(45deg)}
+  ul.tight li{padding-left:1.4em}
+  ul.tight{gap:.7em}
+  li ul{margin-top:.7em}
+  li ul li{padding-left:1.4em}
+  li ul li::before{background:var(--faint);width:.42em;height:.42em;top:.6em}
+
+  /* ---- layout helpers ---- */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:3vw;align-items:start}
+  .cols-3{display:grid;grid-template-columns:repeat(3,1fr);gap:1.6vw}
+  .grow{flex:1}
+  .row{display:flex;gap:1.4vw;flex-wrap:wrap}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:1.5em 1.6em;display:flex;flex-direction:column;gap:.5em}
+  .card h3{color:#fff;display:flex;align-items:center;gap:.5em}
+  .card p{font-size:clamp(13px,1.25vw,16px);color:var(--muted)}
+  .card .tag{font-family:var(--mono);font-size:.72em;color:var(--accent);letter-spacing:.03em}
+
+  .pill{display:inline-block;font-family:var(--mono);font-size:.74em;letter-spacing:.04em;
+    padding:.28em .7em;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:var(--bg2)}
+  .pill.blue{color:var(--accent);border-color:rgba(78,161,211,.4)}
+  .pill.violet{color:var(--violet);border-color:rgba(163,137,224,.4)}
+  .pill.pos{color:var(--pos);border-color:rgba(67,181,129,.4)}
+  .pill.warn{color:var(--warn);border-color:rgba(224,164,88,.4)}
+
+  /* ---- metric callouts ---- */
+  .metric{display:flex;flex-direction:column;gap:.15em}
+  .metric .big{font-size:clamp(26px,3.4vw,46px);font-weight:760;letter-spacing:-.02em;line-height:1}
+  .metric .lbl{font-size:.8em;color:var(--muted)}
+  .ba{display:flex;align-items:center;gap:.7em;font-weight:760;font-size:clamp(22px,2.8vw,38px);letter-spacing:-.01em}
+  .ba .before{color:var(--warn)}
+  .ba .after{color:var(--pos)}
+  .ba .arrow{color:var(--faint);font-weight:400}
+  .pos{color:var(--pos)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+  .blue{color:var(--accent)} .violet{color:var(--violet)}
+
+  /* ---- flow diagram ---- */
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;justify-content:center}
+  .node{background:var(--surface);border:1px solid var(--line);border-radius:11px;
+    padding:.75em 1em;text-align:center;min-width:96px;display:flex;flex-direction:column;gap:.2em;justify-content:center}
+  .node .n-t{font-weight:680;font-size:clamp(12px,1.15vw,16px);color:#fff}
+  .node .n-s{font-family:var(--mono);font-size:.72em;color:var(--muted)}
+  .node.accent{border-color:rgba(78,161,211,.55);background:linear-gradient(180deg,rgba(78,161,211,.10),transparent)}
+  .arr{display:flex;align-items:center;color:var(--faint);font-size:1.4em;padding:0 .35em}
+
+  .box{border:1px solid var(--line);border-radius:12px;padding:1em 1.2em;background:var(--bg2)}
+  .box.accent{border-color:rgba(78,161,211,.4)}
+  .box.violet{border-color:rgba(163,137,224,.35)}
+  .box .bh{font-size:.72em;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:.6em;font-family:var(--mono)}
+
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:.4em 1em;align-items:baseline}
+  .kv .k{font-family:var(--mono);font-size:.82em;color:var(--accent)}
+  .kv .v{color:var(--muted);font-size:.92em}
+
+  .quote{border-left:3px solid var(--accent);padding-left:1em;color:var(--text);
+    font-size:clamp(17px,2.1vw,28px);line-height:1.35;font-weight:600;max-width:52ch}
+  .quote.violet{border-color:var(--violet)}
+  .attrib{color:var(--faint);font-size:.7em;font-weight:400;margin-top:.8em;font-family:var(--mono)}
+
+  /* ---- title slide ---- */
+  .title-slide{justify-content:center;background:
+    radial-gradient(1200px 500px at 12% 8%,rgba(78,161,211,.14),transparent 60%),
+    radial-gradient(1000px 500px at 90% 95%,rgba(163,137,224,.12),transparent 60%)}
+  .title-slide .kicker{font-family:var(--mono);letter-spacing:.22em;text-transform:uppercase;
+    color:var(--accent);font-size:clamp(11px,1.2vw,15px);margin-bottom:1.6em}
+  .title-slide h1{max-width:20ch}
+  .title-slide .sub{margin-top:1em;color:var(--muted);font-size:clamp(16px,1.8vw,24px);max-width:46ch;line-height:1.4}
+  .title-slide .meta{margin-top:2.4em;display:flex;gap:.7em;flex-wrap:wrap}
+
+  .divider{justify-content:center;align-items:flex-start;background:
+    linear-gradient(120deg,rgba(163,137,224,.10),transparent 55%)}
+  .divider .idx{font-family:var(--mono);color:var(--violet);letter-spacing:.2em;margin-bottom:1em}
+  .divider h1{max-width:22ch}
+  .divider .lead{margin-top:1em}
+
+  /* ---- chrome ---- */
+  /* footer holds the clickable slide bar + the info line */
+  #footer{position:fixed;left:0;right:0;bottom:0;z-index:20;pointer-events:none;
+    background:linear-gradient(180deg,transparent,var(--bg) 60%)}
+  #slidebar{pointer-events:auto;display:flex;gap:3px;align-items:flex-end;padding:9px 6vw 4px}
+  .seg{flex:1;height:20px;display:flex;align-items:flex-end;cursor:pointer;position:relative}
+  .seg i{display:block;width:100%;height:6px;border-radius:3px;background:var(--line);
+    transition:height .15s ease,background .15s ease}
+  .seg:hover i{height:13px;background:var(--muted)}
+  .seg.past i{background:rgba(78,161,211,.5)}
+  .seg.active i{height:14px;background:var(--accent);box-shadow:0 0 9px rgba(78,161,211,.65)}
+  .seg .tip{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);
+    background:var(--surface2);border:1px solid var(--line);color:var(--text);
+    font-family:var(--sans);font-size:12px;line-height:1.25;white-space:nowrap;max-width:min(46vw,340px);
+    overflow:hidden;text-overflow:ellipsis;padding:.42em .65em;border-radius:8px;
+    opacity:0;pointer-events:none;transition:opacity .12s ease;box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:5}
+  .seg .tip b{color:var(--accent);font-family:var(--mono);margin-right:.45em}
+  .seg:hover .tip{opacity:1}
+  .chrome{display:flex;align-items:center;justify-content:space-between;gap:1.4em;
+    padding:.1em 6vw .55em;font-family:var(--mono);font-size:12px;color:var(--faint)}
+  .chrome .title{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
+  .chrome .mid{color:var(--faint);white-space:nowrap;flex:0 0 auto}
+  .chrome .mid b{color:var(--muted)}
+  .chrome .counter{color:var(--muted);white-space:nowrap;flex:0 0 auto}
+  .progress{position:fixed;left:0;top:0;height:3px;background:var(--accent);width:0;
+    transition:width .25s ease;z-index:30;box-shadow:0 0 10px rgba(78,161,211,.6)}
+  .snum{color:var(--muted)}
+
+  .notes{position:fixed;left:0;right:0;bottom:0;max-height:42vh;overflow:auto;
+    background:rgba(8,11,16,.97);border-top:2px solid var(--violet);padding:1.4em 6vw 2em;
+    display:none;z-index:40;font-size:15px;line-height:1.5;color:var(--muted)}
+  .notes.show{display:block}
+  .notes b{color:var(--violet);display:block;margin-bottom:.5em;font-family:var(--mono);
+    font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+
+  .verify{position:absolute;top:2.2vh;right:6vw;font-family:var(--mono);font-size:10.5px;
+    letter-spacing:.05em;color:var(--warn);border:1px solid rgba(224,164,88,.35);
+    border-radius:999px;padding:.2em .7em;background:rgba(224,164,88,.06)}
+
+  .fnote{font-size:.72em;color:var(--faint);margin-top:.4em}
+
+  @media (max-width:820px){
+    .cols,.cols-3{grid-template-columns:1fr}
+    .flow{gap:.3em}
+  }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- 1. TITLE -->
+  <section class="slide title-slide active">
+    <div class="kicker">Digdir · RAG-as-a-Service · Prototype</div>
+    <h1>Retrieval-Augmented Generation as a Platform</h1>
+    <div class="sub">Architecture, the challenges we met, and what the numbers taught us.</div>
+    <div class="meta">
+      <span class="pill blue">Clojure · Electric v3</span>
+      <span class="pill">Datahike / Postgres</span>
+      <span class="pill">Typesense · ColBERT</span>
+      <span class="pill violet">Eval-driven retrieval research</span>
+    </div>
+    <div class="notes" data-notes>
+      <b>Speaker notes</b>
+      Frame: this isn't just "a RAG pipeline" — it's a multi-tenant platform we could experiment ON.
+      Two intertwined stories: (1) the architecture that made experimentation cheap, and (2) the research
+      journey to make retrieval actually good — where most of the hard-won lessons live.
+    </div>
+  </section>
+
+  <!-- 2. WHAT WE BUILT -->
+  <section class="slide">
+    <h2><span class="eyebrow">The one-slide picture</span>A configured, tenant-scoped RAG service</h2>
+    <div class="content">
+      <p class="lead">One deployment lets many teams stand up a RAG service over <strong>their own</strong> document sources. Tenants, datasets, skills, agents and LLM config are all <strong>rows in a config tree the runtime resolves on every request</strong> — not code.</p>
+      <div class="cols-3">
+        <div class="card"><span class="tag">SURFACE 01</span><h3>Headless HTTP API</h3><p><span class="mono">/api/rag</span>, <span class="mono">/api/retrieve</span>, conversations, datasets. <span class="mono">X-API-Key</span> auth.</p></div>
+        <div class="card"><span class="tag">SURFACE 02</span><h3>Admin web UI</h3><p>Electric v3. Config, permissions, API keys, dataset browsing, and the observability Playground.</p></div>
+        <div class="card"><span class="tag">SURFACE 03</span><h3>Ingestion pipelines</h3><p>Kudos / EPiServer / website / folder → normalize → chunk → phrases → Typesense.</p></div>
+      </div>
+      <p class="fnote">Stack: Clojure 1.12 + ClojureScript on Java 24 · Electric v3 (Hyperfiddle) · Ring/Jetty + Reitit · Datahike over Postgres · Typesense · Malli · Telemere · deployed via Kamal. Labelled <strong>"PROTOTYPE"</strong> — architecture reflects ongoing experimentation.</p>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      The headline design bet: <em>everything is configuration</em>. That single decision is what turned a RAG app into a platform we could run hundreds of experiments against without redeploying.</div>
+  </section>
+
+  <!-- 3. SYSTEM AT A GLANCE -->
+  <section class="slide">
+    <h2><span class="eyebrow">System at a glance</span>Two front doors, one engine</h2>
+    <div class="content">
+      <div class="flow" style="gap:.4em">
+        <div class="node"><span class="n-t">External apps</span><span class="n-s">X-API-Key</span></div>
+        <div class="arr">→</div>
+        <div class="node accent"><span class="n-t">Headless API</span><span class="n-s">/api/rag</span></div>
+        <div class="node accent" style="margin-left:.4em"><span class="n-t">Admin UI</span><span class="n-s">Electric · JWT</span></div>
+        <div class="arr">→</div>
+        <div class="node accent"><span class="n-t">Skills graph runner</span><span class="n-s">template · or · agent loop</span></div>
+      </div>
+      <div class="flow" style="gap:.4em;margin-top:.4em">
+        <div class="node"><span class="n-t">RAG core</span><span class="n-s">retrieve · rerank · synth</span></div>
+        <div class="arr">→</div>
+        <div class="node"><span class="n-t">Typesense</span><span class="n-s">docs · chunks · phrases</span></div>
+        <div class="arr">·</div>
+        <div class="node"><span class="n-t">LLM providers</span><span class="n-s">Azure · Anthropic · OpenAI</span></div>
+      </div>
+      <div class="box" style="margin-top:1.4em">
+        <span class="bh">Postgres, fronted by Datahike — the system's memory</span>
+        <div class="row" style="gap:1.6vw">
+          <span class="pill">config tree · tenants · datasets · skills · agents</span>
+          <span class="pill">users · permissions · API keys</span>
+          <span class="pill">conversations · messages</span>
+          <span class="pill">pipeline executions</span>
+        </div>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      Both surfaces converge on the <em>same</em> skills graph runner. The Playground in the admin UI runs the identical pipeline the public API does — that's what makes the Playground a trustworthy debugging surface.</div>
+  </section>
+
+  <!-- 4. REQUEST PATH -->
+  <section class="slide">
+    <h2><span class="eyebrow">The central path</span>What happens on <span class="mono" style="font-size:.7em">POST /api/rag</span></h2>
+    <div class="content">
+      <div class="flow">
+        <div class="node"><span class="n-t">1 · Auth</span><span class="n-s">API-key → scope</span></div><div class="arr">→</div>
+        <div class="node"><span class="n-t">2 · Context</span><span class="n-s">tenant · dataset · agent</span></div><div class="arr">→</div>
+        <div class="node accent"><span class="n-t">3 · Skill graph</span><span class="n-s">resolve + run</span></div><div class="arr">→</div>
+        <div class="node"><span class="n-t">4 · Retrieval</span><span class="n-s">multi-strategy + filter</span></div><div class="arr">→</div>
+        <div class="node"><span class="n-t">5 · Rerank + synth</span><span class="n-s">ColBERT → answer</span></div><div class="arr">→</div>
+        <div class="node"><span class="n-t">6 · Persist</span><span class="n-s">conversation</span></div>
+      </div>
+      <div class="cols" style="margin-top:1.2em">
+        <div class="box accent"><span class="bh">One resolution, one context</span>
+          <p class="muted">Auth resolves the key to a permission scope; context resolution walks the config tree once to produce a fully-resolved <strong>execution context</strong> (tenant + dataset + agent policy + merged config). Handlers never redo config I/O.</p></div>
+        <div class="box"><span class="bh">Pure core, impure edge</span>
+          <p class="muted"><span class="mono">execution.scope</span> is pure normalization + config reads — reusable from pipelines, CLI, background jobs. Only <span class="mono">api.context</span> knows about HTTP. API-key scope enforcement is centralized, not re-checked per handler.</p></div>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      The discipline here: assemble context <em>once</em>, pass it through. Traces are preserved all the way down so the Playground can show <em>why</em> each config value won.</div>
+  </section>
+
+  <!-- 5. PILLAR 1 — CONFIG TREE -->
+  <section class="slide">
+    <h2><span class="eyebrow">Architectural pillar 1</span>Everything is a config tree</h2>
+    <div class="content cols">
+      <div>
+        <p class="lead" style="margin-bottom:1.1em">A Datahike-backed inheritance tree resolves every runtime setting per request. Ask for a path; the system walks the tenant's ancestors and returns the first hit.</p>
+        <ul class="tight">
+          <li><strong>Three roots</strong> partition definitions: <span class="mono">platform</span> (infra/secrets), <span class="mono">runtime</span> (agent/skill behavior), <span class="mono">dataset</span> (source + chunking).</li>
+          <li><strong>Deterministic single-winner</strong> resolution — single-parent trees, upward walk, first ancestor wins.</li>
+          <li><strong>Stateless multi-tenancy</strong> — tenant is never in env; every request names its own.</li>
+        </ul>
+      </div>
+      <div class="row" style="flex-direction:column;gap:1em">
+        <div class="box accent"><span class="bh">Why this was the platform bet</span>
+          <p class="muted">Prompts, retrieval knobs, top-K, rerank flags, model choice — all live as config. A new experiment is a config write, not a redeploy. This is what made hundreds of A/B sweeps affordable.</p></div>
+        <div class="kv">
+          <span class="k">ABAC</span><span class="v">user attributes × definition attributes, per-path-prefix rules</span>
+          <span class="k">crypto</span><span class="v">AES-256-GCM, PBKDF2-SHA256 (100k), secrets ciphertext-only</span>
+          <span class="k">audit</span><span class="v">every mutation: actor, before/after, redacted</span>
+          <span class="k">trace</span><span class="v"><span class="mono">*-with-trace</span> returns the winning ancestor — explainability</span>
+        </div>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      Rough edges to be honest about: several trace / non-trace resolver variants are near-duplicates; a couple of ops namespaces are deprecated alias shims. Prototype tax.</div>
+  </section>
+
+  <!-- 6. PILLAR 2 — SKILLS GRAPH -->
+  <section class="slide">
+    <h2><span class="eyebrow">Architectural pillar 2</span>Skills wired as a graph</h2>
+    <div class="content">
+      <div class="cols">
+        <div>
+          <p class="lead" style="margin-bottom:1em">A <strong>skill</strong> is a typed unit of work — schema-validated I/O. A <strong>graph</strong> wires skills into a DAG. One runner executes them topologically.</p>
+          <ul class="tight">
+            <li><strong>Graphs are data</strong> — no macros, no runtime compilation. Serializable, inspectable, swappable.</li>
+            <li><strong>Typed I/O at boundaries</strong> — wiring mistakes caught on load (Kahn's algorithm; cycle + forward-ref checks), not mid-run.</li>
+            <li><strong>Skills are thin</strong> — the hard work is in <span class="mono">rag.*</span> / <span class="mono">llm.*</span>; skills just adapt I/O.</li>
+          </ul>
+        </div>
+        <div class="box violet"><span class="bh">One runner, two sources</span>
+          <p class="muted" style="margin-bottom:.8em">The same engine runs compile-time <strong>templates</strong> and graphs <strong>the agent synthesizes at runtime</strong> — so observability and error handling are shared.</p>
+          <div class="flow" style="justify-content:flex-start">
+            <div class="node" style="min-width:74px"><span class="n-t">planner</span></div><div class="arr">→</div>
+            <div class="node" style="min-width:74px"><span class="n-t">retrieval</span></div><div class="arr">→</div>
+            <div class="node" style="min-width:74px"><span class="n-t">rerank</span></div><div class="arr">→</div>
+            <div class="node" style="min-width:74px"><span class="n-t">synthesis</span></div>
+          </div>
+          <p class="fnote"><span class="mono">basic-rag</span> template · per-step error modes: <span class="mono">:skip</span> / <span class="mono">:default</span> / <span class="mono">:fail</span></p>
+        </div>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      The elegant part: an LLM-authored graph and a hand-written template are validated and run by the exact same code. The optimizer that computes parallel execution levels exists but isn't wired to the sync runner yet — a known thread.</div>
+  </section>
+
+  <!-- 7. PILLAR 3 — RAG CORE -->
+  <section class="slide">
+    <h2><span class="eyebrow">Architectural pillar 3</span>The RAG core — deterministic up to synthesis</h2>
+    <div class="content">
+      <div class="flow" style="gap:.3em">
+        <div class="node"><span class="n-t">3 searches / query</span><span class="n-s">phrase · metadata · content</span></div><div class="arr">→</div>
+        <div class="node"><span class="n-t">merge + normalize</span><span class="n-s">weights 1.0 / .7 / .2</span></div><div class="arr">→</div>
+        <div class="node"><span class="n-t">diversity cap</span><span class="n-s">per-document</span></div><div class="arr">→</div>
+        <div class="node accent"><span class="n-t">ColBERT rerank</span><span class="n-s">top-40</span></div><div class="arr">→</div>
+        <div class="node"><span class="n-t">synthesis</span><span class="n-s">[N] citations</span></div>
+      </div>
+      <div class="cols" style="margin-top:1.3em">
+        <div>
+          <h3 class="blue">Design objectives (as built)</h3>
+          <ul class="tight" style="margin-top:.6em">
+            <li><strong>Deterministic retrieval</strong> — fixed config + index ⇒ reproducible search→merge→rerank. Only synthesis is non-deterministic ⇒ replay, diff, debug.</li>
+            <li><strong>Explicit attribution</strong> — every hit carries its strategy tag through merge.</li>
+            <li><strong>Enforced citation</strong> — synthesis always emits <span class="mono">[N]</span>; post-parse flags unsourced claims.</li>
+          </ul>
+        </div>
+        <div class="box"><span class="bh">Auto-filter</span>
+          <p class="muted">Query text is scanned for org names + years against a cached Typesense facet list; matched filters are injected automatically — so "Digdir 2022" narrows without the caller building a filter spec.</p>
+          <p class="fnote">Swappable rerank: the skill wraps the core so the reranker can change without touching retrieval or synthesis. <em>That seam mattered — see next section.</em></p>
+        </div>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      Foreshadow: "the reranker can change without touching retrieval" is exactly the seam that let us fix the biggest quality bug. Hold that thought.</div>
+  </section>
+
+  <!-- 8. PILLAR 4 — AGENT LOOP -->
+  <section class="slide">
+    <h2><span class="eyebrow">Architectural pillar 4</span>The agentic loop — skills as tools</h2>
+    <div class="content cols">
+      <div>
+        <p class="lead" style="margin-bottom:1em">A ReAct loop that calls retrieval / read / rerank / synthesis as <strong>tools</strong>, with structured evidence gates and hard budgets.</p>
+        <ul class="tight">
+          <li><strong>Definition vs execution</strong> — an agent is a durable config row (allowed graphs, dataset scopes, guardrails) <em>and</em> a code-driven loop. Grant scopes / change instructions as <strong>data</strong>; change behavior as <strong>code</strong>.</li>
+          <li><strong>Tools bridge to skills</strong> — a new retrieval heuristic reaches the agent for free.</li>
+        </ul>
+      </div>
+      <div class="row" style="flex-direction:column;gap:.9em">
+        <div class="box accent"><span class="bh">Two guardrails against the LLM-loop footgun</span>
+          <div class="kv">
+            <span class="k">hard budgets</span><span class="v">every tool call decrements; exhaustion forces finalize</span>
+            <span class="k">read-signals</span><span class="v">per-claim: support-found / gap / conflicting</span>
+            <span class="k">sufficiency</span><span class="v">continue · read more · clarify · finalize</span>
+          </div>
+        </div>
+        <div class="box"><span class="bh">Structured evidence, not "are you done?"</span>
+          <p class="muted"><span class="mono">search</span> returns metadata only (LLM spends no context on bodies it hasn't chosen to read); <span class="mono">read_chunks</span> materializes on demand. Evidence evaluation is separate LLM calls with their own schemas.</p>
+        </div>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      Deliberate choice: the loop calls OpenAI/Anthropic <em>directly</em>, not through the litellm wrapper, to preserve multi-turn tool_calls context. Cost: provider handling duplicated here. Worth it.</div>
+  </section>
+
+  <!-- 9. OBSERVABILITY -->
+  <section class="slide">
+    <h2><span class="eyebrow">Architectural pillar 5</span>The Playground — observability as a first-class surface</h2>
+    <div class="content">
+      <p class="lead">Same pipeline as production, plus deep observability: live event streams, per-stage diagnostics, evidence tables with rerank scores, citation drilldowns, agent tool-call timelines.</p>
+      <div class="cols-3" style="margin-top:.4em">
+        <div class="card"><span class="tag">EVENTS-FIRST</span><h3>Subscribe, don't scrape</h3><p>UI watches structured events from the runner. A step's internals can change without breaking the dashboard.</p></div>
+        <div class="card"><span class="tag">PROGRESSIVE</span><h3>Focused · Detailed · Classic</h3><p>Three view modes: daily Q&A, tuning with full diagnostics, and legacy parity.</p></div>
+        <div class="card"><span class="tag">RESEARCH SUBSTRATE</span><h3>What made experiments cheap</h3><p>Filter-4 stage decomposition — pool → display → read → answer — turned "recall is bad" into "which stage lost it."</p></div>
+      </div>
+      <p class="fnote">This surface, plus config-as-data, is <strong>why the research half of the project was even possible</strong>. You can't tune what you can't attribute.</p>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      Transition line: "We've covered how it's built. The other half of the work was making retrieval actually good — and that's where the surprising lessons are."</div>
+  </section>
+
+  <!-- 9a. INGESTION PIPELINE -->
+  <section class="slide">
+    <h2><span class="eyebrow">Architecture · the write path</span>Ingestion — sources become a searchable index</h2>
+    <div class="content">
+      <div class="flow" style="gap:.3em">
+        <div class="node"><span class="n-t">Source</span><span class="n-s">fetch-entries</span></div><div class="arr">→</div>
+        <div class="node accent"><span class="n-t">Prepare</span><span class="n-s">fetch · normalize · chunk</span></div><div class="arr">→</div>
+        <div class="node"><span class="n-t">Search phrases</span><span class="n-s">LLM + cache</span></div><div class="arr">→</div>
+        <div class="node"><span class="n-t">Store</span><span class="n-s">upsert × 3</span></div><div class="arr">→</div>
+        <div class="node"><span class="n-t">Typesense</span><span class="n-s">docs · chunks · phrases</span></div>
+      </div>
+      <div class="cols" style="margin-top:1.3em">
+        <div>
+          <h3 class="blue">How a run works</h3>
+          <ul class="tight" style="margin-top:.6em">
+            <li>A run is a <strong>materialization</strong> of a dataset against a pipeline — triggered from the operator console or CLI.</li>
+            <li>Content is <strong>chunked by markdown headers</strong>; each chunk gets LLM-generated <strong>search phrases</strong> (query-equivalent keywords, default <span class="mono">gpt-4o</span>, file-cached by chunk+model+prompt).</li>
+            <li>Documents + chunks + phrases are upserted into three per-dataset Typesense collections.</li>
+          </ul>
+        </div>
+        <div class="row" style="flex-direction:column;gap:.9em">
+          <div class="box accent"><span class="bh">Deterministic, versioned collections</span>
+            <p class="muted">Collection names are a <strong>SHA-256 hash of output-affecting config</strong>. Change the chunking strategy → new hash → new collections. The old ones stay intact until the operator flips the reference — <strong>atomic re-ingest, no downtime</strong>.</p></div>
+          <div class="box"><span class="bh">Pluggable + fault-tolerant</span>
+            <div class="row" style="gap:.5em"><span class="pill">Kudos</span><span class="pill">EPiServer</span><span class="pill">website sitemap</span><span class="pill">folder</span></div>
+            <p class="fnote">New source = implement the <span class="mono">DocumentSource</span> protocol + a loader adapter. Prepare/store run in parallel under budgeted failure (<span class="mono">:fault-tolerance/max-document-failures</span>).</p></div>
+        </div>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      The clever bit is versioned collections via config hashing — it turns "re-ingest with new chunking" into a zero-downtime pointer swap. Orchestration (<span class="mono">pipeline.*</span>) is deliberately separate from loading (<span class="mono">docs.*</span>); it's a mid-transition split, honest prototype tax.</div>
+  </section>
+
+  <!-- 9b. COMPUTE SETUP -->
+  <section class="slide pad-tight">
+    <div class="verify">↻ confirm GPU/host specifics with me</div>
+    <h2><span class="eyebrow">Infrastructure</span>The compute setup</h2>
+    <div class="content">
+      <div class="flow" style="gap:.3em;margin-bottom:.4em">
+        <div class="node"><span class="n-t">Clients</span><span class="n-s">API key · browser</span></div><div class="arr">→</div>
+        <div class="node"><span class="n-t">Kamal proxy</span><span class="n-s">rag.digdir.cloud · SSL</span></div><div class="arr">→</div>
+        <div class="node accent"><span class="n-t">App server</span><span class="n-s">5.75.220.232 · JVM/Jetty :8080</span></div>
+      </div>
+      <div class="cols-3" style="gap:1.2vw">
+        <div class="card"><span class="tag">STATE</span><h3>Postgres</h3><p>Config tree, users, permissions, API keys, conversations, executions — via <span class="mono">Datahike</span> JDBC (<span class="mono">ADH_POSTGRES_*</span>).</p></div>
+        <div class="card"><span class="tag">SEARCH INDEX</span><h3>Typesense</h3><p>Per-dataset <span class="mono">documents / chunks / phrases</span> collections. Hybrid keyword + vector search.</p></div>
+        <div class="card" style="border-color:rgba(78,161,211,.4)"><span class="tag blue">RERANK · GPU</span><h3>ColBERT API</h3><p>Dedicated GPU server. HTTP + <span class="mono">X-API-Key</span>, config <span class="mono">:services :colbert :api-url</span>. Late-interaction scoring.</p></div>
+        <div class="card" style="border-color:rgba(78,161,211,.4)"><span class="tag blue">INFERENCE</span><h3>Azure AI Foundry</h3><p>Primary LLM (Azure OpenAI deployment). Synthesis, planning, evidence gates. Anthropic + OpenAI also wired.</p></div>
+        <div class="card"><span class="tag">SOURCES</span><h3>KUDOS API</h3><p><span class="mono">kudos.dfo.no/api/v0</span> (+ preprod). Plus EPiServer, website sitemaps, folders. <span class="mono">Marker</span> for PDF → markdown.</p></div>
+        <div class="card"><span class="tag">BUILD / SHIP</span><h3>Kamal + ACR</h3><p>Image built on the host, pushed to Azure Container Registry (<span class="mono">altinnaicontainers.azurecr.io</span>). Cache bind-mounted <span class="mono">/app/cache</span>.</p></div>
+      </div>
+      <p class="fnote">One app host today (prototype). External state + search + rerank + inference are all separate services the app calls over the network — each independently scalable, each a config-driven endpoint.</p>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      Everything except the JVM app is an external, config-addressed service — that's why swapping a reranker or an LLM deployment is a config write, not a redeploy. Verify the exact GPU hardware and whether ColBERT/Typesense/Postgres are co-located or on separate boxes; the repo only pins the app host (5.75.220.232) and the endpoints, not the accessory topology (accessories.yml was removed mid-transition).</div>
+  </section>
+
+  <!-- 10. DIVIDER — RESEARCH -->
+  <section class="slide divider">
+    <div class="idx">PART II</div>
+    <h1>Building it was half the work.<br>Making retrieval <span class="violet">good</span> was the other half.</h1>
+    <p class="lead">Everything past here is eval-driven: measure, form a hypothesis, A/B a "lever," gate on a judge, keep or kill. Most levers died. A few didn't. The bugs we found in our own measurements were the best teachers.</p>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      Set expectations: this section is a research log, not a victory lap. The value is in the failures and the measurement bugs as much as the wins.</div>
+  </section>
+
+  <!-- 11. HOW WE MEASURED -->
+  <section class="slide">
+    <h2><span class="eyebrow">Method</span>How we measured quality</h2>
+    <div class="content cols">
+      <div class="box"><span class="bh">Two harnesses, two questions</span>
+        <div class="kv" style="grid-template-columns:auto 1fr;gap:.7em 1em">
+          <span class="k">v3-score</span><span class="v"><strong>Fast retrieval inner loop.</strong> Scores the retrieval skill vs golden chunks. Bypasses the agent. ~30s/run. "Did chunk/doc recall move?"</span>
+          <span class="k">sweep runner</span><span class="v"><strong>Full agent loop.</strong> Cartesian <span class="mono">config × question × repeat</span>. Captures real cost + Filter-4 stage attribution. "Which stage lost the golden?"</span>
+        </div>
+      </div>
+      <div>
+        <h3 class="violet">The ground truth</h3>
+        <ul class="tight" style="margin-top:.6em">
+          <li><strong>Golden-chunk tuning loop</strong> — ground → query → goldens → score. ~59 questions.</li>
+          <li><strong>LLM-as-judge</strong> — grades answers vs an authored reference (default judge model held constant).</li>
+          <li><strong>Filter-4 decomposition</strong> — <span class="mono">golden-in-pool?</span> → <span class="mono">in-display?</span> → <span class="mono">read?</span> → <span class="mono">answered?</span>. Attribution, not a single number.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      The rule of thumb: v3-score for "did retrieval move," sweep runner for "which stage is the bottleneck." Both kept, used for different questions. This distinction is what let us localize problems instead of guessing.</div>
+  </section>
+
+  <!-- 12. CHALLENGE — RERANK TRUNCATION -->
+  <section class="slide">
+    <div class="verify">↻ verify wording with me</div>
+    <h2><span class="eyebrow">Challenge 1</span>The bottleneck wasn't where any lever reached</h2>
+    <div class="content cols">
+      <div>
+        <p class="lead" style="margin-bottom:1em">Every upstream lever — corpus vocab, query expansion, phrase tuning, enrichment — failed. Because the loss was <strong>downstream</strong>, at rerank time.</p>
+        <ul class="tight">
+          <li>ColBERT reranked the top-40, but scored each chunk <strong>truncated to 1000 chars — dropping the MIDDLE</strong> (head+tail kept).</li>
+          <li>Answer-bearing content lived in the dropped middle. Generic intros out-scored the real answer.</li>
+          <li><strong>74% of benchmark goldens were longer than the cap.</strong> Difficulty tracked golden length all along.</li>
+        </ul>
+      </div>
+      <div class="row" style="flex-direction:column;gap:1.1em">
+        <div class="box"><span class="bh">The fix — passage windowing (scoring-only)</span>
+          <p class="muted">Send ColBERT the best query-overlap <em>window</em>, not head+tail. The agent still <em>reads</em> the full chunk. Coarse chunks are good for reading, only bad for rerank scoring.</p>
+          <div class="ba" style="margin-top:.6em"><span class="before">0.674</span><span class="arrow">→</span><span class="after">0.760</span></div>
+          <p class="fnote">recall@20, full-42 · N=5 judged · every subset up, none regressed → <strong>promoted to default</strong></p>
+        </div>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      The "swappable rerank" seam from pillar 3 is what made this a scoped fix. Lesson embedded here: <em>check the golden's length before attributing a recall result to any retrieval lever.</em> A whole run of prior arc conclusions was contaminated on the long-golden subset and had to be re-run.</div>
+  </section>
+
+  <!-- 13. CHALLENGE — EVALUATOR BUG -->
+  <section class="slide">
+    <div class="verify">↻ verify wording with me</div>
+    <h2><span class="eyebrow">Challenge 2 · the sharpest lesson</span>A measurement bug faked a "model ceiling"</h2>
+    <div class="content cols">
+      <div>
+        <div class="box" style="border-color:rgba(224,112,95,.4)"><span class="bh" style="color:var(--bad)">The bug</span>
+          <p class="muted">The sweep judge graded answers <strong>truncated to 800 chars</strong> — a <span class="mono">:response</span> cap in the runner that the separate judge pass read. The judge never saw the end of enumerative answers.</p>
+        </div>
+        <p style="margin-top:1.1em">It manufactured a <strong class="warn">"54% under-enumeration ceiling"</strong> — which justified an entire model head-to-head arc chasing a bigger model to break a ceiling that was mostly an artifact.</p>
+      </div>
+      <div>
+        <div class="box accent"><span class="bh">After re-judging on full answers</span>
+          <div class="row" style="justify-content:space-between;align-items:flex-end">
+            <div class="metric"><span class="lbl">partial-of-read</span><span class="ba" style="font-size:clamp(20px,2.4vw,32px)"><span class="before">54%</span><span class="arrow">→</span><span class="after">14%</span></span></div>
+            <div class="metric"><span class="lbl">effective quality</span><span class="ba" style="font-size:clamp(20px,2.4vw,32px)"><span class="before">.66</span><span class="arrow">→</span><span class="after">.75</span></span></div>
+          </div>
+        </div>
+        <div class="quote violet" style="margin-top:1.2em;font-size:clamp(15px,1.8vw,23px)">Instrument the evaluator as carefully as the system.
+          <span class="attrib">A/B deltas survived — the bug clipped both arms equally. That's exactly why it hid for months.</span></div>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      Key transferable insight: <em>distrust absolute-difficulty narratives more than A/B deltas.</em> A shared upstream bug preserves relative numbers while corrupting absolutes. Before concluding "we're at the model's ceiling," verify what the judge actually received. The fix added a judge-input assertion that warns on truncated input.</div>
+  </section>
+
+  <!-- 14. CHALLENGE — COVERAGE PREMISE -->
+  <section class="slide">
+    <div class="verify">↻ verify wording with me</div>
+    <h2><span class="eyebrow">Challenge 3</span>The premise itself was a single-run artifact</h2>
+    <div class="content cols">
+      <div>
+        <p class="lead" style="margin-bottom:1em">We opened a "retrieval coverage" arc believing <strong>~20% of goldens never made the candidate pool</strong>. A clean re-baseline refuted the whole premise.</p>
+        <div class="box accent"><span class="bh">Pooled 503 runs, full-42</span>
+          <div class="kv">
+            <span class="k">reachable</span><span class="v pos">42 / 42 questions</span>
+            <span class="k">never-in-pool</span><span class="v pos">zero</span>
+            <span class="k">golden-in-pool</span><span class="v">0.885 / run · min pool-rank 1–2</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3 class="warn">Where the "20%" came from</h3>
+        <ul class="tight" style="margin-top:.6em">
+          <li>A <strong>single-run artifact</strong> — stochastic query variance read as structural failure.</li>
+          <li>A <strong>scaffolding bug</strong> — runs that never searched (<span class="mono">passes=0</span>) miscounted as "not covered."</li>
+        </ul>
+        <div class="quote" style="margin-top:1.2em;font-size:clamp(15px,1.8vw,23px)">Single-run failure cohorts are ~80% noise.
+          <span class="attrib">Select cohorts by multi-run agreement, or you'll chase ghosts. No coverage headroom existed — the arc redirected upstream.</span></div>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      Same family of lesson as the evaluator bug: our diagnosis, not the system, was wrong. Two fixes came out of it anyway — a shape-agnostic "never searched → re-prompt" guard that took passes=0 from 0.27 → 0.00. But the headline is: verify the premise with replicates before building an arc on it.</div>
+  </section>
+
+  <!-- 15. WHAT MOVED THE NEEDLE -->
+  <section class="slide pad-tight">
+    <div class="verify">↻ verify numbers with me</div>
+    <h2><span class="eyebrow">Results</span>What actually moved the needle</h2>
+    <div class="content">
+      <div class="cols-3">
+        <div class="card" style="border-color:rgba(67,181,129,.4)"><span class="tag pos" style="color:var(--pos)">PROMOTED</span><h3>Rerank passage windowing</h3>
+          <div class="ba" style="font-size:clamp(18px,2vw,26px)"><span class="before">.674</span><span class="arrow">→</span><span class="after">.760</span></div>
+          <p>Score the answer window, not head+tail. Now default.</p></div>
+        <div class="card" style="border-color:rgba(67,181,129,.4)"><span class="tag pos" style="color:var(--pos)">DEPLOYED</span><h3>Snippet-AB self-selection</h3>
+          <div class="ba" style="font-size:clamp(18px,2vw,26px)"><span class="after">+0.083</span><span class="faint" style="font-size:.5em;font-weight:400">effQ · t≈2.45</span></div>
+          <p>Surface the rerank window + a preview-aware prompt. Halved failures — and cheaper.</p></div>
+        <div class="card" style="border-color:rgba(67,181,129,.35)"><span class="tag pos" style="color:var(--pos)">REAL</span><h3>Enrichment bridging</h3>
+          <div class="ba" style="font-size:clamp(18px,2vw,26px)"><span class="after">+0.068</span><span class="faint" style="font-size:.5em;font-weight:400">effQ</span></div>
+          <p>Typical-question bridging recovers lay-query gaps at ingest time.</p></div>
+      </div>
+      <div class="box" style="margin-top:1.4em"><span class="bh" style="color:var(--bad)">The graveyard — levers that looked good and died</span>
+        <div class="row">
+          <span class="pill warn">corpus-vocab expansion</span>
+          <span class="pill warn">corpus-aware PRF</span>
+          <span class="pill warn">completeness directive</span>
+          <span class="pill warn">read-budget raise</span>
+          <span class="pill warn">display-widen</span>
+          <span class="pill warn">phrase pruning</span>
+          <span class="pill warn">re-chunking to uniform</span>
+        </div>
+        <p class="fnote">The <strong>prompt</strong> in snippet-AB was load-bearing — rendering the snippet alone was +55% tokens for nothing. Mechanism matters more than surface.</p>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      Honesty slide. The ratio of dead levers to live ones is the real story of retrieval tuning. Snippet-AB was the first lever in the whole arc to reach statistical significance — and its win came from the <em>prompt</em> telling the model how to use the preview, not from showing the preview.</div>
+  </section>
+
+  <!-- 16. LESSON — EVAL DISCIPLINE -->
+  <section class="slide">
+    <h2><span class="eyebrow">Lesson</span>Most levers are null — so gate hard</h2>
+    <div class="content cols">
+      <div>
+        <ul class="tight">
+          <li><strong>A/B at N≥5.</strong> The rerank fix whipsawed A→B→A purely on per-question N=3 variance. Replicates give a noise band; single runs give a story you'll regret.</li>
+          <li><strong>Screens flip sign at scale.</strong> One interaction went <span class="pos">+0.107</span> on an 8-question screen → <span class="bad">−0.037</span> at full-42. An encouraging screen is not a result.</li>
+          <li><strong>Ship A/B'd, not just "validated."</strong> A no-tool-call guard shipped "validated, not A/B'd" was <strong>inert in production</strong> — its regex missed real shapes. The skipped A/B would have caught it.</li>
+        </ul>
+      </div>
+      <div class="box violet"><span class="bh">The loop that worked</span>
+        <div class="flow" style="justify-content:flex-start;gap:.3em">
+          <div class="node" style="min-width:0;padding:.5em .7em"><span class="n-t">hypothesis</span></div><div class="arr">→</div>
+          <div class="node" style="min-width:0;padding:.5em .7em"><span class="n-t">8-Q screen</span></div><div class="arr">→</div>
+          <div class="node" style="min-width:0;padding:.5em .7em"><span class="n-t">full-42 · N≥5</span></div><div class="arr">→</div>
+          <div class="node" style="min-width:0;padding:.5em .7em"><span class="n-t">judge gate</span></div><div class="arr">→</div>
+          <div class="node accent" style="min-width:0;padding:.5em .7em"><span class="n-t">keep / kill</span></div>
+        </div>
+        <p class="muted" style="margin-top:1em">The screen filters cheaply; the full-42 judged run decides. Nothing is "promoted" without surviving the gate. Most things don't.</p>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      This is the meta-method. The screen-to-full pipeline plus N≥5 replicates is the machinery that turned a noisy problem into decisions we could trust.</div>
+  </section>
+
+  <!-- 17. LESSON — REAL CEILING -->
+  <section class="slide">
+    <h2><span class="eyebrow">Lesson</span>Know a real ceiling from a fake one</h2>
+    <div class="content cols">
+      <div>
+        <p class="lead" style="margin-bottom:1em">After removing the <em>fake</em> ceiling (Challenge 2), a <strong>genuine</strong> one remained: under-enumeration in synthesis.</p>
+        <ul class="tight">
+          <li><strong>87% of golden-read partials cited the golden</strong> — the content reached synthesis and was used — yet the answer still omitted required detail.</li>
+          <li>No plumbing trim to blame: full golden content reaches <span class="mono">generate_response</span>.</li>
+          <li>It's a <strong>35B-local synthesis extraction limit</strong> — a bigger synthesis model would help; local prompt levers can't.</li>
+        </ul>
+      </div>
+      <div class="row" style="flex-direction:column;gap:1em">
+        <div class="box" style="border-color:rgba(224,164,88,.35)"><span class="bh">A directive made it worse</span>
+          <p class="muted">Telling the model to "enumerate everything, only from chunks" traded under-enumeration for over-reach — <strong>hallucination doubled</strong>, net-zero quality. Under-enumeration is not a prompt-instruction gap.</p></div>
+        <div class="quote">The whole game was telling a real ceiling from a measurement artifact.
+          <span class="attrib">One justified a model swap. The other justified fixing our own ruler.</span></div>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      The satisfying symmetry: Challenge 2 was a fake ceiling that <em>looked</em> real; this is a real ceiling that we could only see clearly <em>after</em> fixing the measurement. The correct response to a real model ceiling is a bigger model or a scoped extraction step — not more prompt-poking.</div>
+  </section>
+
+  <!-- 18. KEY TAKEAWAYS -->
+  <section class="slide">
+    <h2><span class="eyebrow">Key takeaways</span>What we'd tell the next team</h2>
+    <div class="content">
+      <div class="cols">
+        <ul class="tight">
+          <li><strong>Config-as-data made it a platform.</strong> Skills-as-graph + config tree meant experiments were writes, not redeploys. That leverage paid for itself many times over.</li>
+          <li><strong>Instrument the evaluator, not just the system.</strong> The judge's <em>input</em> is as load-bearing as its output.</li>
+          <li><strong>The bottleneck is rarely where the lever is.</strong> Attribute the loss to a stage before tuning anything.</li>
+        </ul>
+        <ul class="tight">
+          <li><strong>Distrust absolutes over deltas.</strong> Shared bugs preserve A/B deltas and corrupt absolute narratives — so "ceiling" and "no-lift" claims need the ruler checked first.</li>
+          <li><strong>Gate everything at N≥5.</strong> Single runs and 8-Q screens are hypotheses, not results.</li>
+          <li><strong>Know when you've hit the model, not the method.</strong> Stop poking prompts; change the model or the mechanism.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      If they remember one thing: <em>the measurement is part of the system.</em> Most of our biggest "findings" were bugs in how we measured, and finding them was worth more than any single lever.</div>
+  </section>
+
+  <!-- 19. WHERE IT STANDS -->
+  <section class="slide">
+    <h2><span class="eyebrow">Status &amp; open threads</span>Where it stands</h2>
+    <div class="content cols">
+      <div>
+        <h3 class="pos">Shipped (release v0.1)</h3>
+        <ul class="tight" style="margin-top:.6em">
+          <li>Rerank passage windowing — default.</li>
+          <li>Snippet-AB read self-selection — deployed.</li>
+          <li>Enrichment bridging — real lever.</li>
+          <li>Shape-agnostic no-tool-call guard — landed.</li>
+        </ul>
+        <h3 class="violet" style="margin-top:1.2em">Next real headroom</h3>
+        <ul class="tight" style="margin-top:.6em">
+          <li>Bigger synthesis model (the real ceiling).</li>
+          <li>Scale to the public-docs corpus.</li>
+        </ul>
+      </div>
+      <div class="box" style="border-color:rgba(224,164,88,.3)"><span class="bh" style="color:var(--warn)">Prototype tax — honest debts</span>
+        <ul class="tight" style="gap:.55em">
+          <li><span class="mono">deploy.yml</span> / Dockerfile reference an older <span class="mono">admin/</span> layout — mid-transition.</li>
+          <li><span class="mono">kudos.clj</span> / <span class="mono">kudos_preprod.clj</span> ~95% duplicated.</li>
+          <li>Login confirmation codes live in an in-memory atom — lost on restart.</li>
+          <li>Duplicate live/live_next observability views coexist.</li>
+          <li>Graph optimizer computes parallel levels but the runner is still sequential.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      Be candid: it's labelled PROTOTYPE for a reason. None of these debts block the research or the API path; they're the honest cost of moving fast. The system-overview doc tracks each with file:line.</div>
+  </section>
+
+  <!-- 20. CLOSING -->
+  <section class="slide title-slide">
+    <div class="kicker">Digdir · RAG-as-a-Service</div>
+    <h1>The measurement is part of the system.</h1>
+    <div class="sub">Config-as-data gave us a platform to experiment on. Instrumenting the evaluator is what made the experiments mean anything.</div>
+    <div class="meta">
+      <span class="pill blue">Architecture: 5 pillars</span>
+      <span class="pill violet">3 measurement lessons</span>
+      <span class="pill pos">3 real levers · a graveyard of nulls</span>
+    </div>
+    <p class="fnote" style="margin-top:2em">Grounded in <span class="mono">docs/system-overview.md</span> (architecture) and the retrieval research log. Questions &amp; discussion →</p>
+    <div class="notes" data-notes><b>Speaker notes</b>
+      Close on the through-line: the platform and the research aren't two projects — the platform is what made rigorous research affordable, and the research is what proved the platform's design bets were right.</div>
+  </section>
+
+</div>
+
+<div class="progress" id="progressbar"></div>
+<footer id="footer">
+  <div class="slidebar" id="slidebar" role="navigation" aria-label="Slide navigation"></div>
+  <div class="chrome">
+    <span class="title">Digdir RAG-as-a-Service — Architecture, Challenges &amp; Lessons</span>
+    <span class="mid">← → navigate · <b>S</b> notes · <b>F</b> fullscreen · click a tick to jump</span>
+    <span class="counter"><span class="snum" id="snum">1</span> / <span id="stotal">22</span></span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  const slides=[...document.querySelectorAll('.slide')];
+  let i=0; const total=slides.length;
+  document.getElementById('stotal').textContent=total;
+  const bar=document.getElementById('progressbar');
+  const snum=document.getElementById('snum');
+
+  // ---- build the clickable slide bar ----
+  function slideTitle(s,k){
+    const h2=s.querySelector('h2');
+    if(h2){const c=h2.cloneNode(true);const ey=c.querySelector('.eyebrow');if(ey)ey.remove();
+      return c.textContent.trim().replace(/\s+/g,' ');}
+    const h1=s.querySelector('h1');
+    return h1?h1.textContent.trim().replace(/\s+/g,' '):('Slide '+(k+1));
+  }
+  const barEl=document.getElementById('slidebar');
+  const segs=slides.map((s,k)=>{
+    const seg=document.createElement('div');seg.className='seg';
+    seg.setAttribute('title',(k+1)+'. '+slideTitle(s,k));
+    const tip=document.createElement('div');tip.className='tip';
+    tip.innerHTML='<b>'+(k+1)+'</b>'+slideTitle(s,k).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    if(k===0){tip.style.left='0';tip.style.transform='none';}
+    else if(k===slides.length-1){tip.style.left='auto';tip.style.right='0';tip.style.transform='none';}
+    const bx=document.createElement('i');
+    seg.appendChild(tip);seg.appendChild(bx);
+    seg.addEventListener('click',ev=>{ev.stopPropagation();show(k);});
+    barEl.appendChild(seg);
+    return seg;
+  });
+
+  function show(n){
+    i=Math.max(0,Math.min(total-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    segs.forEach((sg,k)=>{sg.classList.toggle('active',k===i);sg.classList.toggle('past',k<i);});
+    bar.style.width=((i+1)/total*100)+'%';
+    snum.textContent=i+1;
+    // hide any open notes when navigating
+    document.querySelectorAll('.notes.show').forEach(el=>el.classList.remove('show'));
+    location.hash=i+1;
+  }
+  function toggleNotes(){
+    const cur=slides[i].querySelector('[data-notes]');
+    if(!cur) return;
+    document.querySelectorAll('.notes.show').forEach(el=>{if(el!==cur)el.classList.remove('show')});
+    cur.classList.toggle('show');
+  }
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();show(i+1);}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();show(i-1);}
+    else if(e.key==='Home'){show(0);}
+    else if(e.key==='End'){show(total-1);}
+    else if(e.key.toLowerCase()==='s'){toggleNotes();}
+    else if(e.key.toLowerCase()==='f'){
+      if(!document.fullscreenElement)document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+    }
+  });
+  // click right/left thirds to navigate
+  document.getElementById('deck').addEventListener('click',e=>{
+    if(e.target.closest('.notes'))return;
+    const x=e.clientX/window.innerWidth;
+    if(x>0.65)show(i+1); else if(x<0.35)show(i-1);
+  });
+  const start=parseInt(location.hash.replace('#',''))||1;
+  show(start-1);
+})();
+</script>
+</body>
+</html>

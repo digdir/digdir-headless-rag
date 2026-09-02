@@ -1,0 +1,52 @@
+{:cases
+ [{:id "mono-no-base"
+   :pair-id "mono-no"
+   :language :no
+   :query "Hvor mange årsverk hadde Digdir i 2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "mono-no-utforte"
+   :pair-id "mono-no"
+   :language :no
+   :query "Hvor mange utførte årsverk hadde Digdir per 31.12.2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "mono-no-stillinger"
+   :pair-id "mono-no"
+   :language :no
+   :query "Hvor mange årsverk og stillinger hadde Digdir i 2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "mono-no-larlinger"
+   :pair-id "mono-no"
+   :language :no
+   :query "Hvor mange årsverk hadde Digdir i 2022, og hvor mange lærlinger hadde de?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "mono-no-reisetid"
+   :pair-id "mono-no"
+   :language :no
+   :query "Hvor mange utførte årsverk hadde Digdir i 2022 når reisetid og overtid er inkludert?"
+   :golden-chunk-ids ["6a80d6499075"]}
+
+  {:id "mono-en-base"
+   :pair-id "mono-en"
+   :language :en
+   :query "What were the total innovation investments for the Norwegian industrial sector in 2022?"
+   :golden-chunk-ids ["391859380a9f"]}
+  {:id "mono-en-value"
+   :pair-id "mono-en"
+   :language :en
+   :query "How much did the Norwegian industrial sector invest in innovation in 2022, in NOK billions?"
+   :golden-chunk-ids ["391859380a9f"]}
+  {:id "mono-en-growth"
+   :pair-id "mono-en"
+   :language :en
+   :query "By what percentage did innovation investments increase in 2022 compared to 2020?"
+   :golden-chunk-ids ["391859380a9f"]}
+  {:id "mono-en-own-rd"
+   :pair-id "mono-en"
+   :language :en
+   :query "How much was spent on own R&D work in 2022 in the Norwegian industrial sector?"
+   :golden-chunk-ids ["391859380a9f"]}
+  {:id "mono-en-rd-services"
+   :pair-id "mono-en"
+   :language :en
+   :query "How much did the sector invest in purchasing R&D services from others in 2022?"
+   :golden-chunk-ids ["391859380a9f"]}]}

@@ -1,0 +1,42 @@
+;; Pattern A variant: Improved retrieval — target chunk now found with increased limit
+;; Derived from 01_quick_win but with correct answer (326 utførte årsverk)
+;; Validates that the limit increase recovers the target chunk.
+{:description "Improved retrieval: search, rerank, generate in 3 iterations with correct answer"
+ :query "Hvor mange årsverk hadde Digdir i 2022?"
+ :max-iterations 10
+
+ :llm-responses
+ [;; Iteration 0: search for documents
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "I need to search for information about FTEs at Digdir in 2022."
+                        :tool_calls [{:id "call_s1"
+                                      :type "function"
+                                      :function {:name "search_documents"
+                                                 :arguments "{\"queries\":[\"årsverk Digdir 2022\",\"antall ansatte Digdir 2022\",\"bemanning Digdir 2022\",\"ressursbruk Digdir 2022\",\"Digitaliseringsdirektoratet årsverk 2022\"]}"}}]}}]}
+  ;; Iteration 1: rerank results
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Good results including the target chunk about 326 utførte årsverk. Let me rerank."
+                        :tool_calls [{:id "call_r1"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 2: generate response
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "I have reranked context with the key chunk about 326 utførte årsverk. Generating."
+                        :tool_calls [{:id "call_g1"
+                                      :type "function"
+                                      :function {:name "generate_response"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Final: text response (no tool calls)
+  {:choices [{:finish_reason "stop"
+              :message {:content "Digdir besto 31.12.2022 av 326 utførte årsverk fordelt på 345 faste og 15 midlertidige stillinger [3]."}}]}]
+
+ :tool-results
+ ["Retrieved 40 chunks (40 new unique). Workspace now has 40 total chunks. [0 phrase, 110 metadata, 72 content] Auto-filtered by orgs_long: Digitaliseringsdirektoratet. Includes chunk 6a80d6499075."
+  "Reranked to top 10 chunks. Top results: 1. Digdir besto 31.12.2022 av 326 utførte årsverk fordelt på 345 faste og 15 midlertidige stillinger."
+  "Digdir besto 31.12.2022 av 326 utførte årsverk fordelt på 345 faste og 15 midlertidige stillinger [3]."]
+
+ :expected {:iterations 3
+            :tool-sequence ["search_documents" "rerank_results" "generate_response"]
+            :response-pattern "326"
+            :exhausted false}}

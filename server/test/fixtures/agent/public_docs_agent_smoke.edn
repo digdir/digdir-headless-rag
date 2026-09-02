@@ -1,0 +1,87 @@
+;; public-docs v1 Agent Smoke Suite (Phase H output)
+;;
+;; 5 end-to-end agent cases promoted from the v1 enforced rerank suite.
+;; Each case adds an :expected-answer-pattern regex that a grounded answer
+;; should contain. The patterns are deliberately permissive — they verify
+;; the agent's response mentions key terms from the golden chunk, not exact
+;; phrasing.
+;;
+;; Budget shape matches the kudos baseline fixture
+;; (baseline_token_budget_medium_difficulty.edn): :max-search-passes,
+;; :max-read-operations, :max-read-content-length.
+;;
+;; Gate semantics (contract Decision 5 / suite-specs §4.3): zero infra-errors,
+;; zero insufficient-context, golden present in retrieval trace, answer pattern
+;; matches. This is smoke coverage, not a blocking PR gate.
+;;
+;; Invocation (the --tenant-config-key flag is required because public-docs
+;; has no dedicated runtime config node; agent skill graph resolves via
+;; runtime/digdir/default):
+;;
+;;   bb agent-budget-report digdir dataset public-docs \
+;;     --suite server/test/fixtures/agent/public_docs_agent_smoke.edn \
+;;     --tenant-config-key default \
+;;     --fail-on-gate true
+;;
+;; First-run baseline (2026-04-21, post-query-relaxation-fix): 5/5 PASS on
+;; current and relaxed budgets. Pass rate well above the 50% smoke threshold.
+{:cases
+ [{:id                      "altinn-broker-getting-started"
+   :query                   "Hvordan kommer jeg i gang med Altinn Broker under overgangen til Altinn 3?"
+   :expected-answer-pattern "(?is)\\boverg(ang|ang)"
+   :golden-chunk-ids        ["9584a6e89afc"]
+   :budget-dimension        :read-chars
+   :current-budget          {:max-search-passes 4
+                             :max-read-operations 6
+                             :max-read-content-length 12000}
+   :relaxed-budget          {:max-search-passes 4
+                             :max-read-operations 6
+                             :max-read-content-length 16000}}
+
+  {:id                      "altinn-broker-technical-overview"
+   :query                   "Hva er den tekniske arkitekturen bak Altinn Broker i overgangsfasen?"
+   :expected-answer-pattern "(?is)(transition\\s*service\\s*bridge|servicecode|myk\\s+overgang)"
+   :golden-chunk-ids        ["63c3d3e28820"]
+   :budget-dimension        :read-chars
+   :current-budget          {:max-search-passes 4
+                             :max-read-operations 6
+                             :max-read-content-length 12000}
+   :relaxed-budget          {:max-search-passes 4
+                             :max-read-operations 6
+                             :max-read-content-length 16000}}
+
+  {:id                      "altinn-dialogporten-about"
+   :query                   "Hva er Dialogporten?"
+   :expected-answer-pattern "(?is)\\bdialogporten\\b"
+   :golden-chunk-ids        ["9f75a7784e9b"]
+   :budget-dimension        :read-chars
+   :current-budget          {:max-search-passes 4
+                             :max-read-operations 6
+                             :max-read-content-length 12000}
+   :relaxed-budget          {:max-search-passes 4
+                             :max-read-operations 6
+                             :max-read-content-length 16000}}
+
+  {:id                      "altinn-studio-create-user"
+   :query                   "Hvordan oppretter jeg en bruker i Altinn Studio v8?"
+   :expected-answer-pattern "(?is)(ansattporten|altinn\\.studio)"
+   :golden-chunk-ids        ["0fac42eefdc4"]
+   :budget-dimension        :read-chars
+   :current-budget          {:max-search-passes 4
+                             :max-read-operations 6
+                             :max-read-content-length 12000}
+   :relaxed-budget          {:max-search-passes 4
+                             :max-read-operations 6
+                             :max-read-content-length 16000}}
+
+  {:id                      "altinn-studio-datamodeling"
+   :query                   "Hvordan definerer jeg en datamodell i Altinn Studio v8?"
+   :expected-answer-pattern "(?is)\\bdatamodell"
+   :golden-chunk-ids        ["2f6cee8d5f5e"]
+   :budget-dimension        :read-chars
+   :current-budget          {:max-search-passes 4
+                             :max-read-operations 6
+                             :max-read-content-length 12000}
+   :relaxed-budget          {:max-search-passes 4
+                             :max-read-operations 6
+                             :max-read-content-length 16000}}]}

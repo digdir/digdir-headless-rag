@@ -1,0 +1,65 @@
+;; FULL-42 CONFIRM — read-snippet self-selection (mechanism A+B).
+;; control vs snippet-AB, the effQ headline. snippet-A dropped (screen: render
+;; without prompt = +55% tokens, no benefit). See the RESULTS LOG in
+;; plans/proposed/read-snippet-self-selection-plan.md.
+;;
+;; Screen verdict (8-Q N=3): snippet-AB effQ +0.052, recall@10 +0.146, read-rate
+;; 0.58->0.71, AND cheaper (n-ret 3.1->1.8, llm 3.6->2.8, 134->102s). Caveat:
+;; per-Q 3W/4L/1T at n=24 -> this full-42 resolves whether the mean is robust.
+;;
+;; Both arms: enriched-HQ base + the SAME :qwen-adapted base prompt (control via
+;; :qwen-adapted, snippet-AB via :qwen-adapted-snippet = +steps-1-2 snippet
+;; guidance), so the only deltas are the snippet render + its prompt framing.
+;; 2 configs x 42 Q x N=3 = 252 runs, conc 1, judge? false (gpt-5.5 via
+;; bb sweep-judge after; restore config to local). Run with the agent-run
+;; OPENAI_* env. WATCH prefill tokens / wall-clock.
+{:configs
+ [{:id "control"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}}}
+  {:id "snippet-AB"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true}}}]
+ :repeats 3
+ :judge? false
+ :order :interleaved
+ :concurrency 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter
+ {:ids
+  #{"ue-notif-06-egendefinert-avsender-epost-dns" "ue-studio-01-skjul-felt-uttrykk"
+    "ue-studio-03-datamodell-filer" "ue-dialog-04-activity-entity-fields"
+    "ue-authz-06-xacml-obligation-authlevel" "ue-api-04-instances-get-no-list"
+    "ue-authz-07-bruker-typer-authorization" "ue-authz-04-opprette-tilgangsliste-medlemmer"
+    "ue-events-01-abonnement-filtre" "ue-corr-04-notification-order-sms-window"
+    "ue-studio-02-pdf-service-task" "ue-broker-05-filstorrelse-grenser-multi"
+    "ue-studio-07-validering-uttrykk-fil" "ue-authz-02-tilgangsliste-handlingsfilter"
+    "ue-studio-05-tekstressurser-sprak" "ue-studio-06-options-kilder-kodeliste"
+    "ue-dialog-01-aktivitetslogg" "ue-api-06-app-openapi-swagger-spec"
+    "ue-studio-04-non-repeating-group" "ue-events-02-publisere-cloudevents"
+    "ue-corr-02-transmission-group-dialog" "ue-api-05-events-post-app-token"
+    "ue-sys-03-brukerstyrt-vs-leverandorstyrt" "ue-authz-03-validere-samtykketoken"
+    "ue-broker-02-slette-tid-tilgjengelig" "ue-authz-05-xacml-policy-regelstruktur"
+    "ue-authz-01-delegere-tilgangspakke-api" "ue-sys-02-systembrukertoken-pdp-autorisasjon"
+    "ue-dialog-05-search-rest-graphql" "ue-corr-01-events-webhook-subscription"
+    "ue-broker-04-overgang-a2-a3-forskjeller" "ue-notif-07-standard-avsender-sms-epost"
+    "ue-sys-01-leverandorstyrt-og-forhold" "ue-dialog-07-webapi-sdk"
+    "ue-events-03-polling-vs-webhook" "ue-dialog-06-skrivehandlinger"
+    "ue-dialog-02-seen-log" "ue-notif-05-umiddelbar-varsling-otp"
+    "ue-broker-03-store-filer-virusskann" "ue-broker-01-filoverforing-tilstander"
+    "ue-corr-03-system-til-system-nedlasting" "ue-dialog-03-unauthorized-urls"}}}

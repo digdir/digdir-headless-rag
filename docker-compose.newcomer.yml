@@ -1,0 +1,106 @@
+# The newcomer stack: the whole backend, with Docker as the only prerequisite.
+#
+# WHAT THIS IS FOR, AND HOW IT DIFFERS FROM THE OTHER TWO COMPOSE FILES:
+#
+#   docker-compose.dev.yml       dependencies only. The server runs on the HOST
+#                                and needs the mise-pinned toolchain. This is
+#                                the file to use while DEVELOPING.
+#   server/e2e/docker-compose.e2e.yml
+#                                the server in a container, plus mcpo and
+#                                open-webui, for Playwright end-to-end runs. It
+#                                has NO Typesense, so retrieval cannot work there
+#                                — measured, see #328.
+#   THIS FILE                    the server AND its search backend, targeted at
+#                                somebody who has just cloned the repo and
+#                                installed nothing but Docker.
+#
+# ⚠️ IT REUSES server.Dockerfile RATHER THAN DEFINING ITS OWN.
+# That is deliberate and load-bearing: a newcomer-specific Dockerfile would drift
+# from the deploy image silently, and nothing guards that drift. Whatever a
+# newcomer runs here is the artefact production runs.
+#
+# WHAT IT DOES NOT GIVE YOU — stated so it cannot be discovered later as a
+# surprise: A CORPUS. This brings up an EMPTY Typesense. Retrieval will find
+# nothing until a dataset is materialised, and a query returns
+# `Dataset ref does not resolve to a canonical dataset runtime node` (#434 is
+# about that error being misclassified as an internal error). What corpus a
+# newcomer should get is an open product question, deliberately not answered here.
+
+name: digdir-rag-newcomer
+
+services:
+  typesense:
+    # Pinned to match docker-compose.dev.yml rather than tracking `latest`,
+    # which currently resolves to a 31.0 release candidate. Keeping the two
+    # files on the same version means a newcomer and a developer hit the same
+    # engine behaviour.
+    image: typesense/typesense:30.2
+    container_name: digdir-rag-typesense-newcomer
+    restart: unless-stopped
+    command: >
+      --data-dir /data
+      --api-key=${TYPESENSE_API_KEY_ADMIN:-dev-typesense-key}
+      --enable-cors
+    volumes:
+      - typesense-data:/data
+    # NO host port on purpose. The server reaches Typesense over the compose
+    # network, and a newcomer has no reason to talk to it directly. Publishing
+    # 8108 would also collide with docker-compose.dev.yml's Typesense on a
+    # machine that happens to be running both.
+    healthcheck:
+      # Borrowed verbatim from docker-compose.dev.yml, including its reasoning:
+      # the image ships no curl and no wget, and its `sh` has no /dev/tcp — but
+      # `bash` is present and does, so probe /health over a raw socket.
+      # (`typesense-server --version` is NOT a valid flag: it prints usage and
+      # exits non-zero, silently marking the container unhealthy forever.)
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/8108 && printf "GET /health HTTP/1.0\r\n\r\n" >&3 && grep -q ok <&3'
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  digdir-rag:
+    build:
+      context: .
+      dockerfile: server.Dockerfile
+    image: digdir-rag-server:newcomer
+    container_name: digdir-rag-newcomer
+    depends_on:
+      typesense:
+        condition: service_healthy
+    # Secrets come from a .env the newcomer creates:
+    #   cp .env.example .env
+    # `.env.example` is the ONLY .env-shaped file git tracks — `.gitignore`
+    # ignores `.env.*` and negates exactly that one name, so a second example
+    # file would be silently untracked.
+    env_file:
+      - .env
+    environment:
+      # --- infrastructure values, supplied HERE rather than in .env ----------
+      # These describe the stack rather than the operator, so they belong with
+      # the stack. Putting them in .env would ask a newcomer to configure
+      # something they cannot get wrong in an interesting way.
+      TYPESENSE_API_HOST: typesense:8108
+      TYPESENSE_API_TLS: "false"
+      TYPESENSE_COLLECTION_PREFIX: ${TYPESENSE_COLLECTION_PREFIX:-digdir}
+      # Overrides whatever .env says: inside the container the database lives on
+      # the named volume below, not wherever the host copy of .env points.
+      DATAHIKE_FILE_PATH: /var/lib/digdir/db
+      TENANT: ${TENANT:-digdir}
+      DATASET_CONFIG_KEY: ${DATASET_CONFIG_KEY:-public-docs}
+    volumes:
+      - digdir-db:/var/lib/digdir
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/up"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  typesense-data:
+  digdir-db:

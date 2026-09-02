@@ -1,0 +1,16 @@
+;; Kimi K2.6 on the 118 frontier goldens (broad-set generalization test). One arm =
+;; the deployed base config (bare; inherits snippet-AB + guard + rerank windowing).
+;; Compare to the existing local-deployed baseline on the SAME 118 (effQ 0.681,
+;; sweep-2026-06-12T07-26-40 "deployed" arm). conc-32 (endpoint batches), N=1, 50-min cap.
+{:configs
+ [{:id "kimi-deployed"
+   :skill-graph-id :builtin/agent-rag-graph-bundled}]
+ :repeats 1
+ :judge? false
+ :order :interleaved
+ :concurrency 48
+ :max-clarification-rounds 1
+ :run-timeout-ms 3000000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :questions-path "test/fixtures/sweep/questions-website-goldens.edn"
+ :question-filter {:dataset :public-docs}}

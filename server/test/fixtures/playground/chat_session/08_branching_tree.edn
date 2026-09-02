@@ -1,0 +1,7 @@
+{:messages [{:message/id "u1" :message/role :user :message/text "Q1" :message/created 1 :message/parent-message nil}
+            {:message/id "a1" :message/role :assistant :message/text "A1" :message/created 2 :message/parent-message {:message/id "u1"}}
+            {:message/id "u2a" :message/role :user :message/text "Q2a" :message/created 3 :message/parent-message {:message/id "a1"}}
+            {:message/id "u2b" :message/role :user :message/text "Q2b" :message/created 4 :message/parent-message {:message/id "a1"}}
+            {:message/id "a2a" :message/role :assistant :message/text "A2a" :message/created 5 :message/parent-message {:message/id "u2a"}}
+            {:message/id "a2b" :message/role :assistant :message/text "A2b" :message/created 6 :message/parent-message {:message/id "u2b"}}]
+ :active-branch-path {"a1" 1}}

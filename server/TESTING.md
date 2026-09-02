@@ -1,197 +1,92 @@
-# Testing with RCF (Rich Comment Forms)
+# Testing
 
-This project uses Hyperfiddle's RCF framework for inline testing, providing self-documenting requirements directly in the source code.
+Most tests use `clojure.test` (125 `*_test.clj` files under `server/test/`). A handful of
+legacy `digdir.docs.*` source files also carry inline [Hyperfiddle RCF](https://github.com/hyperfiddle/rcf)
+(`tests` macro) blocks colocated with the implementation.
 
-## Quick Start
+## Running Tests
 
-### Running Tests
-
-Use Babashka tasks to run tests:
+Use the Babashka tasks (run from the repo root):
 
 ```bash
-# Run all tests
+# Run the full unit test suite
 bb test
 
-# Run only unit tests
-bb test:unit
+# Run config-resolution tests only (accessor, db, ops, ui, permissions)
+bb test-config
 
-# Run only integration tests
-bb test:integration
-
-# Run tests in watch mode (auto-reruns on file changes)
-bb test:watch
-
-# Open REPL with test environment
-bb test:repl
+# Run diagnostics tests that need src-dev on the classpath
+bb test-diagnostics
 ```
 
-### Running Tests from REPL
+- `bb test` (`bb.edn:1888`) runs `clj -M:test -d test` via `cognitect.test-runner`,
+  excluding `digdir.tools.diagnostics-test`.
+- `bb test-config` (`bb.edn:1934`) runs the five `digdir.config.*` test namespaces
+  (`accessor-test`, `db-test`, `ops-test`, `ui-test`, `permissions-test`).
+- `bb test-diagnostics` (`bb.edn:1930`) runs `digdir.tools.diagnostics-test` with the
+  `:diagnostics:test` aliases (needs `src-dev` on the classpath).
 
-```clojure
-;; RCF tests are enabled via JVM options
-;; Make sure to start REPL with: clojure -M:test
+There is no `bb test:unit` / `bb test:integration` / `bb test:watch` / `bb test:repl` — only
+the three tasks above.
 
-;; Load and test a specific namespace
-(require '[agent.graph.tree] :reload)
+### Running from the REPL
 
-;; Run all tests in project
-(require '[agent.graph.test-runner])
-(agent.graph.test-runner/run-all-tests)
+The `:test` alias (`server/deps.edn`) already sets `-Dhyperfiddle.rcf.enable=true` and
+`-Dhyperfiddle.rcf.generate-tests=true`, so `clj -M:test ...` picks up inline RCF blocks
+automatically. If you start a REPL some other way and want RCF tests to run, set those JVM
+properties yourself.
+
+```bash
+cd server
+clj -M:test -n digdir.config.db-test
+```
+
+### Selecting a single namespace
+
+```bash
+cd server
+clj -M:test -n namespace.name
 ```
 
 ## Writing RCF Tests
 
-RCF tests are written inline with your code using the `tests` macro:
+Inline RCF tests are written with the `tests` macro, colocated with the code they cover
+(see `digdir.docs.website`, `digdir.docs.folder`, `digdir.docs.episerver` for examples):
 
 ```clojure
 (ns my.namespace
-  (:require [hyperfiddle.rcf :as rcf :refer [tests tap %]]))
+  (:require [hyperfiddle.rcf :refer [tests]]))
 
 (defn add [a b]
   (+ a b))
 
-;; Tests go right after the function definition
 (tests
  "add function works correctly"
  (add 2 3) := 5
- (add -1 1) := 0
- (add 0 0) := 0)
+ (add -1 1) := 0)
 ```
 
-### Test Operators
+RCF tests are automatically elided from production builds when
+`hyperfiddle.rcf.enable` is not set.
 
-- `:=` - Assert equality
-- `tap` - Print intermediate values
-- `%` - Reference to previous value
+New tests should generally be `clojure.test` `deftest`s under `server/test/`, matching the
+rest of the suite — RCF is not the primary pattern in this codebase.
 
-Note: For predicates and patterns, use standard Clojure functions:
-- `(some? x) := true` instead of `x := rcf/some?`
-- `(str/includes? s "text") := true` for string matching
+## Known pre-existing failures
 
-### Example with Advanced Features
+Some tests are known to fail when run in isolation (`clj -M:test -n some.ns`) but pass as
+part of the full `bb test` suite, due to test-order/shared-state coupling (e.g. one
+namespace relying on setup performed by an earlier one). `bb test` is the source of truth
+for pass/fail status; don't chase an isolation-only failure as a regression. If you're
+adding coverage for an area with a brittle pre-existing test, prefer writing a fresh,
+self-contained test alongside it rather than fixing the old one's isolation dependency.
 
-```clojure
-(tests
- "complex example"
- (let [result (process-data {:x 10})]
-   (:status result) := :ok
-   (some? (:value result)) := true
-   (pos? (:value result)) := true
-   
-   ;; Use tap to debug
-   (tap result)
-   
-   ;; Use % to reference previous value
-   (:value result) % 
-   (inc %) := 11))
-```
+## CI
 
-## Test Organization
+There is no CI configured yet (`.github/workflows/` does not exist). Run `bb lint` and
+`bb test` locally before opening a PR.
 
-### Inline Tests (Recommended)
-Tests are co-located with the implementation for better maintainability:
+## Related
 
-```clojure
-;; src/agent/graph/tree.clj
-(defn create-llm-foreach-iteration-node [...]
-  ...)
-
-(tests
- "create-llm-foreach-iteration-node creates proper structure"
- ;; Test assertions here
- )
-```
-
-### Benefits of Inline Testing
-
-1. **Self-documenting** - Tests serve as live documentation
-2. **Maintainable** - Tests move with the code
-3. **Discoverable** - Requirements are visible next to implementation
-4. **Production-ready** - Tests are automatically elided in production builds
-
-## Configuration
-
-### Development Mode
-RCF tests are enabled via JVM options in `deps.edn`:
-
-```clojure
-:test {:jvm-opts ["-Dhyperfiddle.rcf.enable=true"
-                  "-Dhyperfiddle.rcf.generate-tests=true"]}
-```
-
-### Production Mode
-Tests are automatically removed from production builds when RCF is not enabled.
-
-## Examples in This Project
-
-### LLM-Foreach Tests
-See `src/agent/graph/tree.clj` for comprehensive inline tests of the `:llm-foreach` implementation:
-
-```clojure
-(tests
- "llm-foreach in async mode generates child nodes"
- (let [test-node {:type :llm-foreach
-                  :node-id (java.util.UUID/randomUUID)
-                  :question "Process this item"
-                  :children [...]}
-       result (answer test-node {})]
-   (some? (:generated-children result)) := true
-   (count (:generated-children result)) := 3))
-```
-
-### Logging Utils Tests
-See `src/agent/graph/logging_utils.clj` for utility function tests:
-
-```clojure
-(tests
- "truncate-for-logging handles strings correctly"
- (truncate-for-logging "hello") := "hello"
- (str/ends-with? (truncate-for-logging (apply str (repeat 150 "a"))) "...")
-   := true)
-```
-
-## Test Runner Implementation
-
-The test runner (`src/agent/graph/test_runner.clj`) provides:
-
-- Automatic namespace discovery
-- Parallel test execution
-- Pretty-printed results
-- Watch mode for development
-- Separate unit/integration test running
-
-## Best Practices
-
-1. **Write tests immediately** after implementing a function
-2. **Use descriptive test names** as documentation
-3. **Test edge cases** (nil, empty collections, etc.)
-4. **Keep tests focused** - one concept per test block
-5. **Use `let` bindings** for complex test setups
-6. **Leverage `rcf/match?`** for flexible assertions
-
-## Troubleshooting
-
-### Tests Not Running
-- Check JVM options include `-Dhyperfiddle.rcf.enable=true`
-- Start REPL with test alias: `clojure -M:test`
-- Reload namespace after adding tests: `(require '[namespace] :reload)`
-
-### Test Output
-- Results appear in REPL and terminal
-- Use `tap` to debug intermediate values
-- Check `*out*` for println output during tests
-
-## Migration from clojure.test
-
-The project has migrated from `clojure.test` to RCF. Old test files in `test/` directory have been converted to inline RCF tests in the source files.
-
-## CI/CD Integration
-
-While CI/CD is not currently configured, tests can be run manually:
-
-```bash
-# For CI scripts
-clojure -M:dev:test -e "(require '[agent.graph.test-runner]) (System/exit (agent.graph.test-runner/run-all-tests))"
-```
-
-Returns exit code 0 on success, 1 on failure.
+- `digdir.skills.builtin.agent.*` (`server/src/digdir/skills/builtin/agent/`) is the current
+  agent-graph implementation — not `agent.graph.*`, which does not exist in this codebase.

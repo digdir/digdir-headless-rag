@@ -1,0 +1,4 @@
+[{:event :request/started :request-id "req-3" :query "Find docs"}
+ {:event :tool/call :tool-call {:tool "search_documents" :args {:queries ["a"]}}}
+ {:event :tool/call :tool-call {:tool "rerank_results" :args {:top-k 5}}}
+ {:event :response/finalized :text "Done" :diagnostics {}}]

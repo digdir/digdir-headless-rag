@@ -1,0 +1,51 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,recall-at-5,recall-at-10,recall-at-20,citation-recall,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,steps-executed,response,error
+dbf8d7b7-08ef-45fc-ae8e-95c9dcab7177,2026-05-22T15:05:48.749162Z,retr-limit-30-ctop-10,altinn-systemuser-api-model,0,public-docs,exploratory-rerank,"altinn-systemuser,exact-lookup,simple",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,7,5,1,d1939e6053a8;c4e7d01f16c1;d612235c64ad;856b843dc042;a79a59ed2586;fd72a28afd94;1071f704051a,d1939e6053a8;c4e7d01f16c1;d612235c64ad;856b843dc042;1071f704051a,6d8a6a851332,17985,,,,3,"Datamodellen for en **system user** i Altinn ser ut til å være en **system user token / authorization_details**-struktur, der tokenet inneholder flere felt enn et vanlig Maskinporten-token. Kilden viser blant annet at tokenet har `authorization_details` med `type: ""urn:altinn:systemuser""` og en `systemuser_org`-del med `authority` og `id`. [5]
+
+Samtidig beskriver kildene også **system register information**-modellen for selve systemet, som er noe annet enn system user-tokenet. Der står det blant annet at systemets `id` skal være på formatet `{systemvendororgno}_{name chosen by the vendor}`, for eksempel `""310547891_testproduct""`, og at systemet har en beskrivelse med språkene `nb`, `en` og `nn`. [1][2]
+
+Kort sagt er det altså to nærliggende, men ulike modeller i kildene:
+- **System registe…",
+9e71c1ea-9cc9-4680-8037-66a587665cea,2026-05-22T15:06:36.836735Z,retr-limit-30-ctop-10,altinn-authorization-regler,0,public-docs,exploratory-rerank,"exact-lookup,altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,8,7,1,bb2b7266e447;0b72efa29c30;ddfbe673e229;4543ab64826c;ff69b65719f0;e246b621f86c;73a819db1dd9;7eddf219a393,bb2b7266e447;0b72efa29c30;ddfbe673e229;4543ab64826c;ff69b65719f0;73a819db1dd9;7eddf219a393,86a29a595367,48087,,,,3,"Nå har jeg en tydelig definisjon nok til å svare: tilgangsregler er policy-regler som styrer hvem som får gjøre hva, definert av tjenesteeier i en XACML-policy. Jeg svarer kort og presist på norsk, og nevner også at Altinn bruker ABAC/XACML og at reglene ligger i policy.xml.
+I Altinn Authorization er **tilgangsregler** de reglene som bestemmer **hvem som får tilgang til en app, ressurs eller handling, og under hvilke vilkår**.
+
+Kort forklart:
+
+- Reglerne er definert av **tjenesteeier / app-utvikler**
+- De ligger i en **XACML policy**-fil, typisk `App/config/authorization/policy.xml`
+- Altinn Authorization bygger på **ABAC** og bruker **XACML 3.0**
+- Reglene kan styre ting som:
+  - hvilke **roller** som gir tilgang
+  - hvilke **ressursattributter** som gjelder
+  - hvilket **autentiseringsni…",
+acc1efce-2f5c-4c29-9ec6-f8be4699f3f5,2026-05-22T15:06:54.315665Z,retr-limit-30-ctop-10,altinn-broker-rest-usage,0,public-docs,exploratory-rerank,"simple,navigational,altinn-broker",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,6,3,1,892d34db3a67;9269cd53c390;9221b1f02039;58d70ee53466;9093f7e1c433;dcb1aada05b0,892d34db3a67;9269cd53c390;9093f7e1c433,0f3807200a65,17478,,,,3,"Du bruker Altinn Broker med REST-API ved å bruke **API for individual file transfers** for runtime-operasjoner, altså **upload, download og status monitoring**. Altinn 3 Broker har også egne API-er for **design time configuration** og for **historical data and statistics**. [3]
+
+Kort sagt:
+
+- **Konfigurer først tjenesten** via de relevante oppsett-API-ene og eventuelt GUI-ene for Altinn Broker, Maskinporten og Altinn Authorization. [3]
+- **Sett opp tilgangsrettigheter** ved å ha fulgt stegene i **Getting started**. [2]
+- **Bruk REST-API-et for filoverføring** til å laste opp filer, laste ned filer og følge med på status. [3]
+- Hvis du trenger å forstå flyten og avhengighetene, viser **Altinn Broker Setup Sequence** hvordan komponentene henger sammen. [2]
+
+Viktig forskjell mellom **Altinn 2…",
+e22ff071-457a-4d18-8ba7-3014d3c65968,2026-05-22T15:07:12.203911Z,retr-limit-120-ctop-80,altinn-systemuser-api-model,0,public-docs,exploratory-rerank,"altinn-systemuser,exact-lookup,simple",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,7,2,1,74fc02526720;050fbe324462;ad408ff1ae47;e6f7545a1adc;a79a59ed2586;fd72a28afd94;1071f704051a,74fc02526720;1071f704051a,6d8a6a851332,17887,,,,3,"Datamodellen for en **system user** i Altinn ser ut til å inneholde disse feltene, basert på kildene [1] og [2]:
+
+- **systemuser_id**: en unik identifikator generert av Altinn når system user opprettes. [1][2]
+- **systemuser_name**: et brukervennlig navn gitt av leverandøren ved opprettelse av system user; hvis den opprettes via portalen, er standardverdien systemnavnet. [1]
+- **system_id**: den unike identifikatoren for systemet. [1][2]
+- **system_name**: et brukervennlig navn for systemet. [1]
+- **system_orgno**: den unike identifikatoren for systemet, generert av Altinn når systemet opprettes. [1]
+- **partyid**: partyid til organisasjonen som eier system user. [1]
+- **partyOrgNo**: organisasjonsnummeret til organisasjonen som eier system user. [1]
+- **created**: datoen system user ble o…",
+56646baf-9673-49d4-9908-e425c0ecc191,2026-05-22T15:07:25.456625Z,retr-limit-120-ctop-80,altinn-authorization-regler,0,public-docs,exploratory-rerank,"exact-lookup,altinn-authorization,hard",complete,0,false,chunks+answer,false,0.0,0.0,0.0,0.0,3,2,1,14d29a52b3e3;548c3bf390b6;295f615f2c0d,548c3bf390b6;295f615f2c0d,86a29a595367,13252,,,,3,"I konteksten er **“tilgangsregler”** ikke definert som en egen, eksplisitt term. Det som beskrives er at Dialogporten bruker Altinn Autorisering til å avgjøre tilgang basert på:
+
+- **roller/tilgangspakker** og **tjeneste-/instansrettigheter** som en bruker har for en part, via **Authorized Parties API** [1]
+- en intern oversikt over hvilke **roller/tilgangspakker** som gir rettigheter til hver ressurs i ressursregisteret [1]
+- **PDP API** for finkornet autorisering av de ulike **handlingene og overføringene** i en dialog [2]
+
+Så hvis du med “tilgangsregler” mener reglene for hvem som får se eller bruke noe i Altinn Authorization, er den nærmeste beskrivelsen i kilden at tilgang avgjøres av **roller/tilgangspakker og tjeneste-/instansrettigheter**, og for dialogdetaljer av **PDP API** med `…",
+9c99cbad-5bfc-481d-aa5b-048d31f6b90a,2026-05-22T15:07:37.670078Z,retr-limit-120-ctop-80,altinn-broker-rest-usage,0,public-docs,exploratory-rerank,"simple,navigational,altinn-broker",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,1,1,1,702ec5c8ecd5,702ec5c8ecd5,0f3807200a65,12213,,,,3,"For å bruke **Altinn Broker med REST-API**, viser kilden til **OpenAPI (swagger) for Formidling** som dokumentasjon for API-et [1].  
+
+Det betyr at den relevante REST-API-referansen for **Formidlingstjenesten** er tilgjengelig her: **/nb/api/broker/spec/** [1].  
+
+Kilden sier ikke mer om konkrete REST-kall, autentisering eller arbeidsflyt, så hvis du vil ha en praktisk veiledning, må du bruke OpenAPI-spesifikasjonen som utgangspunkt [1].",

@@ -1,0 +1,49 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,recall-at-5,recall-at-10,recall-at-20,citation-recall,golden-in-search-pool?,golden-in-display?,golden-read?,search-passes,insufficiency-fired?,refinement-corpus-grounded?,enrichment-hits,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,cached-tokens,llm-calls,steps-executed,response,error
+12bcbce7-5df6-49c8-afbe-d7b4e19ce5a8,2026-05-30T08:27:07.910886Z,bundled-default,hard-sms-segment-length,0,public-docs,new,"altinn-notifications,extraction,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,1,false,,0,4,2,1,11584ff27179;d3a8cfef9194;4b526125dd8b;98c77b6f796b,d3a8cfef9194;4b526125dd8b,9c58e66b93a3,18027,4673,380,5053,0,3,3,En SMS-varsling kan inneholde **160 tegn** før den deles i flere segmenter [1][2].,
+622a0ee6-d99f-4ba3-9d61-2a96feeaaafd,2026-05-30T08:27:52.565453Z,bundled-default,hard-consent-rights-token,0,public-docs,new,"compound,extraction,altinn-authorization,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,3,true,false,0,6,1,1,20b17bd8ba74;f29d16a3f660;86325153025c;55feb621a0f4;a0c5bb0014fd;30ee0a93df8e,20b17bd8ba74,20b17bd8ba74,44652,53589,1244,54833,39040,8,3,"I et samtykketoken må du sjekke rettighetene i feltet `authorization_details`, nærmere bestemt i `consentRights`.
+
+Kort sagt:
+- **Hvor ligger de?**  
+  `authorization_details[...].consentRights`
+- **Hva må du sjekke?**  
+  At `consentRights` samsvarer med rettighetene tjenesten krever, typisk:
+  - `action`
+  - `resource`
+  - eventuelt `metadata` hvis samtykket er knyttet til spesifikke parametere
+
+Eksempel fra dokumentasjonen:
+```json
+""authorization_details"": [
+  {
+    ""consentRights"": [
+      {
+        ""action"": [""consent""],
+        ""resource"": [
+          {
+            ""type"": ""urn:altinn:resource"",
+            ""value"": ""samtykke-test-vegard""
+          }
+        ],
+        ""metadata"": {
+          ""inntektsaar"": ""2022""
+        }
+      }
+    ]
+  }
+]
+```
+
+Så: **valider at `consentRights` in…",
+513d9274-accd-4849-9d04-f5820de07d2f,2026-05-30T08:28:15.527679Z,bundled-default,hard-vergemaal-not-in-prod,0,public-docs,new,"open-ended,altinn-authorization,temporal,hard",complete,0,false,chunks+answer,false,0.0,0.0,0.0,0.0,true,true,false,2,false,false,0,2,1,1,bdf22cba7939;a3d68ab4d39f,bdf22cba7939,11ae3c2cf496,22961,4440,448,4888,0,3,3,"For å ta i bruk **vergemål i Altinn 3 i produksjon**, må du bruke **Sivilrettsforvaltningens inndeling av legitimasjoner** som ekstern autorisasjonskilde i Altinn autorisasjon. Vergemål oppnevnes av Statsforvalteren, og informasjon om verge, omfang og legitimasjoner lagres i Folkeregisteret; Altinn autorisasjon mottar disse opplysningene i overføringer fra FReg. [1]
+
+Det viktigste er at **tjenesteeier må angi aktuell(e) legitimasjon(er) i policy-filen til tjenesten** for at verge skal få fullmakt til å bruke tjenesten eller ressursen. [1]
+
+Hvis du vil, kan jeg også hjelpe deg med å finne hvilke **konkrete legitimasjoner** som gjelder for en bestemt tjeneste, for eksempel bank, helse, Kartverket eller Husbanken. [1]",
+4664022a-cb80-49cc-9865-0aa6dd42e944,2026-05-30T08:28:31.825022Z,bundled-default,hard-correspondence-status-disambig,0,public-docs,new,"altinn-correspondence,list,compare,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,0,4,2,2,068a1c1b7fa5;4236d1b1890c;5e79fdbd6efc;c0a62a9174d8,068a1c1b7fa5;4236d1b1890c,3e5d3ec39d0e;b2d5bb1a67a8,16296,4546,400,4946,0,3,3,"Etter at en melding er publisert, kan den ha disse statusene i mottakerflyten: **Hentet (Fetched)**, **Lest (Read)**, **Vedlegg Lastet Ned (AttachmentsDownloaded)**, **Bekreftet (Confirmed)**, **Slettet av Mottaker (PurgedByRecipient)** og **Slettet av Altinn (PurgedByAltinn)**. [1][2]
+
+Det er litt overlapp i kildene: [1] viser statusnavnene i flytdiagrammet, mens [2] beskriver dem med norske navn. Begge peker på samme post-publiseringsfase. [1][2]",
+c23c94fd-6f9e-425e-9233-19b90c21cc09,2026-05-30T08:28:55.660671Z,bundled-default,hard-represent-bridging,0,public-docs,new,"paraphrase,altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,2,false,false,0,3,2,1,3133c3dc4f6f;0b03cca48e03;6a0f583996bb,0b03cca48e03;6a0f583996bb,b0b0a702328c,23835,4855,533,5388,0,3,3,"Det du er ute etter kalles å **gi fullmakt** i Altinn [2].
+
+Hvis du vil at noen skal kunne representere deg overfor det offentlige, må du gi vedkommende fullmakt på vegne av virksomheten eller personen det gjelder [2]. Hvem som faktisk får slike fullmakter kan også være knyttet til **nøkkelroller** i Enhetsregisteret, som gir fullmakter på vegne av virksomheten [1].
+
+Hvis du mener representasjon for en virksomhet, er det altså **gi fullmakt** som er det nærmeste og riktige begrepet [2].",

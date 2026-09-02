@@ -1,0 +1,6 @@
+{:cases
+ [{:id "mono-en-base" :language :en :query "What were the total innovation investments for the Norwegian industrial sector in 2022?" :golden-chunk-ids ["391859380a9f"]}
+  {:id "mono-en-value" :language :en :query "How much did the Norwegian industrial sector invest in innovation in 2022, in NOK billions?" :golden-chunk-ids ["391859380a9f"]}
+  {:id "mono-en-growth" :language :en :query "By what percentage did innovation investments increase in 2022 compared to 2020?" :golden-chunk-ids ["391859380a9f"]}
+  {:id "mono-en-own-rd" :language :en :query "How much was spent on own R&D work in 2022 in the Norwegian industrial sector?" :golden-chunk-ids ["391859380a9f"]}
+  {:id "mono-en-rd-services" :language :en :query "How much did the sector invest in purchasing R&D services from others in 2022?" :golden-chunk-ids ["391859380a9f"]}]}

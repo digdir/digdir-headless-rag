@@ -1,0 +1,28 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,recall-at-5,recall-at-10,recall-at-20,citation-recall,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,steps-executed,response,error
+c292e1eb-8dd8-4122-90e5-f59c3ab9be5b,2026-05-21T23:42:44.485907Z,bundled-default,altinn-dialogporten-about,0,public-docs,public-docs-smoke,"altinn-dialogporten,exact-lookup,simple",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,4,2,1,9f75a7784e9b;fa42f12f0e96;15caa4bf8ead;e4deb94ea9c5,9f75a7784e9b;15caa4bf8ead,9f75a7784e9b,15505,,,,3,"Dialogporten er en løsning som gjør meldinger og dialoger, implementert på Altinn 3 og andre digitale tjenesteplattformer, tilgjengelig for sluttbruker-systemer i et felles format. [1]
+
+Det er også beskrevet som en tjeneste der metadata er tilgjengelig i Dialogporten, mens selve dataene eller meldingen kan hentes fra den aktuelle tjenesten, avhengig av tjenestetype. [2]",
+2d1f2b9a-ecea-449d-bd30-b53fd37bf763,2026-05-21T23:43:27.526947Z,bundled-default,altinn-correspondence-post-published,0,public-docs,exploratory-rerank,"altinn-correspondence,simple,factual",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,8,0,1,831b2a861032;49362e0ed0fa;82ad7fb84323;e8581528604f;dacba59a3448;8b9a47dadc7f;eba28b91137f;6ea4d4ac1d99,,068a1c1b7fa5,43040,,,,3,"Etter at en correspondence er publisert i Altinn, blir den lagret i mottakerens innboks i Altinn.
+
+Det dokumentasjonen sier er også at:
+
+- Altinn Correspondence logger hendelser og prosesser, så det er mulig å spore hva som skjer.
+- Avsender kan få varsler om status, for eksempel om meldingen har nådd mottakeren og om den er åpnet.
+- Det kan sendes automatisk varsel på e-post eller SMS til mottakeren.
+- Hvis meldingen ikke åpnes, kan det sendes en påminnelse etter 7 dager.
+- Correspondences er tilgjengelige så lenge det kreves av lovverk og retningslinjer.
+- En Altinn 3-melding oppretter også automatisk en dialog i Dialogporten.
+
+Kort sagt: publisering betyr ikke at den “forsvinner” — den blir tilgjengelig for mottakeren i Altinn, kan varsles om, spores, og eventuelt åpnes/kvitteres av mot…",
+65042124-9078-42dd-8025-be2b2947f181,2026-05-21T23:43:44.531049Z,faithful-default,altinn-dialogporten-about,0,public-docs,public-docs-smoke,"altinn-dialogporten,exact-lookup,simple",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,6,2,1,9f75a7784e9b;4a9ad6cd2bd1;fa42f12f0e96;ca4e0bd94283;6ede690dc04c;8730e03855c8,9f75a7784e9b;4a9ad6cd2bd1,9f75a7784e9b,17003,,,,3,"Dialogporten er en løsning som tillater meldinger og dialoger implementert på Altinn 3 og andre digitale tjenesteplattformer å være tilgjengelig for sluttbruker-systemer i et felles format. [1]
+
+Det er altså en felles løsning/API-tilnærming for dialoger og meldinger på tvers av plattformer, og dokumentasjonen viser også at det finnes et eget **Dialogporten API** for funksjonaliteten. [1][2]",
+94822133-d098-40f0-8b1e-a161974d4b74,2026-05-21T23:45:32.636703Z,faithful-default,altinn-correspondence-post-published,0,public-docs,exploratory-rerank,"altinn-correspondence,simple,factual",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,10,1,1,408ad13995a1;cdf2643b7965;c205a444b6ab;a24f98bbdf7b;b7ccec4d9b74;d930cbf3c043;498dbb74c98d;b2d5bb1a67a8;8799fc03af21;4ec418abf028,b2d5bb1a67a8,068a1c1b7fa5,108105,,,,3,"Etter at en correspondence er publisert i Altinn, blir den tilgjengelig for mottakeren, og flere ting kan skje:
+
+- Når mottakeren åpner oversikten eller innholdet, settes status til **Fetched**.
+- Når innholdet leses, settes status til **Read**.
+- Vedlegg kan lastes ned når som helst etter publisering, og da settes status til **AttachmentsDownloaded**.
+- Hvis correspondence krever bekreftelse, kan mottakeren også **Confirm** den.
+- Mottakeren kan senere slette den, eller Altinn kan slette den automatisk etter regler for lagring/retensjon.
+
+Viktig detalj: for vanlige meldinger får mange nøkkelroller automatisk lesetilgang, men for **taushetsbelagt post** får ingen automatisk tilgang. Da må hovedadministrator gi tilgang manuelt, og meldingen kan være usynlig i innboksen hvis ingen har riktig…",

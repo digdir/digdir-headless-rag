@@ -1,0 +1,4 @@
+[{:event :request/started :request-id "req-2" :query "Summarize"}
+ {:event :response/chunk :delta "Part 1"}
+ {:event :response/chunk :delta " + Part 2"}
+ {:event :response/finalized :diagnostics {}}]

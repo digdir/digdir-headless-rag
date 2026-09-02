@@ -8,3 +8,68 @@ body {
     font-family: 'Open Sans', Arial, Verdana, sans-serif;
     background-color: rgb(248 250 252);
 }
+
+/* Markdown table overrides for sparse/wide imported HTML tables */
+.markdown-content table th:empty,
+.markdown-content table td:empty {
+  display: none;
+}
+
+.markdown-content table th,
+.markdown-content table td {
+  max-width: none;
+  vertical-align: top;
+}
+
+.markdown-content table th:first-child,
+.markdown-content table td:first-child {
+  width: 40%;
+  min-width: 14rem;
+  text-align: left;
+}
+
+.markdown-content table thead th:not(:first-child),
+.markdown-content table tbody td:not(:first-child) {
+  text-align: right;
+}
+
+.markdown-content table {
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  border-collapse: separate;
+  border-spacing: 0;  
+}
+
+.markdown-content table th,
+.markdown-content table td {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  /* border-bottom: 1px solid rgba(0, 0, 0, 0.2); */
+  margin-left: 3px;
+  margin-right: 3px;
+}
+
+.markdown-content table tr:last-child td {
+  border-bottom: 0;
+}
+
+.markdown-content .formula {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.markdown-content figure.formula {
+  margin: 1rem 0 1.25rem;
+  text-align: center;
+}
+
+.markdown-content .citation {
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 0.75em;
+  font-weight: 600;
+  vertical-align: super;
+}
+
+@keyframes progress-indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}

@@ -1,0 +1,6 @@
+{:cases
+ [{:id "mono-no-base" :language :no :query "Hvor mange årsverk hadde Digdir i 2022?" :golden-chunk-ids ["6a80d6499075"]}
+  {:id "mono-no-utforte" :language :no :query "Hvor mange utførte årsverk hadde Digdir per 31.12.2022?" :golden-chunk-ids ["6a80d6499075"]}
+  {:id "mono-no-stillinger" :language :no :query "Hvor mange årsverk og stillinger hadde Digdir i 2022?" :golden-chunk-ids ["6a80d6499075"]}
+  {:id "mono-no-larlinger" :language :no :query "Hvor mange årsverk hadde Digdir i 2022, og hvor mange lærlinger hadde de?" :golden-chunk-ids ["6a80d6499075"]}
+  {:id "mono-no-reisetid" :language :no :query "Hvor mange utførte årsverk hadde Digdir i 2022 når reisetid og overtid er inkludert?" :golden-chunk-ids ["6a80d6499075"]}]}

@@ -1,0 +1,83 @@
+;; LEVER 2 (read budget) + LEVER 3 (display window) SCREEN — one-at-a-time vs a
+;; SHARED control, in a single job (close-pool-to-read-gap-plan.md).
+;;
+;; Control == the enrichment A/B `enriched-hq` arm (persisted qwen-adapted prompt
+;; + enrichment collection, auto-read off, default budgets) — identical to the
+;; Lever-1 screen's `autoread-0`, so all three screens share one baseline.
+;;
+;; LEVER 2 — read budget (now sweepable via the skill-params lift in core.clj /
+;;   workspace/resolve-budget-limits-from-skill-params). Defaults are
+;;   max-read-operations 6 / max-read-content-length 12000. The agent keeps only
+;;   ~3 chunks (n-retrieved median 3); raise the allowance so it (and any
+;;   auto-read) can keep more. read-hi / read-xhi step both up.
+;;
+;; LEVER 3 — display window. The rerank context loop (rerank.clj:77) stops at the
+;;   FIRST of context-top-k (default 10) OR max-context-length chars (default
+;;   8000) — so to actually widen the window BOTH must rise together (the
+;;   rerank-truncation memory: widen count/total, never shrink per-chunk).
+;;   disp-15 / disp-20 raise context-top-k 10→15/20 with a generous char budget
+;;   so the count is the binding knob. Attacks the pool→display leak (−0.09).
+;;
+;; 5 configs × 8-Q Sweep-1 subset × N=3 = 120 runs, concurrency 1, judge? false
+;; (cloud gpt-5.5 via `bb sweep-judge` after; restore config to local). Run with
+;; the agent-run OPENAI_* env (preserve_thinking + recommended thinking sampling).
+{:configs
+ [{:id "control"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}}}
+  {:id "read-hi"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:max-read-operations 10 :max-read-content-length 24000}}}
+  {:id "read-xhi"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:max-read-operations 12 :max-read-content-length 36000}}}
+  {:id "disp-15"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :rerank {:context-top-k 15 :max-context-length 24000}}}
+  {:id "disp-20"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :rerank {:context-top-k 20 :max-context-length 32000}}}]
+ :repeats 3
+ :judge? false
+ :order :interleaved
+ :concurrency 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-03-store-filer-virusskann"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-dialog-01-aktivitetslogg"
+                          "ue-events-01-abonnement-filtre"
+                          "ue-corr-02-transmission-group-dialog"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-sys-03-brukerstyrt-vs-leverandorstyrt"}}}

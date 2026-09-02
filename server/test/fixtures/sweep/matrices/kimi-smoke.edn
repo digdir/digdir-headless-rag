@@ -1,0 +1,27 @@
+;; MODEL HEAD-TO-HEAD smoke — 3 diverse questions, N=1, deployed snippet-AB config.
+;; Validates the FULL agent path (tool-calling, retrieval, snippet display, read,
+;; synthesis) per model AND gives a per-run wall-clock to size the overnight
+;; schedule. broker-01 is the canonical under-enumeration case. judge? false.
+{:configs
+ [{:id "deployed"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true}}}]
+ :repeats 1
+ :judge? false
+ :order :interleaved
+ :concurrency 3
+ :max-clarification-rounds 1
+ :run-timeout-ms 3000000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter
+ {:ids
+  #{"ue-broker-01-filoverforing-tilstander"
+    "ue-authz-05-xacml-policy-regelstruktur"
+    "ue-studio-03-datamodell-filer"}}}

@@ -12,5 +12,8 @@
 
     <!-- org.eclipse.jetty, datomic -->
     <logger name="electric-starter-app" level="DEBUG" additivity="false"><appender-ref ref="STDOUT" /></logger>
+    <logger name="digdir.api" level="DEBUG" additivity="false"><appender-ref ref="STDOUT" /></logger>
     <logger name="org.eclipse.jetty.server" level="WARN" additivity="false"><appender-ref ref="STDOUT" /></logger>
+    <logger name="com.mchange" level="WARN" />
+    <logger name="datahike" level="WARN" />
 </configuration>

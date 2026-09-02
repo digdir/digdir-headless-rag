@@ -4,8 +4,7 @@
    Records who changed what, when, with before/after values.
    Encrypted values are redacted in audit logs."
   (:require [datahike.api :as d]
-            [nano-id.core :refer [nano-id]]
-            [digdir.config.crypto :as crypto]))
+            [nano-id.core :refer [nano-id]]))
 
 ;; =============================================================================
 ;; Constants
@@ -13,90 +12,120 @@
 
 (def ^:private redacted-text "[REDACTED]")
 
+(defn- summarize-api-key-grants
+  [{:keys [pipeline-id dataset-scopes agent-refs]}]
+  (cond-> {}
+    pipeline-id (assoc :pipeline-id pipeline-id)
+    (seq dataset-scopes) (assoc :dataset-scopes dataset-scopes)
+    (seq agent-refs) (assoc :agent-refs agent-refs)))
+
 ;; =============================================================================
 ;; Logging
 ;; =============================================================================
 
-(defn log-change!
-  "Log a configuration change.
-
-   Args:
-     conn - Datahike connection
-     opts - Map with:
-       :path - Config path
-       :tenant - Tenant identifier
-       :environment - Environment
-       :action - :create, :update, or :delete
-       :previous-value - Value before change (raw/encrypted)
-       :new-value - Value after change (decoded)
-       :encrypted? - Whether the value is encrypted
-       :user-email - Email of user who made the change
-       :user-id - ID of user who made the change
-       :ip-address - IP address of requester"
-  [conn {:keys [path tenant environment action previous-value new-value
-                encrypted? user-email user-id ip-address]}]
+(defn change-tx-data
+  "Generate transaction data for a configuration change audit record."
+  [{:keys [path tenant tenant-config-key action previous-value new-value
+           client skill-graph pipeline
+           encrypted? user-email user-id ip-address]}]
   (let [now (System/currentTimeMillis)
         audit-id (nano-id)
+        displayed-previous (if encrypted? redacted-text (or previous-value ""))
+        displayed-new (if encrypted? redacted-text (pr-str new-value))]
+    (cond-> {:audit/id audit-id
+             :audit/timestamp now
+             :audit/action action
+             :audit/config-path path
+             :audit/previous-value (str displayed-previous)
+             :audit/new-value (str displayed-new)}
+      user-email (assoc :audit/user-email user-email)
+      user-id (assoc :audit/user-id user-id)
+      tenant (assoc :audit/tenant tenant)
+      tenant-config-key (assoc :audit/tenant-config-key tenant-config-key)
+      client (assoc :audit/client client)
+      skill-graph (assoc :audit/skill-graph skill-graph)
+      pipeline (assoc :audit/pipeline pipeline)
+      ip-address (assoc :audit/ip-address ip-address)
+      true (assoc :audit/config-def [:config-def/path path]))))
 
-        ;; Redact encrypted values for security
-        displayed-previous (if encrypted?
-                             redacted-text
-                             (or previous-value ""))
-        displayed-new (if encrypted?
-                        redacted-text
-                        (pr-str new-value))
-
-        tx-data (cond-> {:audit/id audit-id
-                         :audit/timestamp now
-                         :audit/action action
-                         :audit/config-path path
-                         :audit/previous-value (str displayed-previous)
-                         :audit/new-value (str displayed-new)}
-                  user-email (assoc :audit/user-email user-email)
-                  user-id (assoc :audit/user-id user-id)
-                  tenant (assoc :audit/tenant tenant)
-                  environment (assoc :audit/environment environment)
-                  ip-address (assoc :audit/ip-address ip-address)
-
-                  ;; Add references if definition exists
-                  true (assoc :audit/config-def [:config-def/path path]))]
-
+(defn log-change!
+  "Log a configuration change. Executes a separate transaction."
+  [conn opts]
+  (let [tx-data (change-tx-data opts)]
     (d/transact conn {:tx-data [tx-data]})
-    audit-id))
+    (:audit/id tx-data)))
+
+(defn api-key-change-tx-data
+  "Generate transaction data for an API key operation audit record."
+  [{:keys [action api-key-id api-key-name pipeline-id dataset-scopes agent-refs
+           previous-pipeline-id previous-dataset-scopes previous-agent-refs
+           user-email user-id ip-address]}]
+  (let [now (System/currentTimeMillis)
+        audit-id (nano-id)
+        previous-summary (summarize-api-key-grants {:pipeline-id previous-pipeline-id
+                                                    :dataset-scopes previous-dataset-scopes
+                                                    :agent-refs previous-agent-refs})
+        current-summary (summarize-api-key-grants {:pipeline-id pipeline-id
+                                                   :dataset-scopes dataset-scopes
+                                                   :agent-refs agent-refs})]
+    (cond-> {:audit/id audit-id
+             :audit/timestamp now
+             :audit/action action
+             :audit/api-key-id api-key-id
+             :audit/api-key-name api-key-name}
+      pipeline-id (assoc :audit/api-key-pipeline-id pipeline-id)
+      user-email (assoc :audit/user-email user-email)
+      user-id (assoc :audit/user-id user-id)
+      ip-address (assoc :audit/ip-address ip-address)
+      (seq previous-summary) (assoc :audit/previous-value (pr-str previous-summary))
+      (seq current-summary) (assoc :audit/new-value (pr-str current-summary)))))
 
 (defn log-api-key-change!
-  "Log an API key operation (create, revoke, update).
+  "Log an API key operation. Executes a separate transaction."
+  [conn opts]
+  (let [tx-data (api-key-change-tx-data opts)]
+    (d/transact conn {:tx-data [tx-data]})
+    (:audit/id tx-data)))
 
-   Args:
-     conn - Datahike connection
-     opts - Map with:
-       :action - :create, :revoke, or :update
-       :api-key-id - The API key ID
-       :api-key-name - Name of the API key
-       :entity-id - Associated entity ID
-       :previous-entity-id - (for updates) previous entity ID
-       :user-email - Email of user performing action
-       :user-id - ID of user performing action
-       :ip-address - Optional IP address"
-  [conn {:keys [action api-key-id api-key-name entity-id
-                previous-entity-id user-email user-id ip-address]}]
+(defn global-change-tx-data
+  "Transaction data for a global-layer change: :global-edit, :pin, or :unpin.
+
+   Opts:
+     :action       - :global-edit | :pin | :unpin (required)
+     :path         - config path (required)
+     :tenant       - tenant ID (required for :pin and :unpin)
+     :global-version - global-config version number (required for :global-edit and :pin)
+     :changelog    - operator-authored note (for :global-edit)
+     :previous-value / :new-value - pr-str'd values (encrypted values are redacted)
+     :encrypted?   - redact the displayed values when true
+     :user-email / :user-id / :ip-address - actor metadata"
+  [{:keys [action path tenant global-version changelog
+           previous-value new-value encrypted?
+           user-email user-id ip-address]}]
   (let [now (System/currentTimeMillis)
         audit-id (nano-id)
-        tx-data (cond-> {:audit/id audit-id
-                         :audit/timestamp now
-                         :audit/action action
-                         :audit/api-key-id api-key-id
-                         :audit/api-key-name api-key-name
-                         :audit/api-key-entity-id entity-id}
-                  user-email (assoc :audit/user-email user-email)
-                  user-id (assoc :audit/user-id user-id)
-                  ip-address (assoc :audit/ip-address ip-address)
-                  previous-entity-id (assoc :audit/previous-value
-                                            (str "entity-id: " previous-entity-id))
-                  (and entity-id (= action :update)) (assoc :audit/new-value
-                                                            (str "entity-id: " entity-id)))]
+        displayed-previous (if encrypted? redacted-text (or previous-value ""))
+        displayed-new (if encrypted? redacted-text (pr-str new-value))]
+    (cond-> {:audit/id audit-id
+             :audit/timestamp now
+             :audit/action action
+             :audit/config-path path
+             :audit/previous-value (str displayed-previous)
+             :audit/new-value (str displayed-new)
+             :audit/config-def [:config-def/path path]}
+      user-email (assoc :audit/user-email user-email)
+      user-id (assoc :audit/user-id user-id)
+      tenant (assoc :audit/tenant tenant)
+      ip-address (assoc :audit/ip-address ip-address)
+      (some? global-version) (assoc :audit/global-version global-version)
+      (some? changelog) (assoc :audit/changelog changelog))))
+
+(defn log-global-change!
+  "Log a global-edit, pin, or unpin event. Executes a separate transaction."
+  [conn opts]
+  (let [tx-data (global-change-tx-data opts)]
     (d/transact conn {:tx-data [tx-data]})
-    audit-id))
+    (:audit/id tx-data)))
 
 (defn get-api-key-audit-history
   "Get audit history for a specific API key.
@@ -138,10 +167,10 @@
      path - Config path
      opts - Optional filters:
        :tenant - Filter by tenant
-       :environment - Filter by environment
+       :tenant-config-key - Filter by tenant-config-key
        :limit - Max entries to return (default 100)
        :offset - Entries to skip (default 0)"
-  [db path & [{:keys [tenant environment limit offset]
+  [db path & [{:keys [tenant tenant-config-key limit offset]
                :or {limit 100 offset 0}}]]
   (let [base-results (d/q '[:find [(pull ?e [*]) ...]
                             :in $ ?path
@@ -150,7 +179,7 @@
                           db path)
         filtered (cond->> base-results
                    tenant (filter #(= tenant (:audit/tenant %)))
-                   environment (filter #(= environment (:audit/environment %))))
+                   tenant-config-key (filter #(= tenant-config-key (:audit/tenant-config-key %))))
         sorted (sort-by :audit/timestamp > filtered)]
     (->> sorted
          (drop offset)
@@ -163,19 +192,19 @@
      db - Datahike database value
      opts - Optional filters:
        :tenant - Filter by tenant
-       :environment - Filter by environment
+       :tenant-config-key - Filter by tenant-config-key
        :user-email - Filter by user
        :action - Filter by action type (:create, :update, :delete)
        :since - Timestamp to filter changes after
        :limit - Max entries to return (default 100)"
-  [db & [{:keys [tenant environment user-email action since limit]
+  [db & [{:keys [tenant tenant-config-key user-email action since limit]
           :or {limit 100}}]]
   (let [base-results (d/q '[:find [(pull ?e [*]) ...]
                             :where [?e :audit/id]]
                           db)
         filtered (cond->> base-results
                    tenant (filter #(= tenant (:audit/tenant %)))
-                   environment (filter #(= environment (:audit/environment %)))
+                   tenant-config-key (filter #(= tenant-config-key (:audit/tenant-config-key %)))
                    user-email (filter #(= user-email (:audit/user-email %)))
                    action (filter #(= action (:audit/action %)))
                    since (filter #(> (:audit/timestamp %) since)))
@@ -200,7 +229,7 @@
      start-time - Start timestamp (millis)
      end-time - End timestamp (millis)
      opts - Same filter options as get-recent-changes"
-  [db start-time end-time & [{:keys [tenant environment user-email action limit]
+  [db start-time end-time & [{:keys [tenant tenant-config-key user-email action limit]
                               :or {limit 1000}}]]
   (let [base-results (d/q '[:find [(pull ?e [*]) ...]
                             :in $ ?start ?end
@@ -211,7 +240,7 @@
                           db start-time end-time)
         filtered (cond->> base-results
                    tenant (filter #(= tenant (:audit/tenant %)))
-                   environment (filter #(= environment (:audit/environment %)))
+                   tenant-config-key (filter #(= tenant-config-key (:audit/tenant-config-key %)))
                    user-email (filter #(= user-email (:audit/user-email %)))
                    action (filter #(= action (:audit/action %))))
         sorted (sort-by :audit/timestamp > filtered)]
@@ -227,14 +256,14 @@
    Args:
      db - Datahike database value
      opts - Optional filters (same as get-recent-changes)"
-  [db & [{:keys [tenant environment user-email action since]}]]
+  [db & [{:keys [tenant tenant-config-key user-email action since]}]]
   (let [base-count (d/q '[:find (count ?e) .
                           :where [?e :audit/id]]
                         db)]
     ;; For filtered counts, we need to query and filter
-    (if (or tenant environment user-email action since)
+    (if (or tenant tenant-config-key user-email action since)
       (count (get-recent-changes db {:tenant tenant
-                                     :environment environment
+                                     :tenant-config-key tenant-config-key
                                      :user-email user-email
                                      :action action
                                      :since since
@@ -254,7 +283,27 @@
      :by-action (frequencies (map :audit/action all-changes))
      :by-user (frequencies (map :audit/user-email all-changes))
      :by-tenant (frequencies (map :audit/tenant all-changes))
-     :by-environment (frequencies (map :audit/environment all-changes))}))
+     :by-tenant-config-key (frequencies (map :audit/tenant-config-key all-changes))}))
+
+(defn distinct-audit-tenants
+  "Distinct non-nil tenants present in the audit log, sorted."
+  [db]
+  (->> (d/q '[:find [?t ...]
+              :where [_ :audit/tenant ?t]]
+            db)
+       (remove nil?)
+       sort
+       vec))
+
+(defn distinct-audit-tenant-config-keys
+  "Distinct non-nil tenant-config-keys present in the audit log, sorted."
+  [db]
+  (->> (d/q '[:find [?k ...]
+              :where [_ :audit/tenant-config-key ?k]]
+            db)
+       (remove nil?)
+       sort
+       vec))
 
 ;; =============================================================================
 ;; Cleanup
@@ -277,18 +326,3 @@
     (when (seq old-entries)
       (d/transact conn {:tx-data (mapv (fn [e] [:db/retractEntity e]) old-entries)}))
     (count old-entries)))
-
-(comment
-  ;; Usage examples:
-
-  ;; Get recent changes
-  (get-recent-changes @conn {:limit 10})
-
-  ;; Get history for a specific path
-  (get-audit-history @conn "services.azure-openai.api-key")
-
-  ;; Get changes by user
-  (get-changes-by-user @conn "admin@digdir.no")
-
-  ;; Get stats
-  (get-change-stats @conn {:since (- (System/currentTimeMillis) (* 7 24 60 60 1000))}))

@@ -1,0 +1,1 @@
+{:configs [{:id "bundled-default", :skill-graph-id :builtin/agent-rag-graph-bundled}], :n-questions 5, :repeats 1, :execution-scope {:tenant "digdir", :dataset-config-key "default", :agent-id "builtin/agent-rag-agent"}, :max-clarification-rounds 1, :run-timeout-ms 300000, :started-at "2026-05-30T08:26:49.864287Z"}

@@ -79,11 +79,11 @@
   (when-let [tenants-str (:permission/tenants permission)]
     (edn/read-string tenants-str)))
 
-(defn permission->environments
-  "Parse a permission's EDN-encoded environments string."
+(defn permission->tenant-config-keys
+  "Parse a permission's EDN-encoded tenant-config-keys string."
   [permission]
-  (when-let [envs-str (:permission/environments permission)]
-    (edn/read-string envs-str)))
+  (when-let [keys-str (:permission/tenant-config-keys permission)]
+    (edn/read-string keys-str)))
 
 (defn permission->actions
   "Parse a permission's EDN-encoded actions string."
@@ -92,20 +92,20 @@
     (edn/read-string actions-str)))
 
 (defn matches-context?
-  "Check if a permission matches the tenant/environment context."
-  [permission tenant environment]
+  "Check if a permission matches the tenant/tenant-config-key context."
+  [permission tenant tenant-config-key]
   (let [perm-tenants (permission->tenants permission)
-        perm-envs (permission->environments permission)]
+        perm-keys (permission->tenant-config-keys permission)]
     (and
      ;; Check tenant
      (or (= :* perm-tenants)
          (nil? perm-tenants)
          (and (set? perm-tenants) (contains? perm-tenants tenant)))
 
-     ;; Check environment
-     (or (= :* perm-envs)
-         (nil? perm-envs)
-         (and (set? perm-envs) (contains? perm-envs environment))))))
+     ;; Check tenant-config-key
+     (or (= :* perm-keys)
+         (nil? perm-keys)
+         (and (set? perm-keys) (contains? perm-keys tenant-config-key))))))
 
 (defn permission-matches?
   "Check if a permission matches a config entry and action.
@@ -115,10 +115,10 @@
      config-def - Config definition entity
      action - :read or :write
      tenant - Current tenant
-     environment - Current environment
+     tenant-config-key - Current tenant-config-key
 
    Returns: true if permission grants the requested access"
-  [permission config-def action tenant environment]
+  [permission config-def action tenant tenant-config-key]
   (let [perm-attrs (permission->attributes permission)
         perm-actions (permission->actions permission)
 
@@ -131,8 +131,8 @@
      (or (nil? perm-actions)
          (contains? perm-actions action))
 
-     ;; Check context (tenant/environment)
-     (matches-context? permission tenant environment)
+     ;; Check context (tenant/tenant-config-key)
+     (matches-context? permission tenant tenant-config-key)
 
      ;; Check all attribute dimensions
      (matches-attribute? config-service (:service perm-attrs :*))
@@ -179,10 +179,10 @@
      action - :read or :write
      opts - Options:
        :tenant - Current tenant (default: nil)
-       :environment - Current environment (default: nil)
+       :tenant-config-key - Current tenant-config-key (default: nil)
 
    Returns: true if access is allowed"
-  [db user-id path action & [{:keys [tenant environment]}]]
+  [db user-id path action & [{:keys [tenant tenant-config-key]}]]
   (let [config-def (d/q '[:find (pull ?e [*]) .
                           :in $ ?path
                           :where [?e :config-def/path ?path]]
@@ -194,7 +194,7 @@
       true
 
       ;; Check if any permission grants access
-      (some #(permission-matches? % config-def action tenant environment)
+      (some #(permission-matches? % config-def action tenant tenant-config-key)
             user-permissions))))
 
 (defn evaluate-access
@@ -203,7 +203,7 @@
    Returns: {:allowed? bool
              :matched-permission permission-id or nil
              :reason string}"
-  [db user-id path action & [{:keys [tenant environment]}]]
+  [db user-id path action & [{:keys [tenant tenant-config-key]}]]
   (let [config-def (d/q '[:find (pull ?e [*]) .
                           :in $ ?path
                           :where [?e :config-def/path ?path]]
@@ -222,7 +222,7 @@
        :reason "User has no permissions assigned"}
 
       :else
-      (if-let [matching (first (filter #(permission-matches? % config-def action tenant environment)
+      (if-let [matching (first (filter #(permission-matches? % config-def action tenant tenant-config-key)
                                        user-permissions))]
         {:allowed? true
          :matched-permission (:permission/id matching)
@@ -239,15 +239,15 @@
      user-id - User ID
      config-defs - List of config definition entities
      action - :read or :write
-     opts - Options (tenant, environment)
+     opts - Options (tenant, tenant-config-key)
 
    Returns: Filtered list of config definitions"
   [db user-id config-defs action & [opts]]
   (let [user-permissions (get-user-permissions db user-id)
         tenant (:tenant opts)
-        env (:environment opts)]
+        tenant-config-key (:tenant-config-key opts)]
     (filter (fn [config-def]
-              (some #(permission-matches? % config-def action tenant env)
+              (some #(permission-matches? % config-def action tenant tenant-config-key)
                     user-permissions))
             config-defs)))
 
@@ -311,16 +311,16 @@
        :description - Description
        :attributes - ABAC attribute map {:service :* :sensitivity #{:public} ...}
        :tenants - Tenant access (:* or #{\"ka\" \"altinn\"})
-       :environments - Environment access (:* or #{\"prod\" \"test\"})
+       :tenant-config-keys - tenant-config-key access (:* or #{\"prod\" \"test\"})
        :actions - Allowed actions (#{:read} or #{:read :write})"
-  [conn {:keys [id name description attributes tenants environments actions]}]
+  [conn {:keys [id name description attributes tenants tenant-config-keys actions]}]
   (let [now (System/currentTimeMillis)]
     (d/transact conn {:tx-data [{:permission/id id
                                  :permission/name name
                                  :permission/description description
                                  :permission/attributes (pr-str attributes)
                                  :permission/tenants (pr-str tenants)
-                                 :permission/environments (pr-str environments)
+                                 :permission/tenant-config-keys (pr-str tenant-config-keys)
                                  :permission/actions (pr-str actions)
                                  :permission/created-at now}]})))
 
@@ -424,6 +424,16 @@
           (nil? user)
           (do
             (println "  User not found:" email)
+            ;; NAME THE PATH THAT WORKS (#436). This boot-time hook only GRANTS to
+            ;; users that already exist, while the setup wizard's
+            ;; `auth.migration/migrate-admin-users!` both CREATES and grants from the
+            ;; same ADMIN_USER_EMAILS. One variable, two consumers, opposite
+            ;; behaviour — so on an empty database this line is the whole story a
+            ;; newcomer gets, and it reads as a dead end when a path exists.
+            (println "    ADMIN_USER_EMAILS only GRANTS admin here; it does not create users.")
+            (println "    The setup wizard creates them from the same variable:")
+            (println "      java -cp app.jar clojure.main -m digdir.setup   (in the container)")
+            (println "      bb setup                                        (with the repo toolchain)")
             (swap! results update :not-found conj email))
 
           ;; Check if already has admin-full
@@ -535,54 +545,3 @@
            (apply clojure.set/union)
            (or #{})))))
 
-(defn get-user-accessible-environments
-  "Get all environments a user has access to based on their permissions.
-   Returns a set of environment strings that the user can access.
-
-   Args:
-     db - Datahike database value
-     user-id - User ID
-
-   Returns: Set of accessible environment strings"
-  [db user-id]
-  (let [permissions (get-user-permissions db user-id)
-        all-envs #{"prod" "staging" "test" "dev"}]
-    (if (some #(= :* (permission->environments %)) permissions)
-      ;; User has wildcard access to all environments
-      all-envs
-      ;; Collect specific environment access from all permissions
-      (let [accessible (->> permissions
-                            (map permission->environments)
-                            (filter set?)
-                            (apply clojure.set/union))]
-        (if (seq accessible)
-          accessible
-          ;; If user has no explicit environment restrictions, allow all
-          all-envs)))))
-
-(comment
-  ;; Usage examples:
-
-  ;; Check if user can read a config
-  (can-access? @conn "user-123" "services.azure-openai.api-key" :read
-               {:tenant "ka" :environment "prod"})
-
-  ;; Get detailed evaluation
-  (evaluate-access @conn "user-123" "services.azure-openai.api-key" :read
-                   {:tenant "ka" :environment "prod"})
-
-  ;; Grant permission to user
-  (grant-permission! conn "user-123" "prompt-editor")
-
-  ;; Sync admin permissions from ADMIN_USER_EMAILS
-  (sync-admin-permissions! conn)
-
-  ;; Create custom permission
-  (create-permission! conn
-                      {:id "ka-config-editor"
-                       :name "KA Config Editor"
-                       :description "Can edit KA tenant config"
-                       :attributes {:service :* :sensitivity #{:public :internal} :function :*}
-                       :tenants #{"ka"}
-                       :environments :*
-                       :actions #{:read :write}}))

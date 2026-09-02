@@ -1,0 +1,6 @@
+[{:event :request/started
+  :request-id "req-1"
+  :query "What is Digdir?"}
+ {:event :response/finalized
+  :text "Digdir is a Norwegian public-sector digitalization agency."
+  :diagnostics {}}]

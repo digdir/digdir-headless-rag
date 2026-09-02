@@ -1,0 +1,9 @@
+[{:event :request/started :request-id "req-10" :query "Skills"}
+ {:event :stage/started :stage :skills-init :label "Initializing skills"}
+ {:event :stage/completed :stage :skills-init :label "Initializing skills" :duration-ms 9}
+ {:event :stage/started :stage :skills-query-planning :label "Planning queries"}
+ {:event :stage/completed :stage :skills-query-planning :label "Planning queries" :duration-ms 18}
+ {:event :stage/started :stage :skills-retrieval :label "skills-retrieval"}
+ {:event :stage/completed :stage :skills-retrieval :label "skills-retrieval" :duration-ms 31}
+ {:event :stage/started :stage :skills-generating :label "Generating response"}
+ {:event :response/chunk :delta "skills answer"}]

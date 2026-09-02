@@ -1,0 +1,30 @@
+;; SMOKE GATE for the Kimi weekend queue. Purpose: confirm the query-planner
+;; deployment-name fix took effect — i.e. that with azure OFF + agent model
+;; = moonshotai/Kimi-K2.6 the planner LLM call no longer 404s and the
+;; corpus-aware-2hop expansion actually fires (NOT a raw-query fallback).
+;; The orchestration script aborts the whole queue if this run logs any
+;; "query-planner LLM call failed" / "falling back to raw query" / 404.
+;; 3 Q, N=1, conc-3, judge? false. Deployed snippet-AB config (the prod arm).
+{:configs
+ [{:id "deployed"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true
+                     :no-tool-call-retry true}}}]
+ :repeats 1
+ :judge? false
+ :order :interleaved
+ :concurrency 3
+ :max-clarification-rounds 1
+ :run-timeout-ms 3000000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter
+ {:ids #{"ue-broker-01-filoverforing-tilstander"
+         "ue-studio-03-datamodell-filer"
+         "ue-authz-06-xacml-obligation-authlevel"}}}

@@ -1,0 +1,660 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,answer-judge-verdict,answer-judge-score,answer-judge-rationale,answer-judge-model,task-difficulty,task-difficulty-rationale,recall-at-5,recall-at-10,recall-at-20,citation-recall,golden-in-search-pool?,golden-pool-rank,golden-in-display?,golden-display-rank,golden-read?,golden-features,pool-head,search-passes,issued-queries,insufficiency-fired?,refinement-corpus-grounded?,enrichment-hits,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,cached-tokens,llm-calls,reasoning-tokens,finish-reason,length-finish?,empty?,steps-executed,response,error
+0e25af14-d607-4862-80c0-cd6b070bfbf0,2026-06-07T09:53:11.032282Z,autoread-0,ue-broker-03-store-filer-virusskann,0,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,1,Altinn Broker file size limit maximum | Altinn Broker 2GB filstørrelse begrensning | Altinn broker max filesize upload,false,,18,2,1,1,0127378417da;14d38d41ea63,0127378417da,462659d19025,94213,5068,284,5352,0,2,137,tool_calls,false,false,3,"
+
+Yes, you can send files larger than 2 GB through Altinn Broker [1]. The maximum supported file size depends on whether virus scanning is used for your transfer:
+- Up to **1600 GB** without virus scanning [1].
+- Up to **2 GB** with virus scanning [1].
+
+Because the question does not specify if you intend to enable or require virus scanning, both limits apply depending on how that specific setting is configured. If you opt out of virus scanning for a transfer, files larger than 2 GB can be sent up to the system's maximum limit of 1600 GB securely without it [1].",
+4da06495-f7d2-4960-b482-3b0ba84691b3,2026-06-07T09:55:07.744522Z,autoread-3,ue-broker-03-store-filer-virusskann,0,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,93,false,,false,"df9c39f17a534 R— P1.0 h1.0 or0.5 L693 0/? ty:hypothetical-questions b[0.0,0.0,0.0,0.0,0.0,0.0] +q | Very large files","d7a17bf22a348 R23.2 P1.4 h1.0 or1.0 L1849 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Rate limits ;; d479e27df943e R22.7 P3.6 h3.0 or1.6 L2440 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | What do you get ;; db6c43b81c669 R20.4 P1.5 h1.0 or1.0 L2528 2/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Technical overview ;; d0fd4df1a9003 R20.2 P4.8 h4.0 or2.2 L2833 1/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] +q | News ;; dfc4f74301e59 R20.0 P2.5 h2.0 or1.2 L1362 2/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Basic concepts ;; db55635ab8974 R19.9 P3.6 h3.0 or1.6 L1424 2/? ty:content+hypothetical-questions+metadata b[0.0,0.0,0.0,0.4,0.1,0.0] +q | About ;; dfc4f74301e59 R19.8 P3.7 h3.0 or1.9 L2134 3/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Basic concepts ;; d4723f71d82f9 R19.1 P2.5 h2.0 or1.1 L1793 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System interfaces",1,Altinn Broker file size limit maximum upload | maximumfilestørrelse maxsize attachment broker | filstørrelsesbegrensning filopplasting broker,false,,30,2,1,1,a7b06845f4f1;0127378417da,0127378417da,462659d19025,116709,8560,755,9315,0,4,450,tool_calls,false,false,3,"
+
+Based on the provided documentation, yes, you can send files larger than 2GB through Altinn Broker. The maximum supported file size depends on your security configuration [1]:
+
+* **Without virus scanning**: Transfers of up to `1600 GB` are supported [1].
+* **With virus scanning enabled**: The limit is capped at `2 GB` [1].",
+93302650-f20b-42b9-9b73-b951ea049a95,2026-06-07T09:57:06.283027Z,autoread-5,ue-broker-03-store-filer-virusskann,0,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"df9c39f17a534 R20.7 P3.8 h3.0 or2.0 L693 0/? ty:content+hypothetical-questions+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] +q | Very large files","d0fd4df1a9003 R21.3 P3.6 h3.0 or1.0 L2833 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] +q | News",1,what is altinn broker s maximum file size limit for uploading large files | file upload accepted attachment types max file size in mb | files up to 2gb limited to 2gb file size | attachments up to 5 gb,false,,45,2,2,1,462659d19025;7fcc0669c880,462659d19025;7fcc0669c880,462659d19025,118530,6818,429,7247,0,3,235,tool_calls,false,false,3,"
+
+Yes, you can send files larger than 2 GB through Altinn Broker under specific conditions [1][2]. 
+
+By default, Broker restricts file transfers up to a maximum of 2 GB due to virus scanning restrictions [1]. You can bypass this limit only if the receiving resource has disabled its virus scan (which requires pre-approval by the platform providers) [1]. Under these configuration-dependent setups, there is no single hard-coded cap stated for daily use; however, documents note that ""the theoretical maximum size is 1.6TB"" and you can request infrastructure changes to accommodate larger files if necessary [1]. In practice, operationally the system has only been regularly benchmarked up to a capacity of 100 GB [1], which differs from the discrete scope defined under the upcoming software enhance…",
+e5fb6f29-a543-4dd3-9dfd-f56574e66cb3,2026-06-07T09:58:50.394853Z,autoread-0,ue-broker-03-store-filer-virusskann,1,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,82,false,,false,"df9c39f17a534 R— P1.0 h1.0 or0.1 L693 0/? ty:hypothetical-questions b[0.0,0.0,0.0,0.0,0.0,0.0] +q | Very large files","db55635ab8974 R19.5 P3.3 h3.0 or0.7 L1198 1/? ty:hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.1,0.1,0.0] +q | About ;; d17d3c3058f6c R19.0 P2.6 h2.0 or1.0 L498 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Service owner ;; dfc4f74301e59 R18.5 P2.4 h2.0 or0.6 L1902 0/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Basic concepts ;; d910e06f25460 R18.5 P2.5 h2.0 or1.0 L2227 7/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Solution architecture ;; d0fd4df1a9003 R18.4 P4.7 h4.0 or1.9 L2833 1/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] +q | News ;; db55635ab8974 R18.4 P2.2 h2.0 or0.6 L1424 2/? ty:hypothetical-questions+metadata b[0.0,0.0,0.0,0.1,0.1,0.0] +q | About ;; d479e27df943e R18.3 P3.6 h3.0 or1.7 L2440 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | What do you get ;; d8ee3ca463f94 R18.2 P2.5 h2.0 or1.0 L856 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Security",1,Altinn Broker filstørrelse begrensning | maximal文件大小 Altinn Broker data transfer size limit resources concurrency,false,,29,1,1,1,7fcc0669c880,7fcc0669c880,462659d19025,104110,6668,490,7158,0,3,298,tool_calls,false,false,3,"
+
+Yes, you can send files larger than 2 GB through Altinn Broker [1]. According to the provided context, it supports ""the transfer of files larger than 2 GB, up to 100 GB or more"" [1]. The source terminology explicitly includes ""or more,"" which indicates that while 100 GB is cited as a benchmark, the exact maximum file size may extend beyond this threshold depending on specific configurations or future updates.",
+6198f38e-d926-4c35-8133-2fca46e11c40,2026-06-07T10:02:45.213673Z,autoread-3,ue-broker-03-store-filer-virusskann,1,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,45,false,,false,"df9c39f17a534 R— P1.2 h1.0 or0.7 L693 0/? ty:hypothetical-questions b[0.1,0.0,0.0,0.0,0.1,0.0] +q | Very large files","d479e27df943e R22.7 P3.6 h3.0 or1.4 L2440 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | What do you get ;; d7a17bf22a348 R21.7 P1.4 h1.0 or0.7 L1849 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Rate limits ;; db6c43b81c669 R21.3 P3.6 h3.0 or1.3 L2528 2/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Technical overview ;; d0fd4df1a9003 R20.0 P4.7 h4.0 or1.3 L2833 1/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] +q | News ;; d479e27df943e R19.7 P2.2 h2.0 or0.8 L1353 1/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | What do you get ;; db55635ab8974 R18.9 P4.7 h4.0 or1.3 L1198 1/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] +q | About ;; dae6e914f9ecd R18.5 P1.4 h1.0 or0.7 L2808 3/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Capabilities ;; d32b33dd7d78f R18.5 P2.5 h2.0 or0.8 L1578 0/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Broker",1,altinn broker maximum file size limit | send files using altinn broker 2GB large | broker message size constraint memory limit,false,,37,7,0,1,01fdec6b497d;7fcc0669c880;5bf7538943b5;826281f6dacf;a7b06845f4f1;fb9f9b251b38;82809367a4d2,,462659d19025,234816,27859,1410,29269,0,6,668,stop,false,false,3,"
+
+Basert på dokumentasjonen i Altinn Broker, kan jeg gi deg følgende svar:
+
+## Nåværende begrensning
+
+Akkurat nå **kan ikke filer i Altinn 3 være større enn 1 GB**. Dette er fordi maksfilstørrelsen følger den samme begrensningen som finnes i Altinn 2 (som skal refereres til som max filesize restriction). Se dokumentasjonen under [Technical overview](en/broker/broker-transition/technical-overview/index.md):
+
+> ""Files in Altinn 3 cannot be larger than 1 GB, as this is the maximum file size in Altinn 2.""
+
+## Fremtidig støtte for filer over 2 GB
+
+Ifølge **News**-siden er det planlagt ny funksjonalitet:
+
+- **""Support for really large files""**: Support for transfer of files larger than 2 GB, up to **100 GB or more**
+- Forventet tilgjengelighet: **Q4 2025**
+- Mer informasjon finnes på [GitHub-iss…",
+76b9d1df-b8f0-4108-9558-39b3a1da7fb7,2026-06-07T10:05:44.767197Z,autoread-5,ue-broker-03-store-filer-virusskann,1,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,0,,false,,0,0,0,1,,,462659d19025,179551,2814,431,3245,0,2,353,stop,false,false,3,"
+
+<reasoning> The user asked a specific technical question about Altinn Broker file limits in English. According to my constraints and the injected `[SYSTEM: You have used all available iterations]` instruction at the end of the text, I am forbidden from calling further tools (no more searches) for this turn. Because no prior search results or context containing ""Altinn Broker"" limitations are provided in the user's visible message history here, my working memory contains zero relevant information (""retrieved data""). The system prompt mandates that I must answer **ONLY** what is retrieved and explicitly forbids using prior knowledge (Rule #1). Rule #3 instructs me to plainly say so rather than invent specifics. Therefore, since no documentation has been found in the current context regardi…",
+d584ad4a-f712-49b9-a988-fd2f219984d9,2026-06-07T10:06:06.243089Z,autoread-0,ue-broker-03-store-filer-virusskann,2,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,0,,false,,0,0,0,1,,,462659d19025,21430,2833,233,3066,0,2,160,stop,false,false,3,"
+
+ctl0>SEARCH, queries=[""altinn broker file size limit"", ""Altinn Broker filstørrelse grense"", ""maximal file size altinn broker upload""]",
+26b8747e-6b4b-4a6a-bfa4-e38728d45886,2026-06-07T10:08:11.403953Z,autoread-3,ue-broker-03-store-filer-virusskann,2,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,3,true,3,true,"df9c39f17a534 R19.5 P2.1 h2.0 or0.3 L693 0/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | Very large files","d0fd4df1a9003 R20.3 P2.2 h2.0 or0.7 L2833 1/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.1,0.0] +q | News ;; db6c43b81c669 R19.9 P2.4 h2.0 or0.8 L2528 2/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Technical overview",1,what is altinn broker max file size limit for uploads | maximum file size attachment upload bytes mb gb | file upload accepted attachment types max number of attachments max file size in mb | maxsize maximum allowed size of the attachment,false,,56,3,3,1,462659d19025;7fcc0669c880;01fdec6b497d,462659d19025;7fcc0669c880;01fdec6b497d,462659d19025,125159,6888,471,7359,0,3,224,tool_calls,false,false,3,"
+
+Yes, you can send files larger than 2 GB through Altinn Broker, but the applicable maximum file size depends on your specific integration scope and configuration:
+
+**1. Standard/General Broker Configuration**
+By default, **Broker is restricted to files up to 2GB due to virus scanning restrictions [1]. You can still send files larger than this if the resource has disabled virus scan (which requires pre-approval by the provider) [1]. Under these conditions:
+* The **theoretical maximum size is 1.6TB** [1], though it is only regularly benchmarked up to 100GB [1][2].
+* An upcoming enhancement scheduled for Q4 2025 explicitly targets support for transferring files `larger than 2 GB, up to 100 GB or more` [2]
+
+**2. Altinn 2-to-3 Transition/Bridge Context**
+If you are using a transition solution…",
+49ba4625-6b1a-4518-99ec-34b779d1f347,2026-06-07T10:12:00.863067Z,autoread-5,ue-broker-03-store-filer-virusskann,2,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,95,false,,false,"df9c39f17a534 R— P1.1 h1.0 or0.7 L693 0/? ty:hypothetical-questions b[0.0,0.0,0.0,0.0,0.0,0.0] +q | Very large files","db55635ab8974 R19.5 P3.3 h3.0 or0.8 L1198 1/? ty:hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.1,0.1,0.0] +q | About ;; d8ef3bcbb74d5 R19.0 P2.5 h2.0 or0.6 L2006 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System interfaces ;; d17d3c3058f6c R19.0 P2.6 h2.0 or0.8 L498 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Service owner ;; d910e06f25460 R18.5 P2.5 h2.0 or0.8 L2227 7/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Solution architecture ;; d0fd4df1a9003 R18.4 P4.7 h4.0 or1.7 L2833 1/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] +q | News ;; db55635ab8974 R18.4 P3.6 h3.0 or1.1 L1424 2/? ty:content+hypothetical-questions+metadata b[0.0,0.0,0.0,0.4,0.1,0.0] +q | About ;; d479e27df943e R18.3 P3.6 h3.0 or1.4 L2440 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | What do you get ;; d8ee3ca463f94 R18.2 P2.5 h2.0 or0.8 L856 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Security",1,Altinn Broker filstørrelse begrensning | file size limit Altinn Broker | upload max filesize broker,false,,32,4,2,1,0127378417da;7fcc0669c880;14d38d41ea63;ffa886c75d0a,0127378417da;7fcc0669c880,462659d19025,229458,10793,713,11506,0,3,532,tool_calls,false,false,3,"
+
+Yes, you can send files larger than 2GB through Altinn Broker [1]. However, based on the provided context, there are different maximum file size limits mentioned depending on the feature set and documentation scope, which results in an ambiguity that I will outline explicitly below:
+
+- **Current system capabilities:** The main product overview states that the system currently supports file transfers up to **1600 GB** without virus scanning (and of up to **2 GB with virus scanning**) [1].
+- **Q4 2025 feature enhancements:** A separate release note lists an upcoming enhancement titled `Support for really large files`, which specifies support for transfer of files larger than 2 GB, up to **100 GB or more** (scheduled for Q4 2025) [2]. This value is explicitly tied to the new Altinn Studio b…",
+9928faa9-827d-442d-b639-e1b90a5039e0,2026-06-07T10:13:45.746750Z,autoread-0,ue-events-01-abonnement-filtre,0,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,0.5,0.5,0.5,0.0,true,1,true,1,true,"d99b415acaa9e R23.2 P3.7 h3.0 or1.9 L6345 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Setup subscription",,1,Altinn Events abonnement filter typeFilter | create subscription events filters | abonnement hendelser filtrere,false,,45,2,0,2,a7d7ed7a67e4;54a01225a6af,,a7d7ed7a67e4;4aa2b0740446,104882,11618,1282,12900,0,3,319,stop,false,false,3,"
+
+Basert på dokumentasjonen kan du sette flere filtre når du oppretter et abonnement i Altinn Events:
+
+## Tilgjengelige filtre
+
+| Filter | Beskrivelse | Obligatorisk? |
+|--------|-------------|---------------|
+| **resourceFilter** | Filtrerer hendelseskilden (ressurs-URL). Må være eksakt treff, f.eks. `urn:altinn:resource:app_digdir_demoapp`. Auto-fylles ut hvis `source` er en gyldig URL til en Altinn Studio-app. | **Ja** |
+| **subjectFilter** | Filtrerer basert på CloudEvent-subjektet med eksakt treff. Mulige verdier for app-hendelser: `/party/{partyid}`; for andre kilder: `urn:altinn:organization:identifier-no:{organisasjonsnummer}` eller `urn:altinn:person:identifier-no:{fødselsnummer}` | Påkrevd med mindre du er tjenesteeier (da kan feltet utelates) |
+| **alternativeSubjectFilter** | F…",
+0ccdedef-ec6f-45db-bbac-be2beae30314,2026-06-07T10:16:24.155955Z,autoread-3,ue-events-01-abonnement-filtre,0,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,0.5,0.5,0.5,0.5,true,3,true,3,true,"d99b415acaa9e R18.2 P2.5 h2.0 or1.0 L6345 1/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Setup subscription","d03002f8d046a R23.4 P3.6 h3.0 or0.9 L2691 2/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Subscribing ;; dda315c0bf7a6 R19.9 P2.5 h2.0 or0.2 L2850 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events",1,opprette abonnement Altinn Events subscribe | typeFilter event subscriptions empty string no events | Altinn Broker Service abonnementsfiltre hendelser,false,,63,2,2,2,a7d7ed7a67e4;58ad266e3627,a7d7ed7a67e4;58ad266e3627,a7d7ed7a67e4;4aa2b0740446,158407,6944,549,7493,0,3,273,tool_calls,false,false,3,"
+
+Når du oppretter et abonnement i Altinn Events kan du bruke følgende filtre for å styre hvilke hendelser som skal leveres til endepunktet ditt:
+
+**Påkrevde egenskaper (basert på kontekst):**
+- `resourceFilter`: Filter for hendelseskilden. Påkrevd, men kan fylles ut automatisk hvis `source` er en gyldig Altinn Studio App URL [1]. Verdien må være et eksakt treff med ressursen i genererte hendelser (f.eks. `""urn:altinn:resource:app_digdir_demoapp""`) [1].
+- `subjectFilter`: Filter for cloud event-subjektet/aktøren/partiet [1]. Feltet er påkrevd med mindre du er tjenesteeier. Verdiene utføres som eksakte treff, og mulige verdier inkluderer `/party/{partyid}`, `urn:altinn:organization:...` eller `urn:altinn:person:...`. ⚠️ **Warning**: Å sette denne til en tom streng (`""""`) vil føre til at abo…",
+ecf39989-83f6-4b4a-a6a1-93667c5b7f20,2026-06-07T10:19:52.063477Z,autoread-5,ue-events-01-abonnement-filtre,0,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,0.5,0.5,0.5,0.5,true,17,true,17,true,"d23a9d95b4a7b R19.2 P3.6 h3.0 or1.3 L6302 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Setup subscription","d289753b2d062 R24.6 P2.6 h2.0 or1.3 L490 4/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.1,0.0] +q | Events ;; dda315c0bf7a6 R23.0 P2.6 h2.0 or1.3 L2850 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events ;; d289753b2d062 R21.8 P3.6 h3.0 or1.4 L935 6/? ty:content+hypothetical-questions+metadata b[0.0,0.0,0.0,0.4,0.1,0.0] +q | Events ;; d43982f65bd7a R20.9 P2.4 h2.0 or0.6 L404 0/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Api ;; ddeb3d3229868 R20.5 P3.6 h3.0 or0.8 L697 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Subscribe to events ;; ddabe88fb244e R20.5 P3.7 h3.0 or2.0 L5909 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Events ;; d88a046dc8cb8 R20.5 P2.2 h2.0 or0.3 L732 0/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | Events ;; d759ed27a9806 R20.4 P3.5 h3.0 or0.5 L968 10/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Solution architecture",1,altinn events abonnement filtre | typeFilter filter hendelser altinn | alternativsubjectfilter properties subscription,false,,56,3,2,2,4aa2b0740446;1e76b7265ace;58ad266e3627,4aa2b0740446;1e76b7265ace,a7d7ed7a67e4;4aa2b0740446,207904,6930,592,7522,0,3,327,tool_calls,false,false,3,"
+
+Når du oppretter et abonnement i Altinn Events kan du bruke følgende filtre, som er definert i dokumentasjonen [1]:
+
+**Obligatoriske filter:**
+- **`resourceFilter`**: Kreves for å filtrere på hendelseskilden. Må være en eksakt match mot ressursen som settes på de genererte events (f.eks. `urn:altinn:resource:...`) [2] Altinn Events kan ofte fylle dette feltet automatisk basert på et gyldig kilde-filter med URL til en App, for å sikre tilbakekompatibilitet (3)
+- **`subjectFilter`**: Kreves for å filtrere på CloudEvent-ens subject. Utfører eksakt match sammenligning [1]. Unntak: Service owners kan utelate feltet og abonnere på alle events over parter/subjects) [2]
+
+**Valgfrie filtre:** 
+  - `sourceFilter`: Kan brukes i stedet for resource filter ved hendelser publisert av apper (holderes t…",
+2ce839fe-bf47-4b46-a8b6-261cc1e43c64,2026-06-07T10:22:01.484401Z,autoread-0,ue-events-01-abonnement-filtre,1,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,0.5,0.5,0.5,0.5,true,15,true,15,true,"d99b415acaa9e R15.9 P2.5 h2.0 or0.4 L6345 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Setup subscription","dda315c0bf7a6 R18.5 P2.5 h2.0 or0.3 L2850 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events ;; d03002f8d046a R18.2 P1.4 h1.0 or0.3 L1139 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Subscribing ;; d15acdbec9ae3 R18.0 P1.4 h1.0 or0.5 L1341 7/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Updating dialogs ;; ddabe88fb244e R17.9 P3.6 h3.0 or0.7 L5909 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Events ;; dc7b0859d47e2 R17.9 P1.4 h1.0 or0.3 L649 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Creating dialogs ;; d9eafd6003045 R17.6 P1.4 h1.0 or0.3 L728 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Creating resources ;; d46a8b451042e R17.6 P1.4 h1.0 or0.3 L675 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Create resource ;; d758ed4381f26 R17.4 P1.4 h1.0 or0.3 L519 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Create resource resource admin",1,hvordan opprette abonnement altinn events filtre | typefilter altinn empty string event subscriptions | subscriptions api filter parameters typePackage action resourceType eventType,false,,64,3,2,2,a7d7ed7a67e4;58ad266e3627;e886509893cd,a7d7ed7a67e4;58ad266e3627,a7d7ed7a67e4;4aa2b0740446,129419,6667,556,7223,0,3,309,tool_calls,false,false,3,"
+
+Når du oppretter et abonnement i Altinn Events, kan du bruke følgende filtre [1]:
+
+* **`resourceFilter`** (påkrevd): Filter for hendelseskilden som matcher ressurs-ID-en eksakt, f.eks. `urn:altinn:resource:app_digdir_demoapp`. Feltet kan fylles ut automatisk hvis du oppgir en gyldig URL til en Altinn Studio App i `source`, men det bør settes manuelt for sikker funksjon [1].
+* **`subjectFilter`** (påkrevd med mindre du er tjenesteeier): Filter for cloud event-subjektet. Verdien må matche eksakt, f.eks. `/party/{partyid}`, `urn:altinn:organization:identifier-no:{organisasjonsnummer}` eller `urn:altinn:person:identifier-no:{fødselsnummer}` [1]. Tjenesteeiere kan utelate dette feltet for å abonnere på hendelser over alle parter/subjekter.
+* **`sourceFilter`** (valgfritt): Filter basert på en…",
+679ffad5-ed9b-4d1b-9067-c4f29f11ec71,2026-06-07T10:22:20.559916Z,autoread-3,ue-events-01-abonnement-filtre,1,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,0,,false,,0,0,0,2,,,a7d7ed7a67e4;4aa2b0740446,19073,2852,264,3116,0,2,185,stop,false,false,3,"
+
+SEARCH queries: ""Altinn event subscriptions"", ""Opprette abonnement Altinn Events filtre"", ""typeFilter tom streng""",
+ba3cc5f5-1bfc-46c3-b55b-85e16f1582f1,2026-06-07T10:24:12.053330Z,autoread-5,ue-events-01-abonnement-filtre,1,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,0.5,0.5,0.5,0.5,true,3,true,3,true,"d99b415acaa9e R21.5 P3.6 h3.0 or1.6 L6345 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Setup subscription","ddeb3d3229868 R21.7 P2.2 h2.0 or0.4 L940 1/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | Subscribe to events ;; d289753b2d062 R21.6 P4.7 h4.0 or1.3 L490 4/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] +q | Events",1,altinn events abonnement filtre typeFilter | abonnement opprette event handler filters,false,,34,3,3,2,1e76b7265ace;025727e77e2a;a7d7ed7a67e4,1e76b7265ace;025727e77e2a;a7d7ed7a67e4,a7d7ed7a67e4;4aa2b0740446,111492,6711,402,7113,0,3,227,tool_calls,false,false,3,"
+
+Når du oppretter et abonnement i Altinn Events kan du bruke flere ulike filtre til å avgrense hvilke hendelser som sendes til webhook-endepunktet ditt [1], [3]. Her er filterene og hvordan de fungerer basert på dokumentasjonen:
+
+- **resourceFilter** (påkrevd): Filtre på hendelsens kilde/ressurs. Verdien må være et eksakt treff mot ressurs-ID-en, for eksempel `urn:altinn:resource:...` [2], [3]. Alt Events kan noen ganger fylle dette feltet ut automatisk basert på en gyldig URL til en Altinn Studio App for bakoverkompatibilitet [3].
+- **subjectFilter** (påkrevd med mindre du er tjenesteeier): Filtre på cloud event-subjektet. Verdien sammenlignes eksakt og kan være `/party/{partyid}`, `urn:altinn:organization:...` eller `urn:altinn:person:...` [3].
+- **sourceFilter** (valgfritt): Alternativ…",
+234d456a-be86-47eb-9de3-e41b7a6770b4,2026-06-07T10:31:03.657263Z,autoread-0,ue-events-01-abonnement-filtre,2,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,0.5,0.5,0.5,0.5,true,1,true,1,true,"d23a9d95b4a7b R— P3.7 h3.0 or1.7 L6302 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Setup subscription",,1,altinn events subscription filter | typeFilter altinn event subscription empty string | createSubscription filter settings | hvordan lage abonnement altinn events filtre,false,,80,1,1,2,4aa2b0740446,4aa2b0740446,a7d7ed7a67e4;4aa2b0740446,411579,6708,490,7198,0,3,218,tool_calls,false,false,3,"
+
+Når du oppretter et abonnement i Altinn Events kan du bruke følgende filtre for å styre hvilke hendelser som leveres til endpointet ditt `[1]`:
+
+* **resourceFilter** (påkrevd): Filtrerer etter kilden til hendelsen ved eksakt match mot verdien satt på genererte Cloud Event-hendelser. Feltet kan også fylles ut automatisk basert på en `sourceFilter` for bakoverkompatibilitet med eldre klienter `[1]`.
+* **subjectFilter** (påkrevd, med mindre du er Service owner): Filtrerer etter subjektet til Cloud Event ved eksakt match. Tjenesteoppdrags-eiere kan utelate feltet og abonnere på alle hendelser uavhengig av part/subjekt `[1]`.
+* **sourceFilter** (valgfritt, bakoverkompatibilitet): Et alternativt filter for kilden til Cloud Event som er mulig å bruke istedenfor `resourceFilter` når du abonnerer…",
+7f39b76d-e5ae-4773-8bba-5ff75fdbb766,2026-06-07T10:33:36.499086Z,autoread-3,ue-events-01-abonnement-filtre,2,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,0.5,0.5,0.5,0.5,true,5,true,5,true,"d99b415acaa9e R19.5 P3.7 h3.0 or2.0 L6345 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Setup subscription","d289753b2d062 R21.3 P2.5 h2.0 or0.6 L490 4/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.1,0.0] +q | Events ;; dda315c0bf7a6 R20.3 P2.6 h2.0 or0.8 L2850 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events ;; ddabe88fb244e R20.1 P3.7 h3.0 or1.5 L5909 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Events ;; d289753b2d062 R19.8 P3.6 h3.0 or0.5 L935 6/? ty:content+hypothetical-questions+metadata b[0.0,0.0,0.0,0.4,0.1,0.0] +q | Events",1,Altinn Events abonnement opprette filtre typeFilter | typefilter tom streng ingen hendelser subscription events empty string,false,,39,3,1,2,a7d7ed7a67e4;1e76b7265ace;58ad266e3627,a7d7ed7a67e4,a7d7ed7a67e4;4aa2b0740446,152570,6801,525,7326,0,3,317,tool_calls,false,false,3,"
+
+Når du oppretter et abonnement i Altinn Events, kan du bruke en rekke filtre for å avgrense hvilke hendelser som leveres til ditt endepunkt [1]. Disse deles inn i påkrevde og valgfrie egenskaper:
+
+### Påkrevde filtre
+- **`resourceFilter`**: Filtrer etter hendelseskilden basert på `resource`-feltet i CloudEvent-strukturen, som må være et eksakt treff (f.eks. `urn:altinn:resource:app_digdir_demoapp`) [1]. Dette feltet kan imidlertid fylles ut automatisk av Altinn Events hvis du oppgir en gyldig URL til en App i `source`-verdien, for å sikre bakoverkompatibilitet med eldre klienter [1].
+- **`subjectFilter`**: Filtrer etter cloud event-subjektet ved hjelp av eksakt treff-sammenligning [1]. Feltet er påkrevd med mindre du er tjenesteeier. Tjenesteeiere kan utelate dette feltet, og da vil abon…",
+d8f9063c-2985-48c7-82f7-8f5daafc4bb8,2026-06-07T10:35:40.156357Z,autoread-5,ue-events-01-abonnement-filtre,2,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,0.5,0.5,0.5,0.5,true,4,true,4,true,"d23a9d95b4a7b R— P3.7 h3.0 or1.8 L6302 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Setup subscription","d289753b2d062 R— P4.7 h4.0 or1.2 L935 6/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] +q | Events ;; d289753b2d062 R— P4.7 h4.0 or0.9 L490 4/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] +q | Events ;; d07c5300e222a R— P4.6 h4.0 or0.8 L400 1/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] +q | Detecting changes",1,typeFilter subscription hendelser | abonnement eventer filtre konfigurasjon | Altinn events API subscribe filter options,false,,53,4,2,2,a7d7ed7a67e4;1e76b7265ace;025727e77e2a;fb897d22bdf4,a7d7ed7a67e4;025727e77e2a,a7d7ed7a67e4;4aa2b0740446,123578,6747,329,7076,0,3,81,tool_calls,false,false,3,"
+
+Når du oppretter et abonnement i Altinn Events, kan du sette følgende filtre for å avgrense hvilke hendelser som sendes til webhook-endepunktet ditt:
+
+- **`resourceFilter`**: Påkrevd filter basert på CloudEvent-ressursen [1]. Verdien må være et eksakt treff med ressursfeltet i de genererte hendelsene (f.eks. `urn:altinn:resource:app_digdir_demoapp`) [1].
+- **`subjectFilter`**: Filter for CloudEvent-subjektet som utfører en eksakt treff-sammenligning og er påkrevd med mindre du er tjenesteeier (tjenesteeiere kan utelate feltet for å abonnere på tvers av alle parter) [1]. Typiske verdier inkluderer `/party/{partyid}`, `urn:altinn:organization:...` eller `urn:altinn:person:...` [1], [2].
+- **`sourceFilter`**: Valgfritt filter for hendelseskilden (må være en URL), som kan brukes istedenfor r…",
+5ffbfbb6-79e3-423c-be68-f1b72ad76518,2026-06-07T10:37:49.963695Z,autoread-0,ue-studio-01-skjul-felt-uttrykk,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,true,43,false,,false,"d567750d54810 R— P2.2 h2.0 or0.4 L4025 3/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | Dynamics","d7326fe63e82d R18.5 P2.5 h2.0 or0.5 L2525 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Tracks ;; db6696fced712 R17.0 P2.5 h2.0 or0.5 L1042 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Dynamic ;; d7c9ef4d0a2cd R14.4 P2.5 h2.0 or0.8 L36148 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Repeating ;; db6696fced712 R13.8 P2.5 h2.0 or0.7 L2187 6/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Dynamic ;; d54a309ac9424 R13.7 P2.5 h2.0 or0.5 L2275 6/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Dynamic ;; d66d9dcc0f4b8 R13.3 P2.5 h2.0 or0.5 L2556 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Tracks ;; d6bbc6089980b R12.4 P2.5 h2.0 or0.5 L6259 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Whats new ;; d0ee49363b941 R12.2 P2.5 h2.0 or0.5 L4051 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Breaking changes",2,layoutSettings skjule knapper | sendInn knapp skjules layout | hide button rule condition alder | regel visesIkje dersom age 18 | dynamisk skjuling av komponenter sider regler | vises ikkje alder rule | layout settings hide sendInn knapp | rule handler condition alder 18 år,false,false,160,3,0,1,eeb66ab1f210;4ee08d566f29;c8a35f2b6f9d,,5579a6f92633,129747,22839,678,23517,0,5,310,stop,false,false,3,"
+
+```json
+[{""name"": ""search"", ""arguments"": {""query"": ""\""Altinn\"" \""Hide Component Rule Model JSON""}}, {""name"": ""search"", ""arguments"": {""query"": ""\""altinn studio\"" hide button rule minAge 18}}], name: search, args: {query: 'rules visibility'}
+```",
+42b8c177-8003-400f-a34a-2af1ba79bdd9,2026-06-07T10:38:34.858507Z,autoread-3,ue-studio-01-skjul-felt-uttrykk,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,1,altinn studio regel skjule knapp | conditional visibility logic altinn | validate age min 18 show hide button,false,,73,0,0,1,,,5579a6f92633,44872,6778,599,7377,0,3,444,stop,false,false,3,"
+
+I need to find specific instructions on how to hide UI elements, particularly the submit button (""Send inn""), based on conditional logic (like an age field value) in Altinn Studio. Since the documentation is primarily Norwegian and the user's query is in Norwegian, I will search using relevant Norwegian keywords first.
+
+First, I'll look for general concepts of visibility rules or conditions that hide components like buttons based on data values.
+
+Search queries:
+1. ""skjul komponent regel""
+2. ""vilkår visning skjule knapper""
+3. ""send inn knapp synlighet""
+4. ""regler basert på feltverdier altinn studio""
+
+[SYSTEM: You have access to the tool `search`. Use it as per instructions.]",
+341db2e8-1aab-4459-aed2-4ea951a74008,2026-06-07T10:42:58.471116Z,autoread-5,ue-studio-01-skjul-felt-uttrykk,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,2,hvordan skjule Send inn knapp i altinn studio basert på aldersfelt under 18 | conditionalrulehandlerobject regler for vis/ulovlig skjule | regler skjemalogikk Altinn Studio | vis/skjul reglementer betingelser feltverdi | hvis vis/skjul komponent send-inn knapp layout | conditional rendering component hide show rules configuration.json | expression validation alder minimum 18 validering,false,false,143,6,0,1,1b01da8e1300;7c459c76633e;c8a35f2b6f9d;f549ea84bf51;107a5ee1ff4b;7a42ef5c4a21,,5579a6f92633,263589,71967,1870,73837,0,10,891,tool_calls,false,false,3,"
+
+Jeg trenger fortsatt å hente resten av instruksjonene i den dynamiske guiden som beskriver akkurat dette eksempelet med ""Send inn""-knappen og alder under 18. La meg prøve en siste runde lesing for å få hele løsningen:
+
+<tool_call>
+<function=read_chunks>
+<parameter=chunk_range>
+{""from"": 0, ""to"": 5}
+</parameter>
+<parameter=max_content_length>
+30000
+</parameter>
+<parameter=doc_num>
+567750d54810
+</parameter>
+</function>
+</tool_call>",
+e1b93c62-6f18-4f14-afa8-10c1b944c353,2026-06-07T10:46:16.708882Z,autoread-0,ue-studio-01-skjul-felt-uttrykk,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,0.0,true,7,true,7,true,"d567750d54810 R15.1 P3.7 h3.0 or2.1 L4025 3/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Dynamics","ddfbb35b06527 R17.3 P1.4 h1.0 or1.0 L14624 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Basic form ;; d567750d54810 R16.5 P2.2 h2.0 or0.6 L731 2/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | Dynamics ;; db6696fced712 R16.5 P2.5 h2.0 or0.8 L1042 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Dynamic ;; d6c2c60cb501b R16.1 P1.4 h1.0 or0.3 L3036 1/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Terms ;; d2b627f080566 R15.7 P2.5 h2.0 or0.6 L764 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Service configurations ;; d2a7a456f5569 R15.5 P2.4 h2.0 or0.1 L1089 7/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Dialogporten",1,regler betinget synlighet Send inn-knapp skjema | RuleHandlerObject conditional display hide send in button | vises-skjul regel alder mindre enn 18 | hideButtonSendIn rules logic Altinn,false,,78,5,0,1,107a5ee1ff4b;5579a6f92633;7a42ef5c4a21;9e7fc260fcd3;5560f648f2a4,,5579a6f92633,198187,26784,2347,29131,0,6,865,stop,false,false,3,"
+
+Jeg har funnet nøyaktig denne oppgaven beskrevet i Altinn Studios veiledning om dynamikk/logikkregler. Her er fremgangsmåten:
+
+---
+
+## Slik skjuler du ""Send inn""-knappen når aldersfeltet er tomt eller under 18
+
+### Steg-frem-for-steg-guide
+
+**Forutsetninger:**
+- Du er på **Lage-siden** for en tjeneste i Altinn Studio.
+- Skjemaet ditt har et ""Alder""-felt knyttet til datamodellfeltet `alder`.
+
+### 1. Velg Send inn-knappen og gå til dynamikk-innstillingene
+
+Åpne den siden i skjemaet der **Send inn**-knappen befinner seg, velg denne komponenten (knappekompoment), og åpnet **""Dynamikk""**-seksjonen i konfigurasjons-panelet.
+
+### 2. Lag en ny logikkregel for å skjule knappen
+
+Klikk på **""Lag en ny logikkregel""**. Siden dette er en knappe-komponent, vil det eneste tilgjengelige alternativet være…",
+94886b65-aa47-4c89-bb2f-ba90ece4a2d9,2026-06-07T10:49:00.704166Z,autoread-3,ue-studio-01-skjul-felt-uttrykk,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,15,true,15,true,"d567750d54810 R17.7 P2.5 h2.0 or1.2 L4025 3/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.1,0.0] +q | Dynamics","d162a9a881dfa R19.8 P1.4 h1.0 or0.7 L1268 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Summary2 ;; db6696fced712 R19.6 P2.5 h2.0 or1.1 L4404 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Dynamic ;; df52fd95e676b R19.1 P2.5 h2.0 or0.9 L2531 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Configure layouts ;; db6696fced712 R19.0 P2.6 h2.0 or0.8 L2187 6/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Dynamic ;; de465a3646506 R18.8 P2.5 h2.0 or0.8 L5857 1/? ty:content+metadata b[0.0,0.0,0.0,0.4,0.0,0.0] | Local dev ;; dd5abfb62e36f R18.7 P2.5 h2.0 or0.3 L1237 5/? ty:content+metadata b[0.0,0.0,0.0,0.4,0.0,0.0] | Multi app solution ;; db6696fced712 R18.3 P2.4 h2.0 or0.5 L2682 4/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Dynamic ;; ddfbb35b06527 R18.3 P1.5 h1.0 or1.0 L14624 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Basic form",1,hvordan lage regel skjule komponent Altinn studio rules | send inn knapp visibility toggle componentAltinn studio rule configuration | regel basert på feltverdi tom under 18 aldersberegning validation,false,,70,5,2,1,9e7fc260fcd3;5560f648f2a4;107a5ee1ff4b;5579a6f92633;7a42ef5c4a21,5560f648f2a4;5579a6f92633,5579a6f92633,163919,7078,703,7781,0,3,403,tool_calls,false,false,3,"
+
+Basert på dokumentasjonen settes denne oppsettet som en **_logikkregel_[1]. Her er trinnene for å skjule «Send inn»-knappen når aldersfeltet ikke inneholder noe eller verdien er under 18[3,4]:
+
+1. **Start regelen:** Klikk på «Lag en ny logikkrule` og velger du alternativet **«Skjul felt dersom»**[2].
+2. **Bygg første utrykk (< `alder`** (velg «Datamodell» under Type, og merk `alder[] i datamodelfelt-listen)[2].
+   - *Operator:* Velg funksjonen **«er mindre enn»**[2].
+   - *Andre operand:* Endre typen til **«Tall», og skriv inn verdien **`18**i verdi-feltet [2].
+3. **Lagre:** Klikk på «Lagre og lukk» for å bekrefte underuttrykket [2].
+4. **Legg til andre utrykk (tomt felt):** 
+   - Klikk igjen på **«Legg til underuttryk[k]»**[3, 4]. Påse at dette nye utrykket er koblet med en _OG_-kobling…",
+700c78de-f052-442a-af3c-ac0fd7f3667d,2026-06-07T10:54:00.405848Z,autoread-5,ue-studio-01-skjul-felt-uttrykk,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,1,skjule Send inn-knappen regel | dynamikk visibility toggleButton sendInn | hide submit button conditional rule altinn studio | layout rules visibilitet skjema altinn,false,,82,6,5,1,107a5ee1ff4b;86ec8529b528;c8a35f2b6f9d;bcf5f1f5310f;9e7fc260fcd3;5560f648f2a4,107a5ee1ff4b;86ec8529b528;bcf5f1f5310f;9e7fc260fcd3;5560f648f2a4,5579a6f92633,299595,14219,848,15067,0,4,392,tool_calls,false,false,3,"
+
+Basert på konteksten setter du opp denne regelen ved å bruke **dynamikkverktøyet** i Altinn Studio til å lage et uttrykk (logikkregel) som dynamisk styrer komponentens synlighet [4]. Her er de sentrale stegene og konseptene ifølge dokumentasjonen:
+
+1. **Velg målkomponent og egenskap**: Finn «Send inn»-knappen-komponenten i layout-skjemaet, og åpne den dynamiske oppsett-muligheten for `hidden`-egenskapen («Feltet skal skjules») [2][5].
+2. **Definer betingelsen i et uttrykk**: Uttrykkene lar deg tildele en boolsk verdi som avgjør om knappen vises eller ikke [4]. Siden oppgaven spesifiserer at knappen skal skjules når ""Alder""-feltet er tomt *eller* verdien er under 18, må uttrykket kombinerer sjekker av disse tilstandene slik at det evalueres til `true` i begge scenarioene [1].
+3. **Bruk un…",
+83c3d0dc-e0e5-4ae2-a466-5bb46df7ce7f,2026-06-07T11:00:16.574840Z,autoread-0,ue-studio-01-skjul-felt-uttrykk,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,true,21,false,,false,"d567750d54810 R13.2 P2.5 h2.0 or0.7 L4025 3/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.1,0.0] +q | Dynamics","da979511a6b1b R20.1 P1.2 h1.0 or0.2 L1328 11/? ty:phrase b[0.0,0.0,0.0,0.1,0.0,0.0] | Expressions ;; da979511a6b1b R19.8 P1.6 h1.0 or1.0 L65533 9/? ty:content b[0.0,0.0,0.0,0.4,0.1,0.0] | Expressions ;; da979511a6b1b R19.3 P2.6 h2.0 or0.6 L7550 10/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Expressions ;; dcab432c85c40 R18.9 P2.3 h2.0 or0.3 L3012 3/? ty:metadata+phrase b[0.0,0.0,0.0,0.1,0.1,0.0] | Expressions ;; da979511a6b1b R18.0 P2.5 h2.0 or0.1 L2314 5/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Expressions ;; dcab432c85c40 R17.5 P2.2 h2.0 or0.8 L1624 1/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | Expressions ;; d4588705fbc89 R17.0 P2.5 h2.0 or0.2 L3716 3/? ty:content+metadata b[0.0,0.0,0.0,0.4,0.0,0.0] | Dynamic ;; dcab432c85c40 R16.0 P3.4 h3.0 or1.0 L624 2/? ty:hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.1,0.1,0.0] +q | Expressions",4,layout rules hide send inn knapp betingelser Altinn Studio | page visibility rules conditional layout Altinn Studio | conditional rule aldersfelt skjule visning | setup rule if age empty or under 18 | layout expression hide show button send inn visningsuttrykk | conditional rule handler setup expressions AltsåStudio Norway Bokmål Nynorsk | page navigation hidden expresssion conditional rules layoutSettings | layoutSettings hidden conditional expression component hide show Altinn Studio | expressions reference data boolean comparison greater than less than empty null | expressions functions less greater equals compare numbers Altinn Studio | send inn knapp hidden layout Expressions component toolbar,false,false,242,3,0,1,606fb40836cf;55885dbe10b6;50945c100532,,5579a6f92633,376053,91199,1642,92841,0,10,748,tool_calls,false,false,3,"
+
+For å skjule «Send inn»-knappen basert på et vilkår i Altinn Studio benytter du **Expressions** som defineres direkte i `layout.json`. 
+
+Her er hvordan du setter opp regelen for at knappen skal skjules dersom aldersfeltet er tomt eller under 18:
+
+### Logikk og struktur
+I dokumentasjonen vises det til at uttrykk bruker en rekke-JSON-format der funksjoner som `""or""` brukes for å koble flere vilkår sammen. Verdien på `hidden` må evalueres til sann (`true`) dersom du ønsker å skjule elementet, mens tall og tekst kan konverteres automatisk av systemet.
+
+### Eksempelkodelayout
+Dersom «Send inn»-knappen befinner seg i en bestemt side eller panel (eller er en egen komponent med `id`), definerer du uttrykket under `""data"" > ""hidden""`:
+
+```jsonc
+{
+  ""$schema"": ""..."", 
+  ""layout"": [...], // dine si…",
+5fc7c18c-ecf5-4120-8eec-4c70fddd3271,2026-06-07T11:05:26.184365Z,autoread-3,ue-studio-01-skjul-felt-uttrykk,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,59,false,,false,"d567750d54810 R— P1.1 h1.0 or0.2 L4025 3/? ty:hypothetical-questions b[0.0,0.0,0.0,0.0,0.1,0.0] +q | Dynamics","d603404361f9c R18.2 P2.6 h2.0 or1.7 L807 4/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | External api ;; d54a309ac9424 R16.2 P2.1 h2.0 or0.1 L2586 4/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | Dynamic ;; d8322385fbd19 R14.5 P1.2 h1.0 or0.2 L864 2/? ty:metadata b[0.0,0.0,0.0,0.1,0.1,0.0] | Deployment ;; dcab432c85c40 R13.9 P2.2 h2.0 or0.8 L624 2/? ty:hypothetical-questions+metadata b[0.0,0.0,0.0,0.1,0.1,0.0] +q | Expressions ;; db6696fced712 R13.7 P2.5 h2.0 or1.2 L2187 6/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Dynamic ;; d92d512834d4a R13.5 P1.2 h1.0 or0.7 L588 2/? ty:hypothetical-questions b[0.0,0.0,0.0,0.0,0.1,0.0] +q | Expressions ;; dc04812cefb62 R13.5 P2.5 h2.0 or0.6 L742 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get ;; d603404361f9c R13.1 P1.4 h1.0 or0.2 L4658 3/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | External api",1,conditional visibility hide show button altinn studio | regel skjule vise knapp visningslogikk | displaysettings conditional rendering component rule expressionrule,false,,70,4,3,1,c8a35f2b6f9d;4ee08d566f29;7c459c76633e;222157401bc8,4ee08d566f29;7c459c76633e;222157401bc8,5579a6f92633,309508,14018,723,14741,0,4,436,tool_calls,false,false,3,"
+
+For å skjule «Send inn»-knappen når aldersfeltet er tomt eller under 18, må du bruke **Regler for vis/skjul felt** i kombinasjon med en tilpasset JavaScript-funksjon i `RuleHandler.js` [1], [2]. Siden Altinn Studio kun leverer innebygde standardmetoder som f.eks. `sum`, `fullName` og `lengthBiggerThan4`, må du opprette din egen betingelse for alderssjekk [1].
+
+Følgende steg beskrives i kildene:
+
+### 1. Opprett funksjonen i `RuleHandler.js`
+Din tilpassede logikk defineres inne i `conditionalRuleHandlerObject`, mens forventet input oppgis i `conditionalRuleHandlerHelper` [1], [2]. Funksjonene må håndtere tilfeller der verdier mangler eller er tomme, slik at regelen ikke feiler ved endring av feltverdier [1]:
+
+```javascript
+var conditionalRuleHandlerObject = {
+  alderUnderEllerTom: (obj) =>…",
+239a3119-70e8-4762-be24-3f757ae72503,2026-06-07T11:09:15.537743Z,autoread-5,ue-studio-01-skjul-felt-uttrykk,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,44,false,,true,"d567750d54810 R— P2.3 h2.0 or0.9 L4025 3/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.1,0.0] +q | Dynamics","d567750d54810 R16.3 P3.6 h3.0 or1.4 L731 2/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] +q | Dynamics ;; de8dee21c25f0 R14.3 P2.5 h2.0 or0.5 L1530 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Slide ;; d2b627f080566 R14.1 P2.5 h2.0 or0.3 L764 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Service configurations ;; dc7b0859d47e2 R14.1 P2.5 h2.0 or0.5 L1547 9/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Creating dialogs ;; db6696fced712 R13.5 P3.6 h3.0 or1.3 L4404 2/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Dynamic ;; dd95d23ee2764 R13.5 P2.5 h2.0 or0.5 L6014 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Whats new ;; d24940c1377a4 R12.9 P2.6 h2.0 or0.6 L2171 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Rule handler ;; d2b627f080566 R12.9 P2.5 h2.0 or0.3 L2900 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Service configurations",1,regler skjule Send inn knapp | hide send in button rule altinn studio | rule hide submit button | visningsregel alder tom under 18,false,,86,4,2,1,107a5ee1ff4b;4ee08d566f29;6e5ecc560cae;5579a6f92633,6e5ecc560cae;5579a6f92633,5579a6f92633,229264,12658,869,13527,0,4,504,tool_calls,false,false,3,"
+
+For å opprette denne regelen i Altinn Studio, følger du stegene nedenfor [2]: 
+
+1. Klikk på **「Lag en ny logikkregel」** og velg handlingen som skal skje med komponenten (i eksempelet er det eneste alternativet **「Skjul felt dersom」[2].
+2. Klikk på **【Legg til underuttrykk】for å starte byggingen av utryket.**.*Endre» for å redigere underutstyret: [1]** **Første operand_:** Velg datamodellfeltet `alder` som verdi (velg **「Datamodell i Type-listen, og feltet「alder」i listen 「Operator」**：**Velge **「er mindre enn」（[2].**.*Andre operand_**: Velg type **「Tall」og sett verdien til \`18\`\(kikkk på **【Lagre og lukk】for å lagre underutstyret. [5]**.**Legg til underuttrykk» (merk at veiledningen beskriver koblingen som en _OG-kobling_ for begge må oppfylles),**.*Operator:** Velge **「Er lik」[2].] **An…",
+6ebfa434-a275-48f5-be16-c65ef5eb952b,2026-06-07T11:11:45.376878Z,autoread-0,ue-corr-02-transmission-group-dialog,0,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"deaa7903e19e2 R18.9 P3.6 h3.0 or1.8 L2784 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Dialogporten arbeidsflate",,1,knytte ny melding til eksisterende dialog Altinn | gruppere relaterte instanser sammen | dialog referansenummer knytte oppgaver | altinn 3 process event instance,false,,73,3,2,1,33b39f14a8b2;2f623a3a1547;c01b39350517,33b39f14a8b2;2f623a3a1547,2f623a3a1547,149761,6975,539,7514,0,3,268,tool_calls,false,false,3,"
+
+For å knytte en ny melding til en eksisterende dialog slik at relaterte instanser grupperes sammen, skal du opprette en **transmission** via Altinn 3 Melding API[2]. Dette gjøres ved å sende inn `externalReferences` i JSON-payloadet for den nye meldingen med følgende spesifikasjoner:
+
+- Sett `""referenceType""` til `""DialogportenDialogId""[2]`.
+- Sett `""referenceValue""` til ID-en (`dialogId`) for dialogen du vil knytte meldingen til[2].
+
+Når dette sendes, refererer den nyopprettede meldingen tilbake til den eksisterende dialogen, og relaterte instanser grupperes dermed sammen innenfor samme dialog[2]. Det er også mulig å eksplicit angi en `transmission-type` (f.eks. `""Information""` eller numerisk verdi `""1""`) ved hjelp av referenceType `""DialogportenTransmissionType""[2]`, men dette påvirker…",
+27988c4a-6928-413b-8e5d-8bcd34ae79ce,2026-06-07T11:13:51.715703Z,autoread-3,ue-corr-02-transmission-group-dialog,0,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,true,1,true,1,false,"deaa7903e19e2 R17.6 P3.6 h3.0 or1.5 L2784 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Dialogporten arbeidsflate",,1,knytte ny melding til eksisterende dialog relasjon | relaterte instanser grupperes sammen Altinn | link instance message Altinn 3 API | neste side i samtale knytte meldinger,false,,86,1,1,1,33b39f14a8b2,33b39f14a8b2,2f623a3a1547,126281,6910,435,7345,0,3,196,tool_calls,false,false,3,"
+
+Basert på konteksten håndteres kobling og gruppering av relaterte instanser ved å bruke feltene `process` og `precedingProcess` for dialoger [1]. Ifølge kilden brukes disse feltene til følgende:
+- «Å knytte en dialog til en tidligere prosess når en ny dialog starter som følge av en tidligere prosess»[1] (tilsvarer din beskrivelse om å knutte nye instanser).
+- «Å gruppere flere dialoger som tilhører samme overordnede sak eller prosess, selv når dialogene håndteres av ulike tjenester eller tjenesteeiere»[1].
+
+Det er verdt å presisere at konteksten spesifikt opererer med begrepet `dialog` fremfor `melding`, og funksjonaliteten for `process`/`precedingProcess` er utelukkende definert på dialognivået i kildegrunnlaget[1]. Videre opplyses det at arbeidsflate foreløpig ikke benytter disse felte…",
+2a87a768-1c17-4e47-a64a-a655bfc8191d,2026-06-07T11:16:22.393838Z,autoread-5,ue-corr-02-transmission-group-dialog,0,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,true,78,false,,false,"deaa7903e19e2 R— P1.1 h1.0 or0.7 L2784 1/? ty:hypothetical-questions b[0.0,0.0,0.0,0.0,0.0,0.0] +q | Dialogporten arbeidsflate","db5bf7b3760d7 R20.1 P1.2 h1.0 or0.2 L825 3/? ty:metadata b[0.0,0.0,0.0,0.1,0.1,0.0] | About dialogporten ;; d6532793b5a8f R19.9 P2.2 h2.0 or0.2 L1273 1/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | Dialog lookup ;; d50dd3cb13200 R18.6 P1.2 h1.0 or0.2 L766 5/? ty:metadata b[0.0,0.0,0.0,0.1,0.2,0.0] | Create user ;; df1f2522e8f93 R18.5 P2.1 h2.0 or0.1 L2606 3/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | Status migration ;; de4a8e7ed51b4 R18.3 P1.4 h1.0 or0.4 L9118 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Faq ;; dbf345fb14471 R17.9 P1.1 h1.0 or0.1 L808 8/? ty:phrase b[0.0,0.0,0.0,0.1,0.0,0.0] | Detailed ;; d256b08aebc2a R17.9 P3.6 h3.0 or1.4 L648 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Process identifiers ;; ddfbb35b06527 R17.9 P1.5 h1.0 or1.0 L14624 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Basic form",1,hvordan knytte ny melding til eksisterende dialoggruppe instanser i altinn | knytte ny melding til eksisterende dialog | dialoggrouped instance altinn api | instanceActionId process id altinn,false,,76,2,2,1,33b39f14a8b2;ad8dcba97a48,33b39f14a8b2;ad8dcba97a48,2f623a3a1547,150632,7128,461,7589,0,3,221,tool_calls,false,false,3,"
+
+Basert på konteksten kan du knytte en ny dialog til eksisterende instanser og sikre at de grupperes sammen ved å bruke feltene **`process`** og/eller **`precedingProcess`** når oppretter eller konfigurere dialogen [1]. Dette er direkte beskrevet som et av hovedbruksområdene for disse spesifikke feltene:
+
+- Å knytte en ny dialog til en tidligere prosess når den starter som følge av en tidligere prosess [1]
+- Å gruppere flere dialoger som tilhører samme overordnede sak eller prosess, selv når de håndteres av ulike tjenester eller tjenesteeiere [1]
+
+Begrensninger og merknader basert på kildene:
+- Konteksten opererer med begrepet **dialog** fremfor melding [1].
+- Siden aktiviteter, forsendelser, Part og tjenesteressurs har endreringsbegrensninger etter dialogopprettelse, bør knytningen typis…",
+4a1c32d3-e750-4875-b579-bf5ea0bcfd92,2026-06-07T11:18:27.260476Z,autoread-0,ue-corr-02-transmission-group-dialog,1,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,1,hvordan knytte ny melding til eksisterende dialog gruppering av instanser i altinn | altinn send inn knyte melding til eksisterende sak dialog,false,,48,2,1,1,33b39f14a8b2;9c58e66b93a3,33b39f14a8b2,2f623a3a1547,124816,7009,526,7535,0,3,268,tool_calls,false,false,3,"
+
+Basert på den oppgitte konteksten kan du knytte en ny melding/dialog til en eksisterende for å gruppere relaterte instanser ved hjelp av feltet `process` (og eventuelle relatiserte prosessfelt) [1]. Typiske bruksområder for disse feltene er:
+
+- Å **gruppere flere dialoger** som hører sammen under samme overordnede sak eller prosess, selv når de håndteres av ulike tjenester eller tjenesteeiere [1].
+- Å **knytte en dialog til en tidligere prosess** når en ny dialog starter som følge av denne foregående prosessen [1].
+
+Feltet `process` (samt eventuelt `precedingProcess`) brukes også for å korrelere dialoger i Altinn Events, og de kan filtreres på via både sluttbruker- og tjenesteeiersøke-API-ene [1]. Merk at arbeidsflaten ikke utnytter funksjonaliteten akkurat nå, men dette er potensielt no…",
+c113f129-efe9-405b-8d42-c59b96b28041,2026-06-07T11:18:47.890394Z,autoread-3,ue-corr-02-transmission-group-dialog,1,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,0,,false,,0,0,0,1,,,2f623a3a1547,20573,2827,321,3148,0,2,273,stop,false,false,3,"
+
+SEARCH (required first): Use search with several diverse queries. It returns metadata only — no content. You MUST search before answering; do not answer from memory.",
+6ac8f7b4-ef3d-40c6-a39f-81689fb04dbe,2026-06-07T11:20:36.288696Z,autoread-5,ue-corr-02-transmission-group-dialog,1,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,true,1,true,1,false,"deaa7903e19e2 R19.5 P3.6 h3.0 or1.3 L2784 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Dialogporten arbeidsflate",,1,knytte ny melding til eksisterende dialog gruppere instanser | gruppere relaterede instanser sammen Altinn event hendelse | saksnummer korrelasjon ID dialoger altinn | correlationId saksnummer instance grouping altinn,false,,70,2,1,1,33b39f14a8b2;e1bc9a4c65a7,33b39f14a8b2,2f623a3a1547,108363,6918,497,7415,0,3,216,tool_calls,false,false,3,"
+
+Basert på konteksten kan du oppnå dette ved å bruke feltet **`process`** [1]. Merk at kilden spesifikt omtaler denne funksjonaliteten knyttet til **dialoger**, ikke nødvendigvis «meldinger» som isolerte enheter, så det er viktig at din datastruktur tilsvarer kontekstens definisjon av dialog for å sikre korrekt oppførsel [1]:
+
+- Bruk feltet `process` for å **knytte en ny dialog til en tidligere prosess når den starter som følge av denne** [1].
+- Ved å bruke samme verdi eller sammenhengende verdier, kan du også **gruppere flere dialoger som tilhører samme overordnede sak eller prosess**, selv om de håndteres av ulike tjenester eller tjenesteeiere [1].
+
+Kilden nevner i tillegg parameteren `precedingProcess` (som omtales parallelt med `process`) og spesifiserer at disse kan inngå i hendelses…",
+1c155251-ee29-470f-b244-0c466d0959e8,2026-06-07T11:22:20.411803Z,autoread-0,ue-corr-02-transmission-group-dialog,2,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"deaa7903e19e2 R18.7 P3.6 h3.0 or1.5 L2784 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Dialogporten arbeidsflate","d2a7a456f5569 R19.3 P2.5 h2.0 or0.3 L789 4/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Dialogporten",1,knytte ny melding til eksisterende dialog | gruppere relaterte instanser samanlike dialoger | dialogportalen knytte samtaler samhandling | parentInstanceId referanse til forelder sak,false,,84,2,1,1,33b39f14a8b2;2f623a3a1547,2f623a3a1547,2f623a3a1547,104041,7018,406,7424,0,3,170,tool_calls,false,false,3,"
+
+For å knytte en ny melding til en eksisterende dialog slik at relaterte instanser grupperes sammen, skal du opprette en `transmission` gjennom Altinn 3 Melding API ved å referere til den eksisterende dialogens ID i de eksterne referansene på den nye meldingen [1].
+
+Dette gjøres i JSON-payloaden for correspondencen ved å legge til et objekt med følgende verdier under `externalReferences`:
+```json
+{
+    ""referenceValue"": ""<dialogId>"", 
+    ""referenceType"": ""DialogportenDialogId""
+}
+```
+Her må:
+- `referenceValue` settes til `dialogId` for dialogen du refererer til [1].
+- `referenceType` settes eksakt til `""DialogportenDialogId""` for å indikere at den nye meldingen er en del av en allerede eksisterende dialog [1].
+
+Hvis ikke transmission-type spesifiseres i payloaden, vil standardverdien auto…",
+fc226343-167c-486d-9640-858f5a87c324,2026-06-07T11:24:07.019183Z,autoread-3,ue-corr-02-transmission-group-dialog,2,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"deaa7903e19e2 R19.5 P3.6 h3.0 or1.2 L2784 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Dialogporten arbeidsflate",,1,knytte melding til eksisterende dialog | gruppering av relaterede instanser | melding dialog gruppe id | samme conversasjon knytte flere medlinger,false,,76,3,1,1,2f623a3a1547;33b39f14a8b2;ee8b78e10a90,2f623a3a1547,2f623a3a1547,106584,5417,576,5993,0,2,323,tool_calls,false,false,3,"
+
+For å knytte en ny melding til en eksisterende dialog slik at relaterte instanser grupperes sammen, skal du opprette en **transmission** ved hjelp av Altinn 3 Melding API [1]. Dette gjøres gjennom feltet `externalReferences` på den nye meldingen, der du refererer til `dialogId` for den aktuelle eksisterende dialogen [1].
+
+For å gjøre dette riktig må følgende angis i payloaden:
+- `referenceValue`: Settes lik `dialogId` for dialogen du ønsker at meldingen skal knyttes til [1].
+- `referenceType`: Settes til `""DialogportenDialogId""` for å indikere at den nye meldingen er en del av en eksisterende dialog [1].
+
+Strukturen ser typisk slik ut:
+```json
+{
+    ""correspondence"":{
+        ...,
+        ""externalReferences"":[
+            {
+                ""referenceValue"": ""<dialogId>"",
+               …",
+bd9b2401-d16e-43d7-b9d8-53ca66995751,2026-06-07T11:25:37.781106Z,autoread-5,ue-corr-02-transmission-group-dialog,2,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"deaa7903e19e2 R22.1 P3.6 h3.0 or2.0 L2784 1/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Dialogporten arbeidsflate",,1,gruppere relaterte instanser dialog | knytte melding til eksisterende dialog | instanceId gruppering instanser | relaterte instanser sammenkobling,false,,80,2,1,1,2f623a3a1547;33b39f14a8b2,2f623a3a1547,2f623a3a1547,90738,6946,621,7567,0,3,325,tool_calls,false,false,3,"
+
+For å knytte en ny melding til en eksisterende dialog og sikre at relaterte instanser grupperes sammen via en transmission, må du konfigurere feltet `externalReferences` i JSON-forespørselen din [1]. Dette gjøres ved å oppgi følgende:
+
+* `""referenceValue""` skal settes til den eksisterende meldingens tildelte ID (`dialogId`) for dialogen du vil koble deg på.
+* `""referenceType""` må settes nøyaktig til `DialogportenDialogId` [1].
+
+Gjennom dette angir du at den nye instansen er en del av en allerede eksisterende dialog, noe som får systemet til å behandle meldingen som en transmission og knytte den sammen med de øvrige relaterte instansene i samme gruppe. Når transmisjonen opprettes vil responsen automatisk inneholde både referansen til `dialogId` og en ny generert `transmissionId` [1].
+
+Eks…",
+54780bd0-d714-4add-aeb1-1f26aa0271f3,2026-06-07T11:27:49.224505Z,autoread-0,ue-dialog-01-aktivitetslogg,0,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"dfd39a68c8de7 R22.0 P3.6 h3.0 or1.7 L2058 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Activity log",,1,hvem fyller ut dialogporten i aktivitetsloggen | aktivitetslogg dialog dialogporten fylles ut av | hvem som gjorde endringen i aktivitetslogg for hver dialog | dialogporten etikettildeling logg sluttbrukerkontekst hvem,false,,68,3,3,1,58d02570ed96;294db2090e8b;de7113ac2875,58d02570ed96;294db2090e8b;de7113ac2875,58d02570ed96,131388,7039,615,7654,0,3,293,tool_calls,false,false,3,"
+
+Ifølge kildene defineres aktivitetsloggen som en uforanderlig liste over tidsstemplede oppføringer av bestemte typer, som viser historikken gjennom en bestemt dialogs levetid [1]. Loggen inneholder informasjon om tidligere aktiviteter knyttet til dialogen, og typiske aktiviteter kan være opprettelse av dialogen, melding sendt fra tjenesteeieren, data innsendt av parten, utført signatur/betalingshendelse eller åpning av forsendelser [1]. Frontenden bør aggregere aktivitetsloggen med andre strukturer (som forsendelseslisten) for å gi en fullstendig kronologi over dialogens historie [1].
+
+Når det gjelder hvem som fyller den ut, viser kildene til samme ansvarsområde men bruker ulik begrepsbruk:
+- Kilde [1] slår fast at «tjenesteeieren» har ansvaret for å fylle ut aktivitetsloggen og bør gjør…",
+f27aad75-a5e3-408a-87ff-c324306e08a7,2026-06-07T11:29:11.525074Z,autoread-3,ue-dialog-01-aktivitetslogg,0,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"dfd39a68c8de7 R24.4 P3.6 h3.0 or1.8 L2058 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Activity log",,1,aktivitetslogg dialogport | aktivitetslogg fullfører utfatter | dialogfullføringstidspunkt aktivitet,false,,42,1,1,1,58d02570ed96,58d02570ed96,58d02570ed96,82251,6685,472,7157,0,3,249,tool_calls,false,false,3,"
+
+Basert på konteksten er **aktivitetsloggen** en uforanderlig liste over tidsstemplede oppføringer som viser historikken gjennom hele dialogens levetid [1]. Hver oppføring representerer en bestemt type aktivitet, for eksempel at dialogen blir opprettet, at det sendes meldinger fra tjenesteeieren eller parten, at signatur/betalinger gjennomføres, eller at en forsendelse åpnes [1].
+
+Det er **tjenesteeieren** som fyller ut aktivitetsloggen med informasjon om tidligere aktiviteter knyttet til den aktuelle dialogen og har ansvaret for dette [1].",
+dbd963cb-ce1c-418f-97a2-ea270c400ed1,2026-06-07T11:30:06.742450Z,autoread-5,ue-dialog-01-aktivitetslogg,0,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,0.0,true,1,true,1,true,"dfd39a68c8de7 R22.5 P3.6 h3.0 or1.4 L2058 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Activity log",,1,aktivitetslogg dialogportalen | aktivitetslogg dialog XSD | hvem fyller ut aktivitetstempel,false,,55,2,0,1,58d02570ed96;294db2090e8b,,58d02570ed96,55202,10044,790,10834,0,3,371,stop,false,false,3,"
+
+Basert på dokumentasjonen fra Dialogporten:
+
+## Hva er aktivitetsloggen?
+
+Aktivitetsloggen er en **uforanderlig liste over tidsstemplede oppføringer** som viser historikken gjennom en bestemt dialogs levetid. Hver aktivitet beskriver en handling eller hendelse knyttet til dialogen, for eksempel:
+
+- Opprettelsen av dialogen
+- En melding sendt fra tjenesteeieren
+- Data sendt inn av parten
+- En signatur eller betaling som gjennomføres
+- En forsendelse som åpnes og/eller bekreftes lest
+
+Aktivitetsloggen kan hentes via API, og brukes blant annet ved opprettelse av betingede varslingsbestillinger (påminnelser). Den bør aggregeres med forsendelseslisten og sett-loggen («seen log») for å gi en fullstendig kronologi over dialogens historie.
+
+## Hvem fyller den ut?
+
+**Tjenesteeieren** (også kalt t…",
+d960e087-e042-4d50-a31d-82bd4833e4b3,2026-06-07T11:31:44.091429Z,autoread-0,ue-dialog-01-aktivitetslogg,1,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"dfd39a68c8de7 R24.1 P3.6 h3.0 or1.5 L2058 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Activity log","de8985669f0ad R24.2 P3.6 h3.0 or1.3 L618 8/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Dialogs",1,aktivitetslogg dialog | Dialogporten aktivitetshistorikk | hvem skal fylle ut skjemaet,false,,65,2,2,1,58d02570ed96;294db2090e8b,58d02570ed96;294db2090e8b,58d02570ed96,97338,6891,396,7287,0,3,184,tool_calls,false,false,3,"
+
+Basert på konteksten er **aktivitetsloggen** en uforanderlig liste over tidsstemplede oppføringer av bestemte typer som viser historikken gjennom dialogens levetid [[1]]. Den inneholder informasjon om tidligere aktiviteter knyttet til den aktuelle dialogen, slik som når dialogen ble opprettet, meldinger sendt fra tjenesteeieren, data innlevert av parten, utførte signaturer eller betalinger, samt åpning og lesbekreftelse av forsendelser [[1]].
+
+Det er **tjenesteeieren** som har ansvar for å fylle ut aktivitetsloggen (og bør gjøre det i forbindelse med andre endringer i dialogen) [[1]]. 
+
+*Merknad om terminologi:* Kilde [2] bruker samtidig begrepene **«aktivitetshistorikken»** og oppgir at det er **tjenesteleverandøren** som fyller den på etter hvert som tilstandsendringer skjer. Dette ind…",
+9b89a751-073f-4355-9569-8642ed5e4c62,2026-06-07T11:33:49.094929Z,autoread-3,ue-dialog-01-aktivitetslogg,1,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"dfd39a68c8de7 R23.3 P3.6 h3.0 or1.3 L2058 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Activity log","de8985669f0ad R23.8 P2.2 h2.0 or1.0 L618 8/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | Dialogs",1,aktivitetslogg til dialog i dialogporten | hvem fyller aktivitetssokken for hver dialog i dialogporten | tjenesteeier skriver i aktivitetsloggen dialogporten,false,,60,2,2,1,294db2090e8b;58d02570ed96,294db2090e8b;58d02570ed96,58d02570ed96,124950,6963,395,7358,0,3,157,tool_calls,false,false,3,"
+
+Basert på konteksten er **aktivitetsloggen** til en dialog i Dialogporten en uforanderlig liste over tidsstemplede oppføringer av bestemte typer som viser historikken gjennom den enkelte dialogs levetid [2]. Den fungerer som en logg med informasjon om tidligere aktiviteter knyttet til dialogen, slik som når dialogen ble opprettet, meldinger sendt fra tjenesteeieren, data innlevert av parten, eller hendelser som signaturer, betalinger og åpne forsendelser [1][2]. Loggen kan hentes via API-et og benyttes blant annet ved oppretting av betingede varslingsbestillinger (påminnelser) [2].
+
+Angående **hvem fyller den ut**, bruker de to kontekstblokkene ulikt begrepsapparat for å beskrive ansvarsrollen:
+- I selve dokumentasjonen om aktivitetsloggen angis det eksplisitt at det er *tjenesteeieren* …",
+7afa7a56-8346-43e9-b109-8da0784e7f48,2026-06-07T11:35:11.330458Z,autoread-5,ue-dialog-01-aktivitetslogg,1,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"dfd39a68c8de7 R24.5 P3.7 h3.0 or1.7 L2058 0/? ty:content+hypothetical-questions+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] +q | Activity log","de8985669f0ad R25.0 P3.6 h3.0 or1.2 L618 8/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Dialogs",1,aktivitetslogg dialog Dialogporten | activity log dialog Portalen | dialog prosess Aktivitetsservice | who fills out aktivitetslogg,false,,47,2,1,1,58d02570ed96;b5619d50d6b1,58d02570ed96,58d02570ed96,82210,5281,364,5645,0,2,196,tool_calls,false,false,3,"
+
+Aktivitetsloggen er en uforanderlig liste over tidsstemplede oppføringer, hver av en bestemt type, som viser historikken gjennom en bestemt dialogs levetid [1]. Den inneholder informasjon om tidligere aktiviteter knyttet til dialogen, og kan dekke handlinger som for eksempel opprettelse av dialogen, meldinger sendt fra tjenesteeieren, data innsendt av parten, utførte signaturer eller betalinger, samt åpning/lesing av forsendelser [1].
+
+Det er **tjenesteeieren** som har ansvaret for å fylle ut aktivitetsloggen [1]. Tjenesteeieren bør gjøre dette i forbindelse med andre endringer gjort på dialogen, og oppføringene kan referere til konkrete forsendelser (for eksempel når de åpnes eller bekreftes lest) [1].",
+8a03d313-855d-4e5d-b154-41ea26119049,2026-06-07T11:36:58.398226Z,autoread-0,ue-dialog-01-aktivitetslogg,2,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"dfd39a68c8de7 R22.4 P3.7 h3.0 or2.2 L2058 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Activity log",,1,aktivitetslogg dialogporten hvem fyller ut | hva er aktivitetslogg i en dialog | tjenesteeier sett-logg aktivitet,false,,62,3,3,1,58d02570ed96;294db2090e8b;ec4229c009a6,58d02570ed96;294db2090e8b;ec4229c009a6,58d02570ed96,107050,6877,472,7349,0,3,203,tool_calls,false,false,3,"
+
+Aktivitetsloggen til en dialog i Dialogporten er en uforanderlig liste over tidsstemplede oppføringer av bestemte typer som viser historikken gjennom hele dialogens levetid [1]. Loggen beskriver handlinger eller hendelser samt viktige tilstandsendringer knyttet til dialogen, for eksempel `DialogCreated`, at tjenesteeieren sender en melding, data sendes inn fra parten, signatur gis eller betaling foretas, og at forsendelser åpnes [3]. Aktivitetene fungerer som uforanderlige loggoppføringer som kompletterer listen over faktiske kommunikasjonsenheter (forsendelsene) snarere enn å erstatte dem [2] [3].
+
+Den fylles ut av **tjenesteeieren**, mens en annen kilde bruker betegnelsen **Tjenesteleverandøren** for samme ansvarlige part [1] [2]. Denne parten har ansvaret for å registrere oppføringer …",
+b259a9e1-d2f2-4084-b8f3-40f13f0a94cd,2026-06-07T11:38:16.051597Z,autoread-3,ue-dialog-01-aktivitetslogg,2,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,3,true,3,true,"dfd39a68c8de7 R20.9 P3.6 h3.0 or1.8 L2058 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Activity log","db5bf7b3760d7 R21.9 P1.2 h1.0 or0.2 L803 1/? ty:metadata b[0.0,0.0,0.0,0.1,0.1,0.0] | About dialogporten ;; de8985669f0ad R21.7 P4.6 h4.0 or1.2 L618 8/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.0,0.0] +q | Dialogs",1,hva er aktivitetslogg i dialogdialogporten | aktivitetslogg portaldokumenter | aktivitet logg utfyller,false,,55,2,2,1,a7942896bf17;58d02570ed96,a7942896bf17;58d02570ed96,58d02570ed96,77610,6620,471,7091,0,3,246,tool_calls,false,false,3,"
+
+Basert på konteksten er aktivitetsloggen en uforanderlig liste over tidsstemplede oppføringer, hver av en bestemt type, som viser historikken gjennom en bestemt dialogs levetid [2]. Den inneholder informasjon om tidligere aktiviteter knyttet til dialogen og dekker handlinger som for eksempel opprettelse av dialogen, melding sendt fra tjenesteeieren, data sendt inn av parten, utført signatur eller betaling, samt åpning av en forsendelse [1][2].
+
+Det er **tjenesteeieren** som fyller ut aktivitetsloggen og som bærer det fulle ansvaret for dette [2]. Tjenesteeieren bør gjøre oppdateringene i forbindelse med andre endringer som gjøres på dialogen [2].",
+49978bfd-57ae-4e69-b117-468d630010e6,2026-06-07T11:40:13.443147Z,autoread-5,ue-dialog-01-aktivitetslogg,2,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"dfd39a68c8de7 R24.0 P3.6 h3.0 or1.9 L2058 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Activity log","de8985669f0ad R24.2 P3.6 h3.0 or1.7 L618 8/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Dialogs",1,aktivitetslogg dialogporten | aktivitetlogg en dialog | dialogportens aktivitetslogg hvem fyller ut,false,,41,2,2,1,58d02570ed96;294db2090e8b,58d02570ed96;294db2090e8b,58d02570ed96,117341,6888,503,7391,0,3,262,tool_calls,false,false,3,"
+
+Aktivitetsloggen er en uforanderlig liste over tidsstemplede oppføringer av forskjellige typer som viser historikken gjennom en bestemt dialogs levetid [1]. Den brukes til å logge informasjon om tidligere aktiviteter knyttet til dialogen, for eksempel opprettelse, utveksling av meldinger eller data, signaturer og betalinger [1] (forsendelser i seg selv medfører ikke egne aktivitetslogg-oppføringer fordi de allerede fungerer som en uforanderlig liste) [1].
+
+Angående hvem som fyller den ut, viser kildene til forskjellig begrepsbruk:
+* Ifølge kilde [1] er det **tjenesteeieren** som er ansvarlig for å fylle ut aktivitetsloggen og bør gjøre dette i forbindelse med andre endringer gjort i dialogen. 
+* Kilde [2] beskriver derimot at en tilsvarande liste kalt *aktivitetshistorikken* fylls av *tj…",
+c1ca692c-46da-49b5-9d97-bfafed58be99,2026-06-07T11:42:35.008412Z,autoread-0,ue-authz-01-delegere-tilgangspakke-api,0,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"dd42c77ed5fe8 R23.0 P3.8 h3.0 or2.2 L6997 10/? ty:content+hypothetical-questions+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] +q | Access management",,1,delegere tilgangspakke person access management api | Access Management API delegering | access_management delegat | tilgangsregler Delegere,false,,63,2,1,1,6d1c5124b842;ca81dc2ddc3e,6d1c5124b842,6d1c5124b842,141532,6699,420,7119,0,3,195,tool_calls,false,false,3,"
+
+For å delegere en tilgangspakke bruker du **POST**-metoden på følgende endepunkt [1]:
+- Test: `https://platform.tt02.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages`
+- Produksjon: `https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages`
+
+Ifølge kildeteksten støttes følgende **spørreparametere** [1]:
+| Parameter | Type | Obligatorisk | Beskrivelse |
+|---|---|---|---|
+| `party` | UUID | Ja | partyUuid for parten |
+| `to` | UUID | Nei | partyUuid for mottaker (alternativ til body) [1] |
+| `packageId` | UUID | Nei | ID for tilgangspakken [1] |
+| `package` | string | Nei | URN for tilgangspakken [1] |
+
+**Merknad om entydighet og kildeforskjell:** 
+Dokumentasjonen gir ikke fullstendig klarhet over hvordan mottakeren skal spesifiseres i forhol…",
+2ccafcf6-17b0-43db-875e-980aa12e0af1,2026-06-07T11:44:28.152976Z,autoread-3,ue-authz-01-delegere-tilgangspakke-api,0,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,false,,,,,,,1.0,1.0,1.0,0.0,true,1,true,1,true,"dd42c77ed5fe8 R21.9 P4.9 h4.0 or2.1 L6997 10/? ty:content+hypothetical-questions+metadata+phrase b[0.1,0.0,0.0,0.5,0.1,0.0] +q | Access management",,1,"deleger tilgangspakke person | access management api endpoint delegere | ""check if logged in user can delegate"" request body parametere | sjekker om den innloggede brukeren kan delegere en gitt tilgangspakke",false,,70,4,0,1,6d1c5124b842;ca81dc2ddc3e;cc9af54b9d2a;80aa24b232c2,,6d1c5124b842,113128,22974,1591,24565,0,5,1207,stop,false,false,3,"
+
+Jeg har funnet all nødvendig informasjon fra dokumentasjonen. La meg gi deg et fullstendig svar:",
+f99e31e8-1215-4500-9ed3-657f88345f98,2026-06-07T11:46:08.570880Z,autoread-5,ue-authz-01-delegere-tilgangspakke-api,0,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"dd42c77ed5fe8 R21.6 P4.9 h4.0 or2.2 L6997 10/? ty:content+hypothetical-questions+metadata+phrase b[0.1,0.0,0.0,0.5,0.1,0.0] +q | Access management","deadedaf3b783 R22.2 P2.5 h2.0 or0.4 L371 11/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Client admin",1,delegere tilgangspakke person | access management api delegasjon pakker person | api deleger en gitt tilgangsliste | sjekker om den innloggede brukeren kan delegere en gitt tilgangspakke,false,,88,3,1,1,ca81dc2ddc3e;6d1c5124b842;5f5be8031fb0,6d1c5124b842,6d1c5124b842,100377,7243,473,7716,0,3,200,tool_calls,false,false,3,"
+
+For å delegere en tilgangspakke til en person via Access Management-API-et, bruker du følgende endpoint og parametere:
+
+**API-endepunkt:**
+- Testmiljø: `POST https://platform.tt02.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]
+- Produksjonsmiljø: `POST https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]
+
+**Spørreparametere:**
+| Parameter | Type  | Obligatorisk | Beskrivelse                           |
+|---|---|---|---|
+| `party` | UUID | Ja | partyUuid for parten | [1]
+| `to` | UUID | Nei | partyUuid for mottaker (alternativ til body) | [1]
+| `packageId` | UUID | Nei | ID for tilgangspakken | [1]
+| `package` | string | Nei | URN for tilgangspakken | [1]
+
+**Merk om spesifisering av mottaker:** 
+I tillegg til query-parametre…",
+cb7d6368-b1dd-4e57-9ac0-36455e9fb78f,2026-06-07T11:46:29.589709Z,autoread-0,ue-authz-01-delegere-tilgangspakke-api,1,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,0,,false,,0,0,0,1,,,6d1c5124b842,20952,4556,284,4840,0,3,149,stop,false,false,3,"
+
+SEARCH: queries=[""Access Management API"", ""delegere tilgangspakke person AccessManagementAPI"", ""delegate access package to person Altinn""]",
+906b4ee7-1a0b-46f4-8674-073eaace804d,2026-06-07T11:48:15.520165Z,autoread-3,ue-authz-01-delegere-tilgangspakke-api,1,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"dd42c77ed5fe8 R23.2 P3.4 h3.0 or0.4 L6997 10/? ty:hypothetical-questions+metadata+phrase b[0.1,0.0,0.0,0.1,0.2,0.0] +q | Access management",,1,delegere tilgangspakker personer access management api | access management api sende foresporsel endepunkt person | send request tilganger pakke personsenter,false,,55,3,1,1,ca81dc2ddc3e;6d1c5124b842;5f5be8031fb0,6d1c5124b842,6d1c5124b842,105835,7033,532,7565,0,3,242,tool_calls,false,false,3,"
+
+For å delegere en tilgangspakke til en person via Access Management-API-et, bruker du `POST`-metoden på følgende endepunkt [1]:
+
+- **Test**: `https://platform.tt02.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages`
+- **Produksjon**: `https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages`
+
+Spørreparameterne (query parameters) du kan sende med er [1]:
+
+| Parameter | Type | Obligatorisk | Beskrivelse |
+|---|---|---|---|
+| `party` | UUID | Ja | partyUuid for parten |
+| `to` | UUID | Nei | partyUuid for mottaker (alternativ til body) |
+| `packageId` | UUID | Nei | ID for tilgangspakken |
+| `package` | string | Nei | URN for tilgangspakken |
+
+I tillegg må forespørselskroppen (`body`) inneholde identifikasjon av personen det delegeres til [1]:
+…",
+151b481e-4793-4ae5-9ebd-d086069d50e2,2026-06-07T11:50:08.875760Z,autoread-5,ue-authz-01-delegere-tilgangspakke-api,1,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"dd42c77ed5fe8 R22.0 P4.9 h4.0 or2.2 L6997 10/? ty:content+hypothetical-questions+metadata+phrase b[0.1,0.0,0.0,0.5,0.2,0.0] +q | Access management",,1,delegere tilgangspakke person Access Management API endpoint | API-delegering i Altinn 3 | gi brukere klientrettigheter ved å delegere tilgangspakker | sjekker om den innloggede brukeren kan delegere en gitt tilgangspakke,false,,83,3,1,1,ca81dc2ddc3e;6d1c5124b842;5f5be8031fb0,6d1c5124b842,6d1c5124b842,113189,7296,482,7778,0,3,240,tool_calls,false,false,3,"
+
+For å delegere en tilgangspakke til en person via Access Management-API-et, bruker du endepunktet:
+**Test:** `POST https://platform.tt02.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]  
+**Produksjon:** `POST https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1].
+
+De angitte **spørreparametrene (query parameters)** er:
+| Parameter | Type | Obligatorisk | Beskrivelse |
+|---|---|---|---|
+| `party` | UUID | Ja | partyUuid for parten [1] |
+| `to` | UUID | Nei | partyUuid for mottakeren (alternativ til body) [1] |
+| `packageId` | UUID | Nei | ID for tilgangspakken [1] |
+| `package` | string | Nei | URN for tilgangspakken [1] |
+
+Merk at kildeinformasjonen spesifiserer at mottakeren (`to`) kan oppgis som alternativ i URL-query-param…",
+59d7354b-d693-409c-8c5a-499eec3f0b81,2026-06-07T11:54:49.945075Z,autoread-0,ue-authz-01-delegere-tilgangspakke-api,2,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,4,"delegere tilgangspakke Access Management API | access management api v1 accesspackages delegationendpoints enduser sendposttoaltinn | gi brukere klientrettigheter delegere tilgangspakker | sjekker om den innloggede brukeren kan delegere en gitt tilgangspakke | tilgangsroller delegasjon API endpoint | access package delegation api | tilgangspakke delegeres endepunkt posttoaltinn accesspackages | delegationendpoints v1 | ""tilgangspakker"" ""deleger"" | give a user client rights by delegating | api accessmanagement delegationendpoint posttopost | ""/accessmanagement/api/v1/accesspackages"" | ""delegetoaltinn"" | /access-management/apps api-endepunkt | gi brukere klientrettigheter delegere tilgangspakker | ""/access-management/api/v1/delegationendpoints"" | ""sendposttoaltinn"" accesspackages | delegetoaltiltapp altinn studio reference",false,false,212,3,2,1,dcc89b9d934f;b6080a405b1f;ea34f63282f0,b6080a405b1f;ea34f63282f0,6d1c5124b842,281013,69680,2047,71727,0,10,1040,tool_calls,false,false,3,"
+
+Basert på den oppgitte konteksten er det **ikke dokumentert noe API-endepunkt eller parametere for å delegere** en tilgangspakke (eller rettigheter) til en person via Access Management-API-et. Konteksten beskriver utelukkende endepunkter og metoder for å *hente* eller liste opp eksisterende konfigurasjoner, som er tydelig merket med `GET`:
+
+- `/accessmanagement/api/v1/{who}/rights/outbound/?resource={resource}&recevingParty={receivingparty}` brukes til å hente rettigheter [1].
+- `/accessmanagement/api/v1/accessgroups/offeredBy/{partyId}/coveredBy/{partyId}` og relaterte ressursretts-endepunkter er oppgitt med `GET - List groups` [2].
+
+Selvsagt nevnes det i kilden at tilgangsmenyene også kan omfatte `""Rights from delegated polices""` [1], men utdraget inneholder ingen `POST`, `PUT` eller l…",
+86908ca7-d4cf-401e-b6ae-8c4d03284419,2026-06-07T11:56:36.906583Z,autoread-3,ue-authz-01-delegere-tilgangspakke-api,2,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"dd42c77ed5fe8 R22.0 P3.8 h3.0 or1.8 L6997 10/? ty:content+hypothetical-questions+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] +q | Access management",,1,deleger tilgangspakke person Access Management API endpoint parametere | access management api enduser delegated access package parameters | AccessManagement delegeering rolle pakker api,false,,49,3,1,1,6d1c5124b842;ca81dc2ddc3e;5f5be8031fb0,6d1c5124b842,6d1c5124b842,106946,6862,418,7280,0,3,151,tool_calls,false,false,3,"
+
+For å delegere en tilgangspakke til en person bruker du **POST**-metoden med følgende endepunkt og spørreparametere [1]:
+
+**Endepunkter:**
+- **Testmiljø**: `https://platform.tt02.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages`
+- **Produksjonsmiljø**: `https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages`
+
+**Spørreparametere:**
+| Parameter | Type | Obligatorisk | Beskrivelse |
+|---|---|---|---|
+| `party` | UUID | Ja | partyUuid for parten [1] |
+| `to` | UUID | Nei | partyUuid for mottaker (alternativ til body) [1] |
+| `packageId` | UUID | Nei | ID for tilgangspakken [1] |
+| `package` | string | Nei | URN for tilgangspakken [1] |
+
+*Obs:* Tabellen i kilden markerer parametre som ikke er obligatoriske med `Nei`. For de valgfrie parameter…",
+08456347-3cd4-491d-9eb7-a8c9a28bbc6b,2026-06-07T11:58:34.999417Z,autoread-5,ue-authz-01-delegere-tilgangspakke-api,2,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,2,true,2,false,"dd42c77ed5fe8 R22.2 P2.4 h2.0 or0.8 L6997 10/? ty:metadata+phrase b[0.1,0.0,0.0,0.1,0.2,0.0] | Access management","d75d31d9853b7 R22.2 P2.5 h2.0 or1.1 L582 1/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Accessmanagement",1,hvordan delegere en tilgangspakke via access management api i altinn | api delegere tilgangspakker Altinn | gi brukere klientrettigheter ved å delegere tilgangspakker | altinn client administration api delegation,false,,73,2,2,1,32f099522161;d9e8e94ec5ef,32f099522161;d9e8e94ec5ef,6d1c5124b842,118079,7032,492,7524,0,3,210,tool_calls,false,false,3,"
+
+For å delegere en tilgangspakke via Access Management-API-et bruker du følgende endepunkt og parametere:
+
+**Endepunkt:** `POST https://platform.tt02.altinn.no/accessmanagement/api/v1/enduser/clientdelegations/agents/accesspackages` (Test) eller `POST https://platform.altinn.no/accessmanagement/api/v1/enduser/clientdelegations/agents/accesspackages` (Production) [1]
+
+**Query-parametere:**
+- `party`: Oppgi `{{party}}`, som er *partyUuid* for tjenestetilbyderen [1].
+- `fromOrg`: Oppgi `{{fromOrg}}`, som er *partyUuid* for klienten [1].
+- `to`: Oppgi `{{to}}`, som er *partyUuid* for agenten (mottaker av delegeringen) [1].
+
+**Om terminologi og person/agent:**  
+Selv om spørsmålet ditt nevner delegatering til en ""person"", definerer kilden `{{to}}`-parametren spesifikt som `partyUuid for agente…",
+f1fab45d-8419-4081-a88d-73960b41d334,2026-06-07T12:00:04.804168Z,autoread-0,ue-sys-03-brukerstyrt-vs-leverandorstyrt,0,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"d3ec63e860edb R24.5 P3.6 h3.0 or1.3 L763 2/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | System user","d7d132493aac9 R24.5 P2.5 h2.0 or0.7 L485 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemuserrequest",1,opprette systembruker leverandør sluttbruker | systembrukeier vs brukerstyrt opprettelse altinn | leverandøren har lov til opprette brukere altinn 3,false,,43,3,2,1,c480e7fbbbe4;c61c1f46fe63;16049c347d69,c61c1f46fe63;16049c347d69,c61c1f46fe63,89772,7205,555,7760,0,3,274,tool_calls,false,false,3,"
+
+Basert på konteksten er hovedforskjellen hvem som initierer prosessen og hvordan tilgangsforespørselen behandles:
+
+**Initiativtaker:**
+- Ved **sluttbrukerstyrt opprettelse** starter sluttbrukeren selv prosessen ved å logge inn i Altinn [1].
+- Ved **leverandørstyrt opprettelse** er det systemleverandøren (SBSL) som initierer, typisk gjennom en API-forespørsel sendt fra sitt eget fagsystem til Altinn [2].
+
+**Håndtering av prosess og godkjenning:**
+- I den sluttbrukerstyrte varianten blir brukeren presentert for forhåndsdefinerte tilganger som kreves, og når disse aksepteres direkte i grensesnittet, opprettes systembrukeren uten at det genereres en separat forespørsel [1].
+- I leverandørvarianten sender leverandøren først inn en spesifikk forespørsel med hvilke tilganger systemet trenger, o…",
+922903fa-9f49-479d-b9f2-3a57634bb745,2026-06-07T12:04:05.140808Z,autoread-3,ue-sys-03-brukerstyrt-vs-leverandorstyrt,0,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,82,false,,false,"d3ec63e860edb R— P1.1 h1.0 or0.2 L763 2/? ty:hypothetical-questions b[0.0,0.0,0.0,0.0,0.0,0.0] +q | System user","d3ec63e860edb R24.3 P1.6 h1.0 or1.0 L3319 5/? ty:content b[0.0,0.0,0.0,0.4,0.1,0.0] | System user ;; d3ec63e860edb R24.1 P2.2 h2.0 or0.4 L1089 4/? ty:hypothetical-questions+metadata b[0.0,0.0,0.0,0.1,0.1,0.0] +q | System user ;; d9d1c17a8c23b R24.0 P2.5 h2.0 or0.8 L1703 4/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Setup ;; d71d6c7529780 R23.8 P1.4 h1.0 or0.7 L2043 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemuser ;; dc90b2e25cfc0 R23.5 P1.4 h1.0 or0.3 L567 3/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Authenticating ;; d71d6c7529780 R23.1 P2.2 h2.0 or0.4 L992 3/? ty:hypothetical-questions+metadata b[0.0,0.0,0.0,0.1,0.1,0.0] +q | Systemuser ;; d6c2c60cb501b R22.9 P1.4 h1.0 or1.0 L3036 1/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Terms ;; d71d6c7529780 R22.8 P1.4 h1.0 or0.7 L1659 1/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemuser",1,system bruker opprettelse sluttbruker leverandør Altinn | opprett systembrukere selv eller leverandor altinn | autorisasjon system tilgang apigateway,false,,65,8,5,1,3de2c9c5cd2e;ad001426b658;a9f0f18d005c;75a0997dd647;f31ef7d6052b;b9a97d4daca2;81a4d7e44e18;943d6bd024e4,3de2c9c5cd2e;ad001426b658;75a0997dd647;b9a97d4daca2;81a4d7e44e18,c61c1f46fe63,240252,12369,734,13103,0,4,440,tool_calls,false,false,3,"
+
+Basert på kildene er den sentrale forskjellen **hvem som initiator kontrollerer opprettelsesprosessen, og hvor grensesnittet/mekanismen for oppretting foregår**. Funksjonelt skapes det i begge tilfeller en identisk type bruker (en ikke-personlig «systembruker» med fullmakter på vegne av virksomheten) [2], [4].
+
+Forskjellen kan summeres slik:
+
+- **Brukerstyrt opprettelse (sluttbrukeren selv i Altinn):**  
+  Sluttbrukeren oppretter systembrukeren direkte via **Altinns brukerflate/portal** [3]. Fordelen er at sluttbruker har full administrasjonskontroll på samme sted. De kan til enhver tid se hvilke fullmakter som er tildelt, og slette eller reversere tiltaket uten å måtte kontakte leverandøren for endringer i Access Management-grensesnittet [1], [3].
+
+- **Leverandørstyrt opprettelse (lever…",
+e2dca985-e2cf-4e6f-996e-fea7ab0a72a4,2026-06-07T12:06:26.332326Z,autoread-5,ue-sys-03-brukerstyrt-vs-leverandorstyrt,0,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d3ec63e860edb R23.7 P3.5 h3.0 or0.8 L763 2/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | System user",,1,systembruker opprettelse | selv oprette systembruker | leverandør oppretter systembruker | skille mellom selvopprettede og leverandør-opprettede systembrukere,false,,51,4,4,1,c61c1f46fe63;520a1c11b580;16049c347d69;ad001426b658,c61c1f46fe63;520a1c11b580;16049c347d69;ad001426b658,c61c1f46fe63,141037,5674,540,6214,0,2,276,tool_calls,false,false,3,"
+
+Basert på den oppgitte konteksten er hovedforskjellen **hvem som initierte prosessen**, hvordan **godkjenningsflyten foregår** og hvilke **bruksområder** metodene dekker:
+
+| Aspekt | Sluttbrukerstyrt opprettelse [1] | Leverandørstyrd (SBSL) opprettelse [3][4] |
+|--------|----------------------------------|------------------------------------------|
+| **Hvem starter prosessen?** | Det er sluttbrukeren selv som initierer, typisk ved å logge inn i Altinn og velge hvilket system de ønsker en bruker for. | Det er leverandøren (SBSL) som initierte ved å sende en forespørsel fra sitt eget fagsystem direkte til Altinn om å opprette en spesifikk systembruker. |
+| **Godkjennings- og tildelingssystem** | Sluttbrukeren blir presentert for forhåndsdefinerte tilganger under innloggingen. Når disse aks…",
+71e22592-fd12-439f-9889-acd48e318629,2026-06-07T12:08:50.167809Z,autoread-0,ue-sys-03-brukerstyrt-vs-leverandorstyrt,1,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"d3ec63e860edb R24.3 P3.5 h3.0 or0.9 L763 2/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | System user","d6cc8c21136aa R24.4 P2.5 h2.0 or1.1 L487 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Democlient",1,opprettelse av systembruker | leverandør oppretter systemaktør vs sluttbruker | systembruksrettigheter谁 skal lage applikasjonen i altinn,false,,47,4,2,1,c61c1f46fe63;520a1c11b580;16049c347d69;ad001426b658,c61c1f46fe63;16049c347d69,c61c1f46fe63,143749,7203,603,7806,0,3,255,tool_calls,false,false,3,"
+
+Basert på kildene er hovedforskjellene hvem som starter prosessen, hvordan arbeidsflyten foregår og hvilken rolle godkjenning spiller:
+
+- **Initiering:** Ved `sluttbrukerstyrt opprettelse` initierer sluttbrukeren selv prosessen ved å logge inn i Altinn [1]. Ved `leverandørstyrt opprettelse` er det system leverandøren (SBSL) som starter, typisk fra sitt eget fagsystem, ved at de sender en forespørsel til Altinn om å opprette en systembruker [2].
+- **Arbeidsflyt og godkjenningssteg:** I `sluttbrukerstyrt` prosessen blir sluttbrukeren presentert for forhåndsdefinerte tiltakene. Når disse aksepteres, godkjennes de direkte uten at det genereres en separat forespørsel eller et eget avklarings/steg [1]. For `leverandørstyrt` opprettelse må leverandørens spesifikke forespørsel om nødvendige tilg…",
+d63d2b95-ebcf-4119-8d2e-aa4a680b6b35,2026-06-07T12:11:55.828713Z,autoread-3,ue-sys-03-brukerstyrt-vs-leverandorstyrt,1,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"d3ec63e860edb R22.4 P3.6 h3.0 or1.3 L763 2/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | System user","d3ec63e860edb R23.0 P4.8 h4.0 or1.9 L683 3/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] +q | System user",1,opprettelse av systembruker altinn leverandør | sluttbruker oppretter selv systembruker | systembruker opprettelse hvem skal gjøre | leverandøren eller sluttbrukeren oppretter,false,,54,4,4,1,16049c347d69;c61c1f46fe63;520a1c11b580;ad001426b658,16049c347d69;c61c1f46fe63;520a1c11b580;ad001426b658,c61c1f46fe63,185594,7138,553,7691,0,3,252,tool_calls,false,false,3,"
+
+Basert på konteksten er hovedforskjellene mellom **leverandørstyrt opprettelse** og **sluttbrukerstyrd (eller brukerstyrtd)** som følger: [2]:: 
+
+- **Hvem som initiere prosessen:** 
+  - *Leverend-sls`*initierer prosessen sls`le.
+  *(Self-Correction/Refinement during thought process)*: I realize I'm making typos in my mental draft. Let me write it out cleanly and accurately based on the source text, carefully checking every word against [1] & [2].
+
+**Correct Draft Generation:**
+Basert på konteksten er hovedforskjellene mellom **leverandørstydt opprettelse) og sluttbruker (eller brukerstyrtd) som følger: [2]: 
+- **Hvem som initiere prosessen:** Ved leverend-sls`initierer prosesen `sls`en selv logget inn i Altinn, velger hvilket system de ønsker å opprette en systembruke for.
+**Godkjennings…",
+3effea36-b6fc-4658-847d-3d29fb53a3b1,2026-06-07T12:15:05.741723Z,autoread-5,ue-sys-03-brukerstyrt-vs-leverandorstyrt,1,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"d3ec63e860edb R24.4 P2.5 h2.0 or0.5 L763 2/? ty:content+hypothetical-questions b[0.1,0.0,0.0,0.4,0.1,0.0] +q | System user","d3ec63e860edb R24.8 P4.8 h4.0 or0.6 L683 3/? ty:content+hypothetical-questions+metadata+phrase b[0.1,0.0,0.0,0.5,0.2,0.0] +q | System user",1,systembruker opprettelse sluttbruker leverandør | serviceconfig.json systemressurs createAccessResources | who creates system resource user own vendor,false,,56,3,2,1,c61c1f46fe63;16049c347d69;ad001426b658,c61c1f46fe63;16049c347d69,c61c1f46fe63,189864,5665,606,6271,0,2,368,tool_calls,false,false,3,"
+
+Basert på konteksten er hovedforskjellene knyttet til initiativtaker, prosessflyt og godkjenningskrav:
+
+- **Initiativtaker:** Ved en `brukerstyrt` opprettelse starter sluttbruke ren selv pro sessen ved å log ge inn i Altinn [1]. I den `leverandørst yrte` metoden er det SLBBS (slut tbru kersy stem lever anøren) som initi ere r pros ess en ved å se nde fo respørs el fra sitt eget fagsystem til Alinittn [2].
+
+*(Jeg vil korrigere de genererte OCR-feilene og skrive det korrekt norsk, da konteksten tydelig viser at `brukerstyrt` og `leverandørst yrte er ment. Jeg bruker kilder 1 & 2:)*
+  
+- **Initiativtaker:** Ved en `brukerstyrt opprettelse` starter sluttbruke ren selv pro sessen ved å log ge inn i Altinn [1]. I den `leverandørst yrte metoden er det SLBBS (slut tbru kersy stem lever anøren) s…",
+edba5d3c-ec2a-462f-a6fa-060d6d1f1149,2026-06-07T12:17:33.547701Z,autoread-0,ue-sys-03-brukerstyrt-vs-leverandorstyrt,2,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,3,true,3,true,"d3ec63e860edb R23.1 P3.5 h3.0 or1.2 L763 2/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | System user","d6cc8c21136aa R23.8 P2.6 h2.0 or1.5 L487 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Democlient ;; d3ec63e860edb R23.6 P4.9 h4.0 or1.9 L683 3/? ty:content+hypothetical-questions+metadata+phrase b[0.0,0.0,0.0,0.5,0.2,0.0] +q | System user",1,leverandørstyrt opprettelse av systembruker | brugerstyrt oppretting i altinn | systembruker opprettes sluttbruker eller leverandør altinn 2.0 | ansvar for systemtilgang leverandør vs bruker altinn,false,,64,4,4,1,16049c347d69;c61c1f46fe63;ad001426b658;520a1c11b580,16049c347d69;c61c1f46fe63;ad001426b658;520a1c11b580,c61c1f46fe63,147679,7398,668,8066,0,3,333,tool_calls,false,false,3,"
+
+Basert på kildeteksten er forskjellen mellom de to metodene – som i dokumentasjonen omtales som **sluttbrukerstyrt (eller brukerstyrt) opprettelse** og **leverandørstyrt opprettelse** – hovedsakelig knyttet til initiering, godkjenningsflyt, støttede tilgangstyper og hvilke systemtyper metodene kan brukes på:
+
+1. **Initiering og arbeidsflyt**
+   - *Sluttbrukerstyrt/brukerstyrt opprettelse:* Initieres av sluttbrukeren selv som logger inn i Altinn [2]. Sluttbrukeren velger hvilket system de ønsker å koble, ser hvilke tilganger som kreves, og aksepterer disse direkte. Prosessen genererer ingen separat forespørsel mellom leverandør og Altinn før godkjenning skjer [2].
+   - *Leverandørstyrt opprettelse:* Initieres av sluttbrukersystem-leverandøren (SBSL) som sender en spesifikk forespørsel fra…",
+98cf7b7f-c641-4b5f-9e0c-589a08314c86,2026-06-07T12:20:17.161209Z,autoread-3,ue-sys-03-brukerstyrt-vs-leverandorstyrt,2,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,3,true,3,true,"d3ec63e860edb R16.8 P3.6 h3.0 or1.4 L763 2/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | System user","d6cc8c21136aa R17.3 P2.6 h2.0 or1.7 L487 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Democlient ;; d3ec63e860edb R16.9 P2.5 h2.0 or1.0 L1089 4/? ty:content+hypothetical-questions b[0.0,0.0,0.0,0.4,0.0,0.0] +q | System user",1,leverandørstyrt systembruker Digital Postkasse | digital postkasse samhandling leverandøropprettelse | sluttbrukeropprettet vs leverandøre oppretta digital postsystembruker,false,,54,4,2,1,ad001426b658;c61c1f46fe63;16049c347d69;520a1c11b580,c61c1f46fe63;16049c347d69,c61c1f46fe63,163541,7138,584,7722,0,3,275,tool_calls,false,false,3,"
+
+Forskjellen mellom de to måtene å opprette en systembruker på handler hovedsakelig om **hvem som starter prosessen** og hvordan tilgangsforespørselen håndteres:
+
+* **Sluttbrukeren selv (betegnet i kildene som *brukerstyrt opprettelse*):** Det er sluttbrukeren som initierer opprettelsen ved å logge inn direkte i Altinn [1]. Her velger brukeren det aktuelle systemet, blir presentert for forhåndsdefinerte tilganger og godkjenner dem direkte uten at det genereres en separat forespørsel [1].
+* **Leverandøren (betegnet som *leverandørstyrt opprettelse*):** Det er sluttbrukersystem-leverandøren (SBSL) som initierer prosessen ved å sende en spesifikk forespørsel fra sitt eget fagsystem til Altinn om hvilke rettigheter systemet trenger [2]. Denne forespørselen må deretter godkjennes av sluttbruke…",
+22271b32-2a9c-4076-b9d6-bbd05f01f6ca,2026-06-07T12:22:18.243535Z,autoread-5,ue-sys-03-brukerstyrt-vs-leverandorstyrt,2,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d3ec63e860edb R21.3 P2.1 h2.0 or0.3 L763 2/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | System user",,1,sluttbruker oppretter systembruker Altinn business prosesser | leverandør styrte rolledefinisjoner i Altinn 3 | forskjell mellom sluttbruker og leverandør systembrukere,false,,65,5,2,1,865fe9f2693a;c480e7fbbbe4;c61c1f46fe63;16049c347d69;ad001426b658,c61c1f46fe63;16049c347d69,c61c1f46fe63,121022,7027,492,7519,0,3,311,tool_calls,false,false,3,"
+
+Forskjellen mellom de to metodene ligger i hvem som initierer prosessen, hvordan godkjenning foregår og hvilke myndighetskrav som stilles:
+
+**Brukerstyrt opprettelse** ([1])
+- **Initiativtaker:** Det er sluttbrukeren selv som starter prosessen ved å logge inn i Altinn. Der velger brukeren hvilket system de ønsker å opprette en systembruker for [1].
+- **Prosessflyt:** Sluttbrukeren blir presentert for forhåndsdefinerte tilganger, og når disse aksepteres, godkjennes de direkte. Systembrukeren blir opprettet umiddelbart uten at det genereres en egen forespørsel [1].
+- **Myndighetskrav:** Prosessen forutsetter allerede på dette tidspunktet at sluttbrukeren har myndighet til å delegere alle tilgangene systemet ber om [1].
+
+**Leverandørstyrt opprettelse** ([2])
+- **Initiativtaker:** Det er slu…",
+4bd013f0-a698-448a-97d2-088844478727,2026-06-07T12:24:17.128524Z,autoread-0,ue-api-04-instances-get-no-list,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,1,true,1,false,"d69ccc279de8b R22.0 P2.2 h2.0 or0.2 L1444 0/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | Instances",,1,how to fetch app instance metadata altinn API endpoints | get single instance by ID Altinn 4 | list all instances pagination overview Endres av person Or Saksbehandler,false,,68,1,1,1,9eac3d570118,9eac3d570118,9bce844fa9ba,118855,6696,431,7127,0,3,240,tool_calls,false,false,3,"
+
+Based on the provided documentation:
+
+- **Fetching metadata for a single app instance:** The context does not specify an endpoint or method for retrieving the details/metadata of one specific instance [1]. It only documents how to query and list multiple instances collectively using various filters and pagination parameters [1]. Information on fetching individual instance records is absent from this excerpt.
+
+- **Listing/querying all instances:** Yes, there is a dedicated listing endpoint. You can use a `GET` request towards `{storagePath}/instances`, where the base path is defined as `https://{hostname}/storage/api/v1/instances` [1]. The API supports filtering via query parameters (e.g., `org`, `appId`, `process.currentTask`) and returns paginated results in JSON format [1]. By default,…",
+e57d3b84-6ffb-4267-8c63-ffd80d5acfd7,2026-06-07T12:25:36.398968Z,autoread-3,ue-api-04-instances-get-no-list,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"d69ccc279de8b R24.7 P3.7 h3.0 or2.3 L1444 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Instances","ddf0c0d8b2ee1 R24.8 P2.6 h2.0 or1.1 L2418 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Api",1,altinn app instance metadata endpoint | list all instances altinn API | hent instans metadata enkelt | instances list API dokumentasjon,false,,91,3,3,1,9bce844fa9ba;b1040a899047;6c35ac48bb9c,9bce844fa9ba;b1040a899047;6c35ac48bb9c,9bce844fa9ba,79261,5059,473,5532,0,2,274,tool_calls,false,false,3,"
+
+Based on the provided documentation:
+
+**Fetching metadata for a single instance:**  
+You can retrieve the `instance metadata document` using the App API's download endpoint [1]:
+```http
+GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}
+```
+where `{basePath}` is defined as `{org}/{appname}/instances` [2]. This endpoint is intended for instances that are active, and it requires you to already know both the `owner party id` (`{instanceOwnerPartyId}`) and the instance GUID (`{instanceGuid}`). External systems are advised to cache these values (or the full URL) to minimize repeated queries [1], [2].
+
+**Listing all instances:**  
+The App API does **not** provide an endpoint for listing or querying multiple instances [1]. Instead, you must use a query/listing endpoint on the Storage API in t…",
+bc8f3fed-7dca-42dd-b611-10a7401fd92f,2026-06-07T12:28:59.017174Z,autoread-5,ue-api-04-instances-get-no-list,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,false,,false,,true,,,1,how to fetch metadata for a single app instance in altinn storage api | altinn platform-storage-api-get-instance-metadata endpoint list all instances,false,,44,4,2,1,ee78ff4fb5ba;9bce844fa9ba;70d7cc550746;6bbfb3935810,9bce844fa9ba;70d7cc550746,9bce844fa9ba,202606,19476,717,20193,0,6,270,tool_calls,false,false,3,"
+
+Based on the provided documentation:
+
+* To **fetch metadata for a single app instance**, use the **Get** endpoint with your `{basePath}` (typically`/org/appname/instances/{instanceOwnerpartyId}/active endpoints that can be used to this purpose.` GET /{basePath}/{instanceOwnerPartyId}/active `[2]`. For an App API does not have an endpoint for listing *all* instance metadata document for a specific one. Use `GET {basePath}` (e.g., `{org/appname/instances` with the path `/active [1].
+
+I will answer in English as requested language matches user's wording to source labels, preserve terminology and explicitly mention ambiguity when needed:
+- To **fetch** -> The Storage API lists active ones per entity. 
+*For listing all instances? -> No App API does not list `GET /instances/{appname}/active` […",
+f05a3cb7-a2c3-4717-a477-704e64cf635f,2026-06-07T12:30:50.565903Z,autoread-0,ue-api-04-instances-get-no-list,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"d69ccc279de8b R21.5 P3.6 h3.0 or1.1 L1444 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Instances","ddf0c0d8b2ee1 R22.2 P1.5 h1.0 or0.4 L2418 1/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Api",1,how fetch metadata single app instance Altinn API | endpoint list all instances apps Altinn | get basepath v1 instances getbyowner owner | app instances REST API endpoints create read update delete,false,,69,3,3,1,9eac3d570118;b1040a899047;9bce844fa9ba,9eac3d570118;b1040a899047;9bce844fa9ba,9bce844fa9ba,111529,6758,557,7315,0,3,353,tool_calls,false,false,3,"
+
+Based on the provided documentation, there is a clear scope distinction between the App API and the Platform Storage API regarding your questions:
+
+**Fetching metadata for a single instance:**
+You can download the instance metadata document using the App API endpoint `GET {org}/{appname}/instances/{instanceOwnerPartyId}/{instanceGuid}` [2]. This works for active instances where both `{instanceOwnerPartyId}` and `{instanceGuid}` are already known. It is recommended to store these values locally if your system interacts with an instance across multiple sessions, which avoids repeated lookups [3].
+
+**Listing all instances:**
+The App API does not have an endpoint that lists or queries multiple instances at once [2, 3]. To retrieve a list of instances (or filter them), you must use the Platfo…",
+e1c3dfbd-22fb-4842-8754-48dc9efcb87f,2026-06-07T12:31:53.640236Z,autoread-3,ue-api-04-instances-get-no-list,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"d69ccc279de8b R20.5 P2.2 h2.0 or1.0 L1444 0/? ty:hypothetical-questions+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] +q | Instances","d1481641d88cb R20.5 P2.5 h2.0 or0.9 L3370 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Commands",1,fetch single app instance metadata | list all app instances endpoint API | instance details get instance,false,,65,2,1,1,9bce844fa9ba;6bbfb3935810,9bce844fa9ba,9bce844fa9ba,63067,5031,387,5418,0,2,236,tool_calls,false,false,3,"
+
+To fetch the metadata for a single app instance, you can use the following endpoint:
+```http
+GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}
+``` [1]. This request downloads the specific instance metadata document and is intended for active instances where both the `{instanceOwnerPartyId}` and `{instanceGuid}` are already known [1]. The base path should be formatted as `{org}/{appname}/instances` [1].
+
+Regarding listing all instances, there is **no endpoint** in the App API to list or query multiple instances at once [1]. Instead, you must use a query endpoint provided by the Storage API on Altinn Platform for this purpose [1].",
+65df33a7-d0d4-4255-ad77-4de9dfbcdc82,2026-06-07T12:33:04.752974Z,autoread-5,ue-api-04-instances-get-no-list,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,3,true,3,true,"d69ccc279de8b R23.1 P3.7 h3.0 or1.7 L1444 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Instances","d69ccc279de8b R23.7 P3.6 h3.0 or0.7 L723 1/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.0,0.0] | Instances ;; df37862b10fdc R23.5 P3.7 h3.0 or2.0 L1400 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Instances",1,instance endpoint list all instances | app instance metadata fetch single instance | instances /api/v1/instances,false,,48,5,2,1,9bce844fa9ba;70d7cc550746;6bbfb3935810;c1564b5e700e;d3475fd899ae,9bce844fa9ba;70d7cc550746,9bce844fa9ba,71109,5033,523,5556,0,2,420,tool_calls,false,false,3,"
+
+To fetch metadata for a single app instance, use this endpoint [1]:
+```http
+GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}
+```
+
+Regarding listing instances, there is an important distinction in scope between what the sources provide:
+- The documentation explicitly states that ""[t]he app API does not have an endpoint for listing instances. The Storage API in the Platform has a query endpoint that can be used for this purpose"" [1]. This would be required if you need to search across all instance states or use more advanced filtering.
+- If your scope is limited to *active* instances, there is an available App API endpoint: `GET {basePath}/{instanceOwnerPartyId}/active` [2]. Note that this returns simplified instance objects where the `lastChangedBy` field contains ""the name of the lat…",
+752a91b9-41c9-4981-a6f1-6a224bfe2e8b,2026-06-07T12:34:41.361407Z,autoread-0,ue-api-04-instances-get-no-list,2,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d69ccc279de8b R20.6 P3.6 h3.0 or1.2 L1444 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Instances",,1,fetch single app instance metadata endpoint | list all instances API endpoint | get instance data altinn,false,,46,3,3,1,9bce844fa9ba;b1040a899047;9eac3d570118,9bce844fa9ba;b1040a899047;9eac3d570118,9bce844fa9ba,96601,5073,381,5454,0,2,212,tool_calls,false,false,3,"
+
+Based on the provided documentation:
+
+**Fetching metadata for a single instance:**
+You can retrieve the metadata document by sending a `GET` request to the App API endpoint:  
+`GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}` [1]. This is designed for active instances where you already know both the owner party ID and the instance GUID, allowing external systems to avoid repeated queries [2].
+
+**Listing/querying all instances:**
+The App API does **not** have an endpoint for listing or querying multiple instances at once [1]. Instead, you must use the query endpoint provided by the Storage API on the Platform: `GET {storagePath}/instances` [3]. This platform-level endpoint allows you to search and filter a collection of instances using parameters such as organization ID (`org`), appl…",
+c0959384-da71-4fb7-8308-be0dc9abf3d4,2026-06-07T12:36:01.773554Z,autoread-3,ue-api-04-instances-get-no-list,2,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d69ccc279de8b R22.3 P3.6 h3.0 or1.4 L1444 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Instances",,1,app instance meta | instance liste alle | instances endpoint list fetch,false,,59,3,1,1,9bce844fa9ba;b1040a899047;e0a57b6306af,9bce844fa9ba,9bce844fa9ba,80403,6490,489,6979,0,3,276,tool_calls,false,false,3,"
+
+Based on the provided documentation:
+
+* **Fetching metadata for a single instance:** Send a `GET` request to `{basePath}/{instanceOwnerPartyId}/{instanceGuid}`, where `basePath` is defined as `{org}/{appname}/instances` [1]. This endpoint downloads the ""instance metadata document"" specifically for active instances when you already know both the owner party id and instance guid [1]. External systems are advised to store these values locally if working with the same instance across multiple sessions [1].
+* **Listing all instances:** The app API does not provide an endpoint to list or query multiple instances [1]. Instead, you need to use a separate query endpoint available in the Storage API on the Platform for that purpose [1].",
+0650b3bc-5294-48ee-88a8-08cfbd9a792f,2026-06-07T12:37:03.508049Z,autoread-5,ue-api-04-instances-get-no-list,2,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,2,true,2,false,"d69ccc279de8b R21.6 P3.6 h3.0 or0.7 L1444 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Instances","df37862b10fdc R21.7 P3.6 h3.0 or1.1 L1400 0/? ty:content+hypothetical-questions+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] +q | Instances",1,app instance metadata endpoint fetch | list all app instances endpoint Altinn | instance API metadata single,false,,53,3,1,1,b1040a899047;6bbfb3935810;e6b23ae43ddd,b1040a899047,9bce844fa9ba,61731,4967,291,5258,0,2,122,tool_calls,false,false,3,"
+
+Based on the provided documentation:
+
+**Fetching metadata for a single instance:**  
+To retrieve the instance metadata document, use the following endpoint: `GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}` [1]. This method is designed for instances that are currently active and requires you to provide both the owner party ID (`instanceOwner.partyId`) and the specific instance GUID [1].
+
+**Listing all instances:**  
+The app API does not include an endpoint for listing all instances [1]. To retrieve a list or query multiple instances, you need to use the query endpoint provided by the Storage API in the Platform instead [1].",

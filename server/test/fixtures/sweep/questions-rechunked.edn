@@ -1,0 +1,1061 @@
+{:version 1,
+ :created "2026-05-21",
+ :notes
+ "Lever B re-grounded (long goldens remapped to rechunk1500 sub-chunks)",
+ :questions
+ [{:id "altinn-broker-getting-started",
+   :dataset :public-docs,
+   :query
+   "Hvordan kommer jeg i gang med Altinn Broker under overgangen til Altinn 3?",
+   :golden-chunk-ids ["9584a6e89afc"],
+   :expected-answer-pattern "(?is)\\boverg(ang|ang)",
+   :tags #{:simple :navigational :altinn-broker},
+   :source :public-docs-smoke}
+  {:id "altinn-broker-technical-overview",
+   :dataset :public-docs,
+   :query
+   "Hva er den tekniske arkitekturen bak Altinn Broker i overgangsfasen?",
+   :golden-chunk-ids ["63c3d3e28820"],
+   :expected-answer-pattern
+   "(?is)(transition\\s*service\\s*bridge|servicecode|myk\\s+overgang)",
+   :tags #{:exact-lookup :simple :open-ended :altinn-broker},
+   :source :public-docs-smoke}
+  {:id "altinn-dialogporten-about",
+   :dataset :public-docs,
+   :query "Hva er Dialogporten?",
+   :golden-chunk-ids ["9f75a7784e9b"],
+   :expected-answer-pattern "(?is)\\bdialogporten\\b",
+   :tags #{:altinn-dialogporten :exact-lookup :simple},
+   :source :public-docs-smoke}
+  {:id "altinn-studio-create-user",
+   :dataset :public-docs,
+   :query "Hvordan oppretter jeg en bruker i Altinn Studio v8?",
+   :golden-chunk-ids ["0fac42eefdc4"],
+   :expected-answer-pattern "(?is)(ansattporten|altinn\\.studio)",
+   :tags #{:simple :altinn-studio :navigational},
+   :source :public-docs-smoke}
+  {:id "altinn-studio-datamodeling",
+   :dataset :public-docs,
+   :query "Hvordan definerer jeg en datamodell i Altinn Studio v8?",
+   :golden-chunk-ids ["2f6cee8d5f5e"],
+   :expected-answer-pattern "(?is)\\bdatamodell",
+   :tags #{:simple :altinn-studio :navigational},
+   :source :public-docs-smoke}
+  {:id "altinn3-lansert-when",
+   :dataset :public-docs,
+   :query "Når ble Altinn 3 lansert?",
+   :golden-chunk-ids ["8e22ae4b88b1"],
+   :expected-answer-pattern "(?i)juni\\s*2020",
+   :tags #{:exact-lookup :simple :altinn-3-general :temporal},
+   :source :altinn3-stability,
+   :notes
+   "Stability-batch query — n=10 runs per variant historically."}
+  {:id "altinn-correspondence-post-published",
+   :dataset :public-docs,
+   :query
+   "Hva skjer med en correspondence etter at den er publisert i Altinn?",
+   :golden-chunk-ids ["068a1c1b7fa5"],
+   :expected-answer-pattern "(?is)(publis|lest|notif|status|trigger)",
+   :tags #{:altinn-correspondence :simple :factual},
+   :source :exploratory-rerank,
+   :notes
+   "Phase D: stable at rank=53 — retrieval surfaces golden but rerank promotes unrelated chunks above it. Excellent rerank-tuning canary."}
+  {:id "altinn-systemuser-api-model",
+   :dataset :public-docs,
+   :query "Hvordan ser datamodellen for en system user ut i Altinn?",
+   :golden-chunk-ids ["6d8a6a851332"],
+   :expected-answer-pattern
+   "(?is)(datamodell|system\\s*user|systembruker|felter|fields)",
+   :tags #{:altinn-systemuser :exact-lookup :simple},
+   :source :exploratory-rerank,
+   :notes
+   "Phase D: stable at rank=71 — rerank doesn't help. Tests deep retrieval reach."}
+  {:id "altinn-systemuser-api-opprett",
+   :dataset :public-docs,
+   :query
+   "Hvordan oppretter jeg en systembruker via Altinn system user API?",
+   :golden-chunk-ids ["70a69fb50d45"],
+   :expected-answer-pattern
+   "(?is)(POST|opprett|system\\s*user|systembruker|endpoint)",
+   :tags #{:altinn-systemuser :simple :navigational},
+   :source :exploratory-rerank,
+   :notes "Phase D: marginal-variance rank=12-15 (variance=3)."}
+  {:id "altinn-systemuser-accept-request",
+   :dataset :public-docs,
+   :query
+   "Hvordan aksepterer en sluttbruker en forespørsel om system user i Altinn?",
+   :golden-chunk-ids ["bbf82de07a2f"],
+   :expected-answer-pattern
+   "(?is)(aksept|godkjenn|forespørsel|samtykke)",
+   :tags #{:altinn-systemuser :simple :navigational},
+   :source :exploratory-rerank,
+   :notes "Phase D: marginal-one-miss rank=17,miss,10."}
+  {:id "altinn-systemuser-delegate-clients",
+   :dataset :public-docs,
+   :query "Hvordan delegere klienter til en system user i Altinn?",
+   :golden-chunk-ids ["434ca284c0bf"],
+   :expected-answer-pattern
+   "(?is)(deleger|klient|system\\s*user|systembruker)",
+   :tags #{:altinn-systemuser :simple :navigational},
+   :source :exploratory-rerank,
+   :notes "Phase D: rank=1,2,miss — close to promotable."}
+  {:id "altinn-authorization-accessgroups-knytning",
+   :dataset :public-docs,
+   :query
+   "Hvordan knytter man en organisasjon til en tilgangsgruppe i registeret?",
+   :golden-chunk-ids ["a438b1775bf0"],
+   :expected-answer-pattern
+   "(?is)(tilgangsgruppe|access\\s*group|organisasjon|knytt|register)",
+   :tags #{:simple :navigational :altinn-authorization},
+   :source :exploratory-rerank,
+   :notes "Phase D: marginal-one-miss rank=1,miss,1."}
+  {:id "altinn-authorization-tilgangslister",
+   :dataset :public-docs,
+   :query
+   "Hva er tilgangslister i Altinn Authorization og hva brukes de til?",
+   :golden-chunk-ids ["bca3510f8c05"],
+   :expected-answer-pattern
+   "(?is)(tilgangsliste|access\\s*list|filter|begrense)",
+   :tags #{:exact-lookup :simple :altinn-authorization},
+   :source :exploratory-rerank,
+   :notes "Phase D: rank=miss,1,1."}
+  {:id "altinn-authorization-regler",
+   :dataset :public-docs,
+   :query "Hva er tilgangsregler i Altinn Authorization?",
+   :golden-chunk-ids ["86a29a595367"],
+   :expected-answer-pattern
+   "(?is)(tilgangsregel|access\\s*rule|policy|regel)",
+   :tags #{:exact-lookup :altinn-authorization :hard},
+   :source :exploratory-rerank,
+   :notes
+   "Phase D: always-missed across 3 runs. Tests retrieval edge cases."}
+  {:id "altinn-broker-rest-usage",
+   :dataset :public-docs,
+   :query "Hvordan bruker jeg Altinn Broker med REST-API?",
+   :golden-chunk-ids ["0f3807200a65"],
+   :expected-answer-pattern
+   "(?is)(REST|HTTP|endpoint|POST|GET|broker)",
+   :tags #{:simple :navigational :altinn-broker},
+   :source :exploratory-rerank,
+   :notes "Phase D: marginal-one-miss rank=miss,3,3."}
+  {:id "altinn-events-architecture",
+   :dataset :public-docs,
+   :query "Hvordan er Altinn Events arkitektonisk bygget opp?",
+   :golden-chunk-ids ["7d33c4c5baf1"],
+   :expected-answer-pattern
+   "(?is)(arkitekt|cloudevent|architecture|component|comp\\.|subscript)",
+   :tags #{:exact-lookup :simple :altinn-events},
+   :source :exploratory-rerank,
+   :notes
+   "Phase D: marginal-one-miss rank=miss,14,14 — borderline even on hit."}
+  {:id "altinn-studio-grouping-repeating",
+   :dataset :public-docs,
+   :query
+   "Hva er forskjellen mellom repeterende og ikke-repeterende grupper i Altinn Studio?",
+   :golden-chunk-ids ["9d621302f88b"],
+   :expected-answer-pattern
+   "(?is)(repeter|ikke-?repeter|gruppe|forskjell|differanse)",
+   :tags #{:paraphrase :altinn-studio :compare},
+   :source :exploratory-rerank,
+   :notes
+   "Phase D: marginal-variance rank=3-6 (var=3). Comparison-style query — secondary chunk fd3c5cddbfbb (non-repeating counterpart) jointly answers."}
+  {:id "altinn-studio-grouping-repeating-edit",
+   :dataset :public-docs,
+   :query
+   "Hvordan redigerer jeg en repeterende gruppe i Altinn Studio v8?",
+   :golden-chunk-ids ["3685015c0f1c"],
+   :expected-answer-pattern "(?is)(rediger|edit|gruppe|repeterende)",
+   :tags #{:simple :altinn-studio :navigational},
+   :source :exploratory-rerank,
+   :notes "Phase D: rank=miss,2,1."}
+  {:tags #{:altinn-3-general :open-ended :compare},
+   :source :new,
+   :grounding-mode :answer-only,
+   :golden-chunk-ids [],
+   :id "altinn3-what-is-new",
+   :notes "Open comparison — tests synthesis breadth.",
+   :expected-answer-pattern
+   "(?is)(plattform|arkitektur|skytjenester|microservic)",
+   :query "Hva er hovedforskjellene mellom Altinn 2 og Altinn 3?",
+   :dataset :public-docs}
+  {:id "altinn3-deprecated-services",
+   :dataset :public-docs,
+   :query
+   "Hvilke tjenester fra Altinn 2 fases ut i overgangen til Altinn 3?",
+   :golden-chunk-ids [],
+   :expected-answer-pattern
+   "(?is)(fase|legge\\s+ned|overgang|sluttdato|utfases)",
+   :tags #{:compound :altinn-3-general :list},
+   :source :new,
+   :grounding-mode :answer-only}
+  {:id "altinn-authorization-policy-shape",
+   :dataset :public-docs,
+   :query "Hvordan er en autorisasjonspolicy bygd opp i Altinn 3?",
+   :golden-chunk-ids [],
+   :expected-answer-pattern
+   "(?is)(xacml|policy|rule|target|subject|resource)",
+   :tags #{:simple :open-ended :altinn-authorization},
+   :source :new,
+   :grounding-mode :answer-only}
+  {:id "altinn-authorization-delegation",
+   :dataset :public-docs,
+   :query
+   "Kan jeg delegere rettigheter til andre brukere i Altinn, og hvordan?",
+   :golden-chunk-ids [],
+   :expected-answer-pattern
+   "(?is)(deleger|tilgangsstyring|rettigheter|fullmakt)",
+   :tags #{:simple :open-ended :altinn-authorization},
+   :source :new,
+   :grounding-mode :answer-only}
+  {:id "altinn-events-subscribe",
+   :dataset :public-docs,
+   :query "Hvordan abonnerer jeg på hendelser i Altinn Events?",
+   :golden-chunk-ids [],
+   :expected-answer-pattern
+   "(?is)(subscription|abonne|webhook|cloudevent)",
+   :tags #{:lookup :simple :altinn-events},
+   :source :new,
+   :grounding-mode :answer-only}
+  {:id "altinn-notifications-channels",
+   :dataset :public-docs,
+   :query
+   "Hvilke kanaler støtter Altinn Notifications for å sende varsler?",
+   :golden-chunk-ids [],
+   :expected-answer-pattern "(?is)(e-?post|sms|email|kanal)",
+   :tags #{:altinn-notifications :simple :list},
+   :source :new,
+   :grounding-mode :answer-only}
+  {:id "altinn-correspondence-purpose",
+   :dataset :public-docs,
+   :query
+   "Hva brukes Altinn Correspondence til, og hvordan skiller det seg fra Dialogporten?",
+   :golden-chunk-ids [],
+   :expected-answer-pattern
+   "(?is)(correspondence|melding|dialogporten|forskjell|skille)",
+   :tags #{:altinn-correspondence :open-ended :compare},
+   :source :new,
+   :grounding-mode :answer-only}
+  {:id "altinn-studio-deploy-app",
+   :dataset :public-docs,
+   :query
+   "Hvordan distribuerer jeg en Altinn-app fra Altinn Studio til produksjon?",
+   :golden-chunk-ids [],
+   :expected-answer-pattern
+   "(?is)(deploy|publis|produksjon|app-?utvikling|pipeline)",
+   :tags #{:simple :open-ended :altinn-studio},
+   :source :new,
+   :grounding-mode :answer-only}
+  {:tags #{:altinn-dialogporten :followup :open-ended},
+   :source :new,
+   :grounding-mode :answer-only,
+   :golden-chunk-ids [],
+   :id "altinn-dialogporten-followup-actor",
+   :notes
+   "Pronoun-only followup — tests whether stateless retrieval still finds the topic.",
+   :expected-answer-pattern
+   "(?is)(part|aktør|tilgang|rolle|avsender|mottaker)",
+   :query "Og hvem kan se dialogene som opprettes der?",
+   :dataset :public-docs}
+  {:tags #{:negative :altinn-3-general :hard},
+   :source :new,
+   :grounding-mode :refusal-expected,
+   :golden-chunk-ids [],
+   :id "altinn-out-of-scope-weather",
+   :notes
+   "Out-of-domain — should produce a graceful refusal, not a hallucinated forecast.",
+   :expected-answer-pattern
+   "(?is)(kan ikke|finner ikke|ikke relevant|utenfor|ikke dekke)",
+   :query "Hva er værmeldingen for Oslo i morgen?",
+   :dataset :public-docs}
+  {:tags #{:negative :altinn-broker :hard},
+   :source :new,
+   :grounding-mode :refusal-expected,
+   :golden-chunk-ids [],
+   :id "altinn-out-of-scope-pricing",
+   :notes
+   "In-domain topic but pricing is not in the public docs — should refuse cleanly.",
+   :expected-answer-pattern
+   "(?is)(ikke oppgitt|ikke spesifisert|kan ikke|finner ikke|kontakt)",
+   :query
+   "Hvor mye koster det å bruke Altinn Broker for en bedrift med 50 ansatte?",
+   :dataset :public-docs}
+  {:id "altinn-broker-vs-correspondence",
+   :dataset :public-docs,
+   :query
+   "Når bør jeg bruke Altinn Broker fremfor Altinn Correspondence?",
+   :golden-chunk-ids [],
+   :expected-answer-pattern
+   "(?is)(stor(e)?\\s+filer|filoverføring|melding|størrelse|use\\s*case)",
+   :tags #{:compound :compare :altinn-broker},
+   :source :new,
+   :grounding-mode :answer-only}
+  {:tags #{:simple :altinn-3-general :temporal :hard},
+   :source :new,
+   :grounding-mode :answer-only,
+   :golden-chunk-ids [],
+   :id "altinn-2-sunset-date",
+   :notes
+   "Date-sensitive — answer may legitimately be 'not yet announced' depending on corpus age.",
+   :expected-answer-pattern
+   "(?is)(20\\d\\d|sluttdato|legges\\s+ned|utfases|sunset)",
+   :query "Når legges Altinn 2 endelig ned?",
+   :dataset :public-docs}
+  {:id "digdir-arsverk-canonical-pivot",
+   :tombstone? true,
+   :golden-chunk-ids []}
+  {:id "digdir-arsverk-avtalte-utforte-2021-2023",
+   :tombstone? true,
+   :golden-chunk-ids []}
+  {:id "digdir-tilsette-avtalte-utforte-2021-2023",
+   :tombstone? true,
+   :golden-chunk-ids []}
+  {:id "digdir-lonn-per-arsverk-2021-2023",
+   :tombstone? true,
+   :golden-chunk-ids []}
+  {:id "digdir-utforte-lonn-2018-2023",
+   :tombstone? true,
+   :golden-chunk-ids []}
+  {:id "digdir-lonn-2018-2023-coverage",
+   :tombstone? true,
+   :golden-chunk-ids []}
+  {:id "digdir-arsverk-2022-utforte",
+   :tombstone? true,
+   :golden-chunk-ids []}
+  {:id "digdir-arsverk-bilingual-scope",
+   :tombstone? true,
+   :golden-chunk-ids []}
+  {:id "digdir-arsverk-lonn-2020-2023",
+   :tombstone? true,
+   :golden-chunk-ids []}
+  {:id "digdir-utforte-arsverk-2018-2023-anchored",
+   :tombstone? true,
+   :golden-chunk-ids []}
+  {:id "digdir-tilsette-lonn-2020-2023",
+   :tombstone? true,
+   :golden-chunk-ids []}
+  {:tags #{:altinn-notifications :extraction :hard},
+   :source :new,
+   :grounding-mode :chunks+answer,
+   :golden-chunk-ids ["4b526125dd8b" "d3a8cfef9194"],
+   :id "hard-sms-segment-length",
+   :notes
+   "Numeric fact in the SMS-segmentation doc's table (160 tegn); lay term 'SMS', not 'segment'. Goldens are the two NB chunks that carry the 160-tegn table.",
+   :expected-answer-pattern "(?i)160|16\\s*segment",
+   :query
+   "Hvor mange tegn kan en SMS-varsling inneholde før den deles i flere segmenter?",
+   :dataset :public-docs}
+  {:tags #{:compound :extraction :altinn-authorization :hard},
+   :source :new,
+   :grounding-mode :chunks+answer,
+   :golden-chunk-ids ["3e3f2b47ee86"],
+   :id "hard-consent-rights-token",
+   :notes
+   "Multi-hop: samtykke -> token -> consentRights field -> validation. Needs chaining; unlikely to resolve in one pass.",
+   :expected-answer-pattern "(?i)consentRights",
+   :query
+   "Hvilke rettigheter må jeg sjekke i et samtykketoken, og hvor i tokenet ligger de?",
+   :dataset :public-docs}
+  {:tags #{:open-ended :altinn-authorization :temporal :hard},
+   :source :new,
+   :grounding-mode :chunks+answer,
+   :golden-chunk-ids ["11ae3c2cf496"],
+   :id "hard-vergemaal-not-in-prod",
+   :notes
+   "Temporal trap: the doc says vergemål is NOT yet in TEST/PROD (planlagt mars). A correct answer must surface the not-yet-available caveat.",
+   :expected-answer-pattern
+   "(?i)(ikke.{0,20}(test|prod)|ennå ikke|planlagt|mars)",
+   :query "Hvordan tar jeg i bruk vergemål i Altinn 3 i produksjon?",
+   :dataset :public-docs}
+  {:tags #{:altinn-correspondence :list :compare :hard},
+   :source :new,
+   :grounding-mode :chunks+answer,
+   :golden-chunk-ids ["23313b9a4c7a" "068a1c1b7fa5"],
+   :id "hard-correspondence-status-disambig",
+   :notes
+   "Cross-system disambiguation: correspondence status-lifecycle vs dialogporten statuses. Tests whether the agent disambiguates or blends.",
+   :expected-answer-pattern "(?i)(publisert|lest|bekreftet|hentet)",
+   :query
+   "Hvilke statuser kan en melding ha i Altinn etter at den er publisert?",
+   :dataset :public-docs}
+  {:tags #{:paraphrase :altinn-authorization :hard},
+   :source :new,
+   :grounding-mode :chunks+answer,
+   :golden-chunk-ids ["0e6cefe285b2" "1e982e3e2bba"],
+   :id "hard-represent-bridging",
+   :notes
+   "Lay->jargon bridge (Q06 class): 'representere meg overfor det offentlige' -> fullmakt/delegering. Exercises enrichment + corpus-aware.",
+   :expected-answer-pattern "(?i)(fullmakt|delegering|representere)",
+   :query
+   "Hvordan gir jeg noen lov til å representere meg overfor det offentlige?",
+   :dataset :public-docs}
+  {:id "gc-01-conditional-field-visibility",
+   :dataset :public-docs,
+   :query
+   "How can I make one form field show up only when another field has a certain value in my Altinn app?",
+   :golden-chunk-ids ["e4c6a83371ce" "281902e3aa4c" "3adda2fcc065"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-02-dialogporten-what-is",
+   :dataset :public-docs,
+   :query
+   "I keep hearing about Dialogporten — what is it and what does it actually do?",
+   :golden-chunk-ids ["d4528782a4c8" "d1b16e295b68" "f3899e00b3c2"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-dialogporten :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-03-system-acts-for-company",
+   :dataset :public-docs,
+   :query
+   "How can an accounting program submit data to Altinn for a company without a person logging in each time?",
+   :golden-chunk-ids ["050fbe324462" "6f4a1ef342c8" "e6f7545a1adc"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-systemuser :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-04-notify-instead-of-polling",
+   :dataset :public-docs,
+   :query
+   "How can my system automatically find out when something happens to one of my Altinn forms, instead of checking all the time?",
+   :golden-chunk-ids ["fb897d22bdf4" "f183fac18900"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-events :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-05-dropdown-options-code-list",
+   :dataset :public-docs,
+   :query
+   "How do I set up options for a dropdown component from a code list in Altinn Studio?",
+   :golden-chunk-ids
+   ["725316b0e0d6" "c84c1a8349a6" "89f48381197d" "efd790a816ae"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-06-send-official-letter-to-company",
+   :dataset :public-docs,
+   :query
+   "Can a public agency send an official letter to a company through Altinn, and how does the company get notified?",
+   :golden-chunk-ids ["ebd89d3a9496" "e00057498d4d" "1543a3f4e321"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-correspondence :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-07-let-bought-software-act-for-my-company",
+   :dataset :public-docs,
+   :query
+   "I bought an accounting program for my company — how do I let it pull my tax data without me logging in every time?",
+   :golden-chunk-ids ["4689264ab363" "3b20a43a6423"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-3-general :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-08-let-my-bank-fetch-my-income-data",
+   :dataset :public-docs,
+   :query
+   "How does it work when I allow my bank to fetch my income information from a public agency on my behalf?",
+   :golden-chunk-ids ["4bd38515507a" "e396875b9f1f" "362792b4400e"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-09-api-to-link-customers-to-accountant-integration",
+   :dataset :public-docs,
+   :query
+   "Which endpoints do I call to attach and detach the companies an accountant integration represents?",
+   :golden-chunk-ids
+   ["57f8552e5a08" "6766efe772bc" "2bb677636e5c" "06eb4cf43970"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-3-general :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-10-stop-a-program-from-accessing-my-company",
+   :dataset :public-docs,
+   :query
+   "How do I stop a program I set up from having access to my company's data?",
+   :golden-chunk-ids ["9c69cb9df661" "6ec10f61e0dd"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-authorization :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-11-create-a-consent-request-via-api",
+   :dataset :public-docs,
+   :query
+   "What do I need in place and what payload do I post to ask a user to approve data sharing?",
+   :golden-chunk-ids ["628290aa1d8d" "3af08a1514c5" "f4b568a29836"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-12-got-an-approval-request-but-cant-approve-it",
+   :dataset :public-docs,
+   :query
+   "A software vendor sent me a request to approve, but I don't have permission — what can I do?",
+   :golden-chunk-ids ["ffb35e69a2df" "c6cabaa59697"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-13-validate-system-user-token-and-authorize-with-pdp",
+   :dataset :public-docs,
+   :query
+   "As an API provider, how do I read the system user token and authorize the request against Altinn PDP?",
+   :golden-chunk-ids
+   ["4346f10c772d"
+    "ad5da30939c7"
+    "432c769fd813"
+    "7ea7afe1d1fe"
+    "fd72a28afd94"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-systemuser :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-14-steps-to-start-sharing-data-with-consent",
+   :dataset :public-docs,
+   :query
+   "What setup does each side need before we can start sharing data based on a user's permission?",
+   :golden-chunk-ids
+   ["8ed6b6f67007"
+    "58c6b4d9d37c"
+    "64c20dcb3464"
+    "f7d93b8285d3"
+    "7c0a546eef80"
+    "99e1a5169644"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-3-general :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-15-what-files-make-up-a-data-model",
+   :dataset :public-docs,
+   :query
+   "When I build a data model in Altinn Studio, what files does it actually create and what is each one for?",
+   :golden-chunk-ids ["ad84e478aa32" "0c64b409aeeb" "4203ab18015a"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-16-change-the-error-text-shown-to-users",
+   :dataset :public-docs,
+   :query
+   "How do I change the wording of the error message a user sees when they leave a required field blank or type something too long?",
+   :golden-chunk-ids
+   ["20685f3bb6f3" "fd4115c67b52" "5f97c04bbb18" "9db4a2d762fa"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-17-auto-fill-name-and-address-from-registers",
+   :dataset :public-docs,
+   :query
+   "Can my form automatically fill in the person's name and address so they don't have to type it themselves, and what details can it pull in?",
+   :golden-chunk-ids ["8f1a161a2478" "0eb04db689d9" "a590caa6182f"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-18-add-a-payment-step-to-the-process",
+   :dataset :public-docs,
+   :query
+   "How do I wire up a payment step in my app's process flow by hand, including the BPMN task and the data types it needs?",
+   :golden-chunk-ids ["9f64718d010d" "c32d43d94d43" "c0db84ac5786"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-19-let-users-attach-documents",
+   :dataset :public-docs,
+   :query
+   "I want people to be able to attach documents to my form — which building block do I use and how do I limit file types and number of files?",
+   :golden-chunk-ids ["cedf20aa5fc7" "f6036027743a"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-20-configure-layout-sets-and-page-order",
+   :dataset :public-docs,
+   :query
+   "How do I configure layout sets and the page order for an app with multiple pages?",
+   :golden-chunk-ids ["8d4fc568bd07" "d4e85e861c04" "736efe1d44d4"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-21-start-a-new-instance-via-api-with-prefill",
+   :dataset :public-docs,
+   :query
+   "From an external system, how do I start a new instance for a given person and pass in some initial field values in the request?",
+   :golden-chunk-ids ["443150f355f7" "ffe33bf3120d" "c1564b5e700e"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-22-which-test-logins-when-running-locally",
+   :dataset :public-docs,
+   :query
+   "When I'm trying out my form on my own machine, which fake people can I log in as, and can I add my own with a different ID number?",
+   :golden-chunk-ids
+   ["9a53ae7fdb0b"
+    "2f38ea1a18f7"
+    "a79b2583b9f2"
+    "abb489258c20"
+    "b5e8946eeb16"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-23-what-info-government-stores-about-messages",
+   :dataset :public-docs,
+   :query
+   "What information does the government actually keep about my digital messages from public agencies?",
+   :golden-chunk-ids ["a233d1c22ebe" "b8ddca7bace0" "ea7de904e1aa"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-24-group-related-letters-under-one-inbox-item",
+   :dataset :public-docs,
+   :query
+   "How can I make several related letters show up grouped under one item in the inbox instead of as separate entries?",
+   :golden-chunk-ids ["e14dcba9fdfa"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-correspondence :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "gc-25-message-blocks-me-from-opening-attachment-or-button",
+   :dataset :public-docs,
+   :query
+   "When I open one of my messages some attachments and buttons are greyed out and one even gave a \"forbidden\" error — why can't I access them?",
+   :golden-chunk-ids ["7862f7d4c489" "506bcbea034e" "2fa2b30bb3b8"],
+   :expected-answer-pattern ".{40,}",
+   :tags #{:altinn-authorization :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-broker-01-filoverforing-tilstander",
+   :dataset :public-docs,
+   :query
+   "Hvilke statuser kan en filoverføring i Altinn Formidling gå gjennom, fra den blir startet til filen er slettet?",
+   :golden-chunk-ids ["b1bed59410cf" "3a6b040447a3"],
+   :expected-answer-pattern
+   "(?i)initialisert|opplasting|publisert|bekreftet nedlastet",
+   :tags #{:altinn-broker :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-broker-02-slette-tid-tilgjengelig",
+   :dataset :public-docs,
+   :query
+   "How long does a file stay available for download in Altinn Broker, and how do I control when it gets deleted after recipients confirm?",
+   :golden-chunk-ids ["bfb6a531901c"],
+   :expected-answer-pattern
+   "(?i)FileTransferTimeToLive|PurgeFileTransferAfterAllRecipientsConfirmed|PurgeFileTransferGracePeriod|30 days",
+   :tags #{:altinn-broker :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-broker-03-store-filer-virusskann",
+   :dataset :public-docs,
+   :query
+   "Can I send files larger than 2GB through Altinn Broker, and what is the maximum file size?",
+   :golden-chunk-ids ["462659d19025"],
+   :expected-answer-pattern
+   "(?i)2\\s?GB|virus scan|1\\.6\\s?TB|pre-approved",
+   :tags #{:altinn-broker :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-broker-04-overgang-a2-a3-forskjeller",
+   :dataset :public-docs,
+   :query
+   "What changes for consumers when an Altinn 2 Broker service is moved to Altinn 3, for example around receipts and virus scanning?",
+   :golden-chunk-ids ["7c0cab211f48"],
+   :expected-answer-pattern
+   "(?i)Receipt Id|virus.?scan|after upload|File List",
+   :tags #{:altinn-broker :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-broker-05-filstorrelse-grenser-multi",
+   :dataset :public-docs,
+   :query
+   "Hva er filstørrelsesgrensene i Altinn Broker med og uten virusskanning, hvorfor er standardgrensen 2 GB, og hva må til for å sende større filer?",
+   :golden-chunk-ids ["627b7692a830" "462659d19025"],
+   :expected-answer-pattern
+   "(?i)2\\s?GB|virus|1[.,]?6\\s?TB|1600\\s?GB|pre-approved|forh[åa]ndsgodkjen",
+   :tags #{:compound :altinn-broker :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-events-01-abonnement-filtre",
+   :dataset :public-docs,
+   :query
+   "Når jeg oppretter et abonnement i Altinn Events, hvilke filtre kan jeg sette og hvorfor får jeg ingen hendelser hvis jeg setter typeFilter til en tom streng?",
+   :golden-chunk-ids
+   ["2204f69c25e9"
+    "f408cb20fca5"
+    "be153e14d413"
+    "f3b39cb68445"
+    "9906679bb40e"
+    "2e20a16f2e1b"
+    "5caf12fa9d60"],
+   :expected-answer-pattern
+   "(?i)resourceFilter|subjectFilter|typeFilter|tom streng",
+   :tags #{:altinn-events :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-events-02-publisere-cloudevents",
+   :dataset :public-docs,
+   :query
+   "Hvordan publiserer jeg en egendefinert hendelse til Altinn Events, og hvilket Maskinporten-scope og format trengs?",
+   :golden-chunk-ids ["55043ff5e8e8"],
+   :expected-answer-pattern
+   "(?i)POST /events|altinn:events\\.publish|cloudevents|Ressursregister",
+   :tags #{:altinn-events :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-events-03-polling-vs-webhook",
+   :dataset :public-docs,
+   :query
+   "Kan jeg hente hendelser fra Altinn Events ved å polle et API i stedet for å bruke webhooks?",
+   :golden-chunk-ids ["bd4ef5587250"],
+   :expected-answer-pattern
+   "(?i)polling|Events API|webhooks|planlagte forespørsler",
+   :tags #{:altinn-events :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-studio-01-skjul-felt-uttrykk",
+   :dataset :public-docs,
+   :query
+   "Hvordan setter jeg opp en regel i Altinn Studio som skjuler «Send inn»-knappen når aldersfeltet er tomt eller under 18?",
+   :golden-chunk-ids ["d787f2a722f9" "9729c3643a69"],
+   :expected-answer-pattern
+   "(?i)logikkregel|underuttrykk|operand|skjul felt|mindre enn",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-studio-02-pdf-service-task",
+   :dataset :public-docs,
+   :query
+   "How do I add a step that generates a PDF in my app's process in Altinn Studio?",
+   :golden-chunk-ids ["3cac8ba0d799"],
+   :expected-answer-pattern
+   "(?i)Arbeidsflyt|PDF service task|process\\.bpmn|autoPdfTaskIds|layout set",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-studio-03-datamodell-filer",
+   :dataset :public-docs,
+   :query
+   "Hvilke modellfiler genereres for en app-datamodell og hvor i repoet ligger de?",
+   :golden-chunk-ids ["3db5a48a99cd"],
+   :expected-answer-pattern
+   "(?i)App/models|schema\\.json|metadata\\.json|\\.cs|XSD",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-studio-04-non-repeating-group",
+   :dataset :public-docs,
+   :query
+   "How do I group several fields together in a form so I can apply the same dynamics to all of them at once?",
+   :golden-chunk-ids ["a62e1e6697bf"],
+   :expected-answer-pattern
+   "(?i)FormLayout\\.json|Group|children|group component",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-studio-05-tekstressurser-sprak",
+   :dataset :public-docs,
+   :query
+   "Hvordan legger jeg til og oversetter tekster til flere språk i appen min i Altinn Studio?",
+   :golden-chunk-ids ["855b659b4ac4"],
+   :expected-answer-pattern
+   "(?i)Teksteditor|tekstn[øo]kkel|Ny tekst|spr[åa]k|oversett",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-studio-06-options-kilder-kodeliste",
+   :dataset :public-docs,
+   :query
+   "Hvilke egenskaper kan jeg bruke for å koble en komponent til svaralternativer/kodelister, og hvilken vinner hvis flere er satt?",
+   :golden-chunk-ids ["d01a5da54202" "9e4f1a14b0c7"],
+   :expected-answer-pattern
+   "(?i)options|optionsId|source|forrang|svaralternativ",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-studio-07-validering-uttrykk-fil",
+   :dataset :public-docs,
+   :query
+   "Hvordan setter jeg opp egendefinert validering med uttrykk når det ikke kan gjøres i Studio Designer?",
+   :golden-chunk-ids ["b6c96f94d373"],
+   :expected-answer-pattern
+   "(?i)validation\\.json|validations|definitions|uttrykk|datamodell",
+   :tags #{:altinn-studio :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-corr-01-events-webhook-subscription",
+   :dataset :public-docs,
+   :query
+   "Hvordan setter jeg opp et webhook-abonnement for å motta hendelser fra Altinn Correspondence, og hvilke filtre må jeg bruke som mottaker?",
+   :golden-chunk-ids ["9f49f2505a30" "afac432bc8a3"],
+   :expected-answer-pattern
+   "(?i)resourceFilter|subjectFilter|subscription|correspondencepublished",
+   :tags #{:altinn-correspondence :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-corr-02-transmission-group-dialog",
+   :dataset :public-docs,
+   :query
+   "Hvordan kan jeg knytte en ny melding til en eksisterende dialog slik at relaterte instanser grupperes sammen?",
+   :golden-chunk-ids ["f00bac7b7c04"],
+   :expected-answer-pattern
+   "(?i)transmission|dialogId|externalReferences|DialogportenDialogId",
+   :tags #{:altinn-correspondence :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-corr-03-system-til-system-nedlasting",
+   :dataset :public-docs,
+   :query
+   "Vi mottar store mengder meldinger med vedlegg i Altinn - bør vi behandle dem manuelt i innboksen eller integrere mot API?",
+   :golden-chunk-ids ["647ad0047b4c"],
+   :expected-answer-pattern
+   "(?i)system-til-system|integra|vedlegg|maskinelt|Dialogporten",
+   :tags #{:altinn-correspondence :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-corr-04-notification-order-sms-window",
+   :dataset :public-docs,
+   :query
+   "When a correspondence message triggers an SMS notification, at what time of day is the SMS actually sent, and when is a reminder sent if it stays unread?",
+   :golden-chunk-ids ["c8b07d37ef4c" "290cbbba59cf"],
+   :expected-answer-pattern
+   "(?i)9:00 AM|5:00 PM|reminder|7 days|notification order",
+   :tags #{:altinn-correspondence :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-notif-05-umiddelbar-varsling-otp",
+   :dataset :public-docs,
+   :query
+   "Vi trenger å sende en engangskode (OTP) til brukeren med en gang ved innlogging - finnes det en måte å sende et varsel øyeblikkelig på, døgnet rundt?",
+   :golden-chunk-ids ["046877b17d91"],
+   :expected-answer-pattern
+   "(?i)umiddelbar varsling|OTP|sendingTimePolicy|Anytime|shipmentId",
+   :tags #{:altinn-notifications :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-notif-06-egendefinert-avsender-epost-dns",
+   :dataset :public-docs,
+   :query
+   "Hvordan kan jeg sette en egen e-postadresse som avsender på varsler via API-et, og hva må til for å ta i bruk et eget domene?",
+   :golden-chunk-ids ["aa73725749c0"],
+   :expected-answer-pattern
+   "(?i)senderEmailAddress|emailSettings|DNS|DKIM|verifiser",
+   :tags #{:altinn-notifications :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-notif-07-standard-avsender-sms-epost",
+   :dataset :public-docs,
+   :query
+   "Hvis jeg ikke konfigurerer noe eget, hvilken avsender vises på SMS og e-post som sendes gjennom Altinn Varsling?",
+   :golden-chunk-ids ["1ae507a826c4"],
+   :expected-answer-pattern
+   "(?i)Altinn|noreply@altinn|avsender|SMS|epost",
+   :tags #{:altinn-notifications :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-dialog-01-aktivitetslogg",
+   :dataset :public-docs,
+   :query
+   "Hva er aktivitetsloggen til en dialog i Dialogporten, og hvem fyller den ut?",
+   :golden-chunk-ids ["7d7ea7c7f801"],
+   :expected-answer-pattern
+   "(?i)aktivitetslogg|uforanderlig|tjenesteeier|tidsstemplede",
+   :tags #{:altinn-dialogporten :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-dialog-02-seen-log",
+   :dataset :public-docs,
+   :query
+   "In Dialogporten, what exactly does it mean that a dialog has been 'seen' in the seen log, and does listing or searching dialogs count?",
+   :golden-chunk-ids ["ef0db48a577e"],
+   :expected-answer-pattern
+   "(?i)seen log|requested from the API|search or list|automatically",
+   :tags #{:altinn-dialogporten :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-dialog-03-unauthorized-urls",
+   :dataset :public-docs,
+   :query
+   "What happens to the URLs of a Dialogporten action or transmission if the authenticated user is not authorized for it?",
+   :golden-chunk-ids ["7862f7d4c489"],
+   :expected-answer-pattern
+   "(?i)isAuthorized|urn:dialogporten:unauthorized|replaced|authorization check",
+   :tags #{:altinn-dialogporten :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-dialog-04-activity-entity-fields",
+   :dataset :public-docs,
+   :query
+   "Which fields does a dialog activity entity contain in Dialogporten, and can an activity be tied to a specific transmission?",
+   :golden-chunk-ids ["8539ebbedd61"],
+   :expected-answer-pattern
+   "(?i)immutable timeline|createdAt|extendedType|transmissionId",
+   :tags #{:altinn-dialogporten :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-dialog-05-search-rest-graphql",
+   :dataset :public-docs,
+   :query
+   "Hvilke protokoller støtter Dialogporten for å søke etter dialoger, og hvorfor får jeg mindre informasjon i søkeresultatet enn i detaljvisningen?",
+   :golden-chunk-ids ["584b5bfdcbb8"],
+   :expected-answer-pattern
+   "(?i)REST|GraphQL|detaljendepunkt|forskjellig",
+   :tags #{:altinn-dialogporten :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-dialog-06-skrivehandlinger",
+   :dataset :public-docs,
+   :query
+   "Hva er skrivehandlinger i Dialogporten og hvordan lar de GUI-handlinger endre tilstand uten full sidenavigering?",
+   :golden-chunk-ids ["6e58e5506c06"],
+   :expected-answer-pattern
+   "(?i)skrivehandlinger|GUI-handlinger|tilstandsendrende|sidenavigering",
+   :tags #{:altinn-dialogporten :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-dialog-07-webapi-sdk",
+   :dataset :public-docs,
+   :query
+   "Hvordan kan jeg programmatisk opprette og oppdatere dialoger selv når den automatiske synkroniseringen ikke gir nok kontroll?",
+   :golden-chunk-ids ["68a9ae627a18"],
+   :expected-answer-pattern
+   "(?i)WebAPI SDK|programmatisk|opprette og\\s*oppdatere|finkornet",
+   :tags #{:altinn-dialogporten :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-authz-01-delegere-tilgangspakke-api",
+   :dataset :public-docs,
+   :query
+   "Hvilket API-endepunkt og hvilke parametere bruker jeg for å delegere en tilgangspakke til en person via Access Management-API-et?",
+   :golden-chunk-ids ["1698fc076bc5"],
+   :expected-answer-pattern
+   "(?i)accesspackages|connections/accesspackages|partyUuid|packageId|delegere tilgangspakke",
+   :tags #{:altinn-authorization :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-authz-02-tilgangsliste-handlingsfilter",
+   :dataset :public-docs,
+   :query
+   "Hvordan kan jeg begrense at én tilgangsliste bare gir lesetilgang mens en annen gir både lese- og skrivetilgang på samme ressurs?",
+   :golden-chunk-ids ["92ccd3cd8025"],
+   :expected-answer-pattern
+   "(?i)handlingsfilter|actionFilters|resource-connections|read.*write|XACML",
+   :tags #{:altinn-authorization :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-authz-03-validere-samtykketoken",
+   :dataset :public-docs,
+   :query
+   "Hvordan validerer jeg som tjenesteeier at et samtykketoken faktisk gir de rettighetene tjenesten min krever?",
+   :golden-chunk-ids ["3e3f2b47ee86"],
+   :expected-answer-pattern
+   "(?i)consentRights|authorization_details|samtykke.?token|Maskinporten",
+   :tags #{:altinn-authorization :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-authz-04-opprette-tilgangsliste-medlemmer",
+   :dataset :public-docs,
+   :query
+   "Hvordan oppretter jeg en ny tilgangsliste og legger til organisasjoner som medlemmer via API-et?",
+   :golden-chunk-ids ["c95081d798ce"],
+   :expected-answer-pattern
+   "(?i)access-lists|members|PUT|POST|identifier-no",
+   :tags #{:altinn-authorization :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-authz-05-xacml-policy-regelstruktur",
+   :dataset :public-docs,
+   :query
+   "What does a XACML policy in Altinn describe, and what are the parts that make up each rule?",
+   :golden-chunk-ids ["833d9b905c64"],
+   :expected-answer-pattern
+   "(?i)XACML|resource.*action.*subject|rule|access rules",
+   :tags #{:altinn-authorization :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-authz-06-xacml-obligation-authlevel",
+   :dataset :public-docs,
+   :query
+   "How do I set the required authentication level for access in the XACML policy, and what is the default?",
+   :golden-chunk-ids ["30f6851d8d1f"],
+   :expected-answer-pattern
+   "(?i)obligation|authentication ?level|minimum-authenticationlevel|Maskinporten",
+   :tags #{:altinn-authorization :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-authz-07-bruker-typer-authorization",
+   :dataset :public-docs,
+   :query
+   "What are the different types of users Altinn Authorization supports, and which ones can actually submit on behalf of a party in an app?",
+   :golden-chunk-ids ["15cc08f9afa8" "3bc844e09c45"],
+   :expected-answer-pattern
+   "(?i)system ?user|service owner|organization|valid submitter|Maskinporten token",
+   :tags #{:altinn-authorization :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-sys-01-leverandorstyrt-og-forhold",
+   :dataset :public-docs,
+   :query
+   "Hvis systemleverandøren ber om flere tilganger i en systembruker-forespørsel, kan kunden godkjenne bare noen av dem?",
+   :golden-chunk-ids ["16049c347d69"],
+   :expected-answer-pattern
+   "(?i)leverandørstyrt|OG-forhold|samtlige tilganger|godkjenne|én av tilgangene",
+   :tags #{:altinn-systemuser :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-sys-02-systembrukertoken-pdp-autorisasjon",
+   :dataset :public-docs,
+   :query
+   "Hvilken verdi i systembrukertokenet trenger jeg for å autorisere tilgang mot Altinn PDP, og hvordan ser PDP-kallet ut?",
+   :golden-chunk-ids ["1635b1c52f89" "ef303586547d"],
+   :expected-answer-pattern
+   "(?i)systemuser_id|PDP|AccessSubject|urn:altinn:systemuser|Permit",
+   :tags #{:altinn-systemuser :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-sys-03-brukerstyrt-vs-leverandorstyrt",
+   :dataset :public-docs,
+   :query
+   "Hva er forskjellen på at sluttbrukeren selv oppretter en systembruker i Altinn versus at leverandøren gjør det?",
+   :golden-chunk-ids ["c61c1f46fe63"],
+   :expected-answer-pattern
+   "(?i)brukerstyrt|leverandørstyrt|sluttbruker|forhåndsdefinerte tilgangene",
+   :tags #{:altinn-systemuser :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-api-04-instances-get-no-list",
+   :dataset :public-docs,
+   :query
+   "How do I fetch the metadata for a single app instance, and is there an endpoint to list all instances?",
+   :golden-chunk-ids ["9bce844fa9ba"],
+   :expected-answer-pattern
+   "(?i)instanceOwnerPartyId|instanceGuid|listing|Storage API",
+   :tags #{:altinn-3-general :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-api-05-events-post-app-token",
+   :dataset :public-docs,
+   :query
+   "What authentication do I need to publish an app event via the Events POST /app endpoint, and what should the request body contain?",
+   :golden-chunk-ids ["eab508bca469" "bdf5fc355e77"],
+   :expected-answer-pattern
+   "(?i)POST /app|Platform Access Token|Cloud Event|AppCloudEventRequestModel",
+   :tags #{:altinn-3-general :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}
+  {:id "ue-api-06-app-openapi-swagger-spec",
+   :dataset :public-docs,
+   :query
+   "Where do I find the app-specific OpenAPI spec that includes the datamodel schemas for a given Altinn 3 app?",
+   :golden-chunk-ids ["42186e0a3d24"],
+   :expected-answer-pattern
+   "(?i)openapi|swagger|app.specifikk|apps\\.altinn\\.no|data typer",
+   :tags #{:altinn-3-general :hard},
+   :source :new,
+   :grounding-mode :chunks+answer}]}

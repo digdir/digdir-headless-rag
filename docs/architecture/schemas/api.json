@@ -1,0 +1,54 @@
+{
+  "input" : {
+    "properties" : {
+      "conversation_id" : {
+        "type" : "string"
+      },
+      "dataset" : {
+        "type" : "string"
+      },
+      "question" : {
+        "type" : "string"
+      },
+      "stream" : {
+        "type" : "boolean"
+      }
+    },
+    "required" : [ "question", "dataset" ],
+    "type" : "object"
+  },
+  "module" : "api",
+  "output" : {
+    "properties" : {
+      "answer" : {
+        "type" : "string"
+      },
+      "citations" : {
+        "items" : {
+          "properties" : {
+            "chunk_id" : {
+              "type" : "string"
+            },
+            "doc_num" : {
+              "type" : "string"
+            },
+            "title" : {
+              "type" : "string"
+            },
+            "url" : {
+              "type" : "string"
+            }
+          },
+          "required" : [ "chunk_id", "doc_num" ],
+          "type" : "object"
+        },
+        "type" : "array"
+      },
+      "conversation_id" : {
+        "type" : "string"
+      }
+    },
+    "required" : [ "answer", "citations", "conversation_id" ],
+    "type" : "object"
+  }
+}

@@ -93,7 +93,7 @@
        (fn [ids] (chunks-schema ids))
        (fn [ids] (phrases-schema ids)))"
   [config docs-schema-fn chunks-schema-fn phrases-schema-fn]
-  (let [[docs-coll chunks-coll phrases-coll :as ids] (coll-ids config)]
+  (let [[docs-coll _chunks-coll _phrases-coll :as ids] (coll-ids config)]
     (t/event! :pipeline/creating-stores {:data {:coll-ids ids}})
     (create-collection! (docs-schema-fn docs-coll))
     (create-collection! (chunks-schema-fn ids))
@@ -126,19 +126,75 @@
 (defn prepare-chunks
   "Prepares chunks for storage by selecting only required fields.
    location-key should be :url or :path depending on source type.
-   location-transform-fn transforms the location value (e.g., make-relative-url)."
+   location-transform-fn transforms the location value (e.g., make-relative-url).
+
+   Sets `:id` to the chunk's `:chunk_id` so Typesense upsert keys on a
+   stable, content-derived id. Without this, Typesense auto-generates
+   a new `:id` on every upsert and the same logical chunk gets inserted
+   as a duplicate row each time — discovered 2026-05-26 after re-ingest
+   bloated the collection ~2x with byte-identical rows distinguished
+   only by their auto-generated numeric ids."
   [chunks location-key location-transform-fn]
   (mapv #(-> %
              (update location-key location-transform-fn)
-             (select-keys [:chunk_id :doc_num :chunk_index :content_markdown :metadata location-key]))
+             (assoc :id (:chunk_id %))
+             (select-keys [:id :chunk_id :doc_num :chunk_index :content_markdown :content_length :metadata location-key]))
         chunks))
 
+(defn ensure-chunk-id
+  "Defensive helper: ensure a chunk has its Typesense `:id` set to its
+   `:chunk_id`. Each pipeline (website / folder / episerver / kudos)
+   has its own prepare-chunks-fn that select-keys's its way to a
+   storage shape; it's easy to forget to include `:id`, in which case
+   Typesense auto-generates one and upsert becomes insert. Applying
+   this at the store-chunks! boundary makes the invariant pipeline-
+   independent."
+  [chunk]
+  (cond-> chunk
+    (not (:id chunk)) (assoc :id (:chunk_id chunk))))
+
 (defn store-chunks!
-  "Stores chunks for a document into the chunks collection."
+  "Stores chunks for a document into the chunks collection.
+   Enforces `:id := :chunk_id` so upsert is keyed correctly even if
+   the upstream prepare-fn omitted the field."
   [chunks-coll chunks]
   (when (seq chunks)
-    (t/event! :pipeline/upserting-chunks {:data {:count (count chunks)}})
-    (ts/upsert-documents! ts-admin chunks-coll chunks)))
+    (let [chunks-with-ids (mapv ensure-chunk-id chunks)]
+      (t/event! :pipeline/upserting-chunks {:data {:count (count chunks-with-ids)}})
+      (ts/upsert-documents! ts-admin chunks-coll chunks-with-ids))))
+
+(defn- ts-id-list
+  "Render a seq of alphanumeric IDs as a Typesense filter list:
+   `[id1,id2,id3]`. The IDs we use (chunk_id, doc_num) are sha256
+   short hashes — all alphanumeric — so no escaping is needed."
+  [ids]
+  (str "[" (str/join "," ids) "]"))
+
+(defn delete-orphan-chunks!
+  "Delete chunks for `doc-num` whose Typesense `:id` is NOT in the
+   `current-ids` set. Use after upserting new chunks so that orphan
+   rows from previous ingests get removed.
+
+   Filters on `id` (the Typesense document id), not on `chunk_id`,
+   because legacy rows have auto-generated numeric ids (since chunks
+   were stored without an explicit `:id` field). After the
+   prepare-chunks fix that pins `:id := :chunk_id`, the keep-set is
+   the chunk_ids and this filter:
+     - Excludes new rows (id == chunk_id, in keep-set)
+     - Includes legacy auto-id rows (id like \"5802\", not in keep-set)
+     - Includes prior-revision rows whose chunk_id is no longer current
+
+   No-op when `current-ids` is empty (defensive: avoid wiping the
+   doc's chunks if upstream produced zero)."
+  [chunks-coll doc-num current-ids]
+  (when (and (seq current-ids) (not (str/blank? (str doc-num))))
+    (let [filter-by (str "doc_num:=" doc-num
+                         " && id:!=" (ts-id-list current-ids))]
+      (t/event! :pipeline/deleting-orphan-chunks
+                {:data {:doc-num doc-num
+                        :keep-count (count current-ids)
+                        :filter filter-by}})
+      (ts/delete-documents! ts-admin chunks-coll {:filter_by filter-by}))))
 
 ;; ============================================================================
 ;; Phrase Storage
@@ -146,7 +202,12 @@
 
 (defn extract-phrases
   "Extracts search phrases from chunks into phrase documents.
-   Returns a vector of {:search_phrase :chunk_id :doc_num} maps."
+   Returns a vector of {:id :search_phrase :chunk_id :doc_num} maps.
+
+   `:id` is a deterministic sha256-short-hash of `chunk_id|phrase` so
+   the upsert correctly replaces the same (chunk, phrase) pair instead
+   of inserting a duplicate row on every ingest. See the same note on
+   prepare-chunks for context."
   [chunks doc-num]
   (let [chunks-with-phrases (filter #(seq (:search-phrases %)) chunks)
         chunks-without-phrases (remove #(seq (:search-phrases %)) chunks)]
@@ -155,23 +216,60 @@
     (vec (for [chunk chunks-with-phrases
                phrase (:search-phrases chunk)
                :when (and phrase (string? phrase) (not (str/blank? phrase)))]
-           {:search_phrase phrase
+           {:id (core/sha256-short-hash (str (:chunk_id chunk) "|" phrase))
+            :search_phrase phrase
             :chunk_id (:chunk_id chunk)
             :doc_num doc-num}))))
 
+(defn ensure-phrase-id
+  "Defensive helper: ensure a phrase has its Typesense `:id` set to a
+   deterministic sha256-short-hash of `chunk_id|search_phrase`.
+   Same rationale as ensure-chunk-id — without this, Typesense
+   auto-generates a numeric id and upsert becomes insert."
+  [phrase]
+  (cond-> phrase
+    (not (:id phrase))
+    (assoc :id (core/sha256-short-hash
+                (str (:chunk_id phrase) "|" (:search_phrase phrase))))))
+
 (defn store-phrases!
-  "Stores search phrases for a document into the phrases collection."
+  "Stores search phrases for a document into the phrases collection.
+   Enforces a deterministic `:id` per (chunk_id, search_phrase) pair
+   so upsert is keyed correctly even if the upstream caller omitted
+   the field."
   [phrases-coll phrases doc-id]
   (t/event! :pipeline/phrase-count {:data {:count (count phrases) :doc-id doc-id}})
   (when (seq phrases)
-    (try
-      (ts/upsert-documents! ts-admin phrases-coll phrases)
-      (catch Exception e
-        (t/error! {:id :pipeline/upsert-phrases-error
-                   :msg ["Failed to upsert phrases" "doc:" doc-id "count:" (count phrases)]}
-                  e)
-        (t/log! ["Sample phrases:" (take 3 phrases)])
-        (throw e)))))
+    (let [phrases-with-ids (mapv ensure-phrase-id phrases)]
+      (try
+        (ts/upsert-documents! ts-admin phrases-coll phrases-with-ids)
+        (catch Exception e
+          (t/error! {:id :pipeline/upsert-phrases-error
+                     :msg ["Failed to upsert phrases" "doc:" doc-id "count:" (count phrases-with-ids)]}
+                    e)
+          (t/log! ["Sample phrases:" (take 3 phrases-with-ids)])
+          (throw e))))))
+
+(defn delete-orphan-phrases!
+  "Delete phrases for `doc-num` whose Typesense `:id` is NOT in
+   `current-ids`. After the extract-phrases fix that pins `:id` to
+   a deterministic hash of (chunk_id, phrase), the keep-set is those
+   hash values and this filter:
+     - Excludes new rows (id == hash(chunk_id, phrase), in keep-set)
+     - Includes legacy auto-id rows (id like \"13213\", not in keep-set)
+     - Includes prior-revision rows for chunks no longer present
+       (because their hash isn't in the new keep-set)
+
+   No-op when `current-ids` is empty."
+  [phrases-coll doc-num current-ids]
+  (when (and (seq current-ids) (not (str/blank? (str doc-num))))
+    (let [filter-by (str "doc_num:=" doc-num
+                         " && id:!=" (ts-id-list current-ids))]
+      (t/event! :pipeline/deleting-orphan-phrases
+                {:data {:doc-num doc-num
+                        :keep-count (count current-ids)
+                        :filter filter-by}})
+      (ts/delete-documents! ts-admin phrases-coll {:filter_by filter-by}))))
 
 ;; ============================================================================
 ;; Complete Document Storage
@@ -186,31 +284,142 @@
    - prepare-doc-fn: (fn [config doc] -> doc-for-storage)
    - prepare-chunks-fn: (fn [chunks] -> chunks-for-storage)
 
+   Always upserts — docs / chunks / phrases are all upserted unconditionally.
+   The previous skip-if-doc-exists branch produced bugs (docs present but
+   chunks / phrases missing) and prevented schema-evolution backfills like
+   adding new doc-level fields. Upsert is the right strategy in all cases;
+   any rate-limiting belongs in the underlying upsert primitives, not here.
+
+   After upserting, deletes orphan chunks / phrases (those whose
+   chunk_id is no longer in the current set for this doc). Necessary
+   because chunk_id = sha256(content_markdown), so when source content
+   changes between ingests the new chunks get new IDs and the old ones
+   linger as duplicates unless explicitly removed. The window between
+   upsert and delete is sub-second per doc; during that window a query
+   may see both revisions of one doc's chunks.
+
    Returns nil on success, throws on error."
   [config doc prepare-doc-fn prepare-chunks-fn]
-  (let [[docs-coll chunks-coll phrases-coll] (coll-ids config)]
-    (if (document-inserted? docs-coll doc)
-      (do
-        (Thread/sleep 1000)  ; Rate limiting for existing docs
-        (t/event! :pipeline/document-already-exists))
-      (do
-        (try
-          ;; Store document
-          (upsert-document! docs-coll (prepare-doc-fn config doc))
+  (let [[docs-coll chunks-coll phrases-coll] (coll-ids config)
+        doc-num (:doc_num doc)]
+    (try
+      ;; Store document
+      (upsert-document! docs-coll (prepare-doc-fn config (assoc doc :total_chunks (count (:chunks doc)))))
 
-          ;; Store chunks
-          (let [prepared-chunks (prepare-chunks-fn (:chunks doc))]
-            (store-chunks! chunks-coll prepared-chunks))
+      ;; Store chunks + delete orphan chunks for this doc.
+      ;; Apply ensure-chunk-id to the prepared chunks BEFORE both
+      ;; storage and keep-set extraction so the deleted-orphans
+      ;; filter exactly matches the upserted :id values, regardless
+      ;; of whether the upstream prepare-fn included :id.
+      (let [prepared-chunks (mapv ensure-chunk-id (prepare-chunks-fn (:chunks doc)))
+            current-chunk-ids (mapv :id prepared-chunks)]
+        (store-chunks! chunks-coll prepared-chunks)
+        (delete-orphan-chunks! chunks-coll doc-num current-chunk-ids)
 
-          ;; Store phrases
-          (let [phrases (extract-phrases (:chunks doc) (:doc_num doc))]
-            (store-phrases! phrases-coll phrases (:id doc)))
+        ;; Store phrases + delete orphan phrases. Same defense-in-depth:
+        ;; pass through ensure-phrase-id before extracting ids.
+        (let [phrases (mapv ensure-phrase-id (extract-phrases (:chunks doc) doc-num))
+              current-phrase-ids (mapv :id phrases)]
+          (store-phrases! phrases-coll phrases (:id doc))
+          (delete-orphan-phrases! phrases-coll doc-num current-phrase-ids)))
 
-          (core/say "Stored document")
-          (t/event! :pipeline/document-stored {:data {:id (:id doc)}})
+      (core/say "Stored document")
+      (t/event! :pipeline/document-stored {:data {:id (:id doc)}})
 
-          (catch Exception e
-            (t/error! {:id :pipeline/store-document-error
-                       :msg ["Failed to store document" (:id doc)]}
-                      e)
-            (throw e)))))))
+      (catch Exception e
+        (t/error! {:id :pipeline/store-document-error
+                   :msg ["Failed to store document" (:id doc)]}
+                  e)
+        (throw e)))))
+
+;; ============================================================================
+;; Backfill Functions
+;; ============================================================================
+
+(defn backfill-content-length!
+  "Backfill content_length on chunks that are missing it.
+   Iterates through all chunks in the collection, computes content_length
+   from content_markdown, and upserts the updated chunks.
+   Returns {:updated count :skipped count :errors count}."
+  [chunks-coll opts]
+  (t/event! :pipeline/backfill-content-length-start {:data {:collection chunks-coll}})
+  (let [ts-settings (ts-utils/make-ts-settings opts)
+        per-page 250
+        stats (atom {:updated 0 :skipped 0 :errors 0})]
+    (loop [page 1]
+      (let [result (ts/search ts-settings chunks-coll
+                              {:q "*"
+                               :query_by "chunk_id"
+                               :include_fields "id,chunk_id,content_markdown,content_length"
+                               :per_page per-page
+                               :page page})
+            hits (:hits result)
+            total-found (:found result)]
+        (doseq [hit hits]
+          (let [doc (:document hit)
+                existing-length (:content_length doc)]
+            (if (some? existing-length)
+              (swap! stats update :skipped inc)
+              (let [content (or (:content_markdown doc) "")
+                    computed-length (count content)]
+                (try
+                  (ts/upsert-document! ts-admin chunks-coll
+                                       {:id (:id doc)
+                                        :content_length computed-length})
+                  (swap! stats update :updated inc)
+                  (catch Exception e
+                    (t/error! {:id :pipeline/backfill-content-length-error
+                               :msg ["Failed to update chunk" (:id doc)]} e)
+                    (swap! stats update :errors inc)))))))
+        (let [fetched-so-far (* page per-page)]
+          (when (and (seq hits) (< fetched-so-far total-found))
+            (recur (inc page))))))
+    (let [final-stats @stats]
+      (t/event! :pipeline/backfill-content-length-done {:data final-stats})
+      final-stats)))
+
+(defn backfill-total-chunks!
+  "Backfill total_chunks on documents that are missing it.
+   For each document, counts the chunks in the chunks collection and updates.
+   Returns {:updated count :skipped count :errors count}."
+  [docs-coll chunks-coll opts]
+  (t/event! :pipeline/backfill-total-chunks-start {:data {:docs-coll docs-coll :chunks-coll chunks-coll}})
+  (let [ts-settings (ts-utils/make-ts-settings opts)
+        per-page 250
+        stats (atom {:updated 0 :skipped 0 :errors 0})]
+    (loop [page 1]
+      (let [result (ts/search ts-settings docs-coll
+                              {:q "*"
+                               :query_by "doc_num"
+                               :include_fields "id,doc_num,total_chunks"
+                               :per_page per-page
+                               :page page})
+            hits (:hits result)
+            total-found (:found result)]
+        (doseq [hit hits]
+          (let [doc (:document hit)
+                existing-count (:total_chunks doc)]
+            (if (some? existing-count)
+              (swap! stats update :skipped inc)
+              (try
+                (let [chunk-result (ts/search ts-settings chunks-coll
+                                             {:q "*"
+                                              :query_by "chunk_id"
+                                              :filter_by (str "doc_num:=`" (:doc_num doc) "`")
+                                              :per_page 0
+                                              :page 1})
+                      chunk-count (or (:found chunk-result) 0)]
+                  (ts/upsert-document! ts-admin docs-coll
+                                       {:id (:id doc)
+                                        :total_chunks chunk-count})
+                  (swap! stats update :updated inc))
+                (catch Exception e
+                  (t/error! {:id :pipeline/backfill-total-chunks-error
+                             :msg ["Failed to update doc" (:id doc)]} e)
+                  (swap! stats update :errors inc))))))
+        (let [fetched-so-far (* page per-page)]
+          (when (and (seq hits) (< fetched-so-far total-found))
+            (recur (inc page))))))
+    (let [final-stats @stats]
+      (t/event! :pipeline/backfill-total-chunks-done {:data final-stats})
+      final-stats)))

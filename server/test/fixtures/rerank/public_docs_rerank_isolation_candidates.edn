@@ -1,0 +1,220 @@
+{:capture
+ {:captured-at "2026-04-21T09:20:13.466658Z",
+  :dataset-ref {:tenant "digdir", :dataset-config-key "public-docs"},
+  :suite "/tmp/public_docs_isolation_seed.edn",
+  :collection-names
+  {:docs-collection "website_documents_ab897fbdedfa",
+   :chunks-collection "website_chunks_ab897fbdedfa",
+   :phrases-collection "website_phrases_ab897fbdedfa"},
+  :effective-params
+  {:suite "/tmp/public_docs_isolation_seed.edn",
+   :out
+   "/Users/bdbrodie/dev/digdir/rag/add-evals/server/test/fixtures/rerank/public_docs_rerank_isolation_candidates.edn",
+   :limit 120,
+   :retrieve-top-k 100,
+   :max-per-document 10,
+   :query-aware-boost true,
+   :auto-filter-enabled true},
+  :elapsed-ms 3349.257334},
+ :cases
+ [{:pair-id "altinn-broker-technical-overview",
+   :search-attribution
+   {:merged 68,
+    :retrieve-top-k 100,
+    :query-aware-boost-enabled true,
+    :content 8,
+    :dropped-by-diversity 0,
+    :chunks-after-diversity 68,
+    :phrase 61,
+    :max-per-document 10,
+    :chunks-before-diversity 68,
+    :effective-max-per-document 10,
+    :metadata 4},
+   :source-slice :altinn-docs,
+   :merged-chunk-ids [],
+   :golden-chunk-ids ["63c3d3e28820"],
+   :retrieved-chunk-ids
+   ["e21b490e680b"
+    "1f287112d201"
+    "588e7f66c44f"
+    "5d9c89c1afec"
+    "5c9c216c8c1f"
+    "ec3d8182194e"
+    "9f75a7784e9b"
+    "2fdfadae4f0d"
+    "f731ee7ddee5"
+    "71edc1fa4e22"
+    "989cc83e5afc"
+    "aa36957253ca"
+    "2c9085ae6cc1"
+    "bf7466ce03c2"
+    "cdd0fa0520d6"
+    "c48747e2b5eb"
+    "63c3d3e28820"
+    "54cf9b4a112e"
+    "a1a45b9d7585"
+    "d438d14968f7"
+    "f2c87d24c5be"
+    "c585f52be35f"
+    "75278a49bc20"
+    "05e9fe2c2c5b"
+    "efb70e42d46f"
+    "e4f6b3689263"
+    "f9f576be43d3"
+    "65ac88e194a6"
+    "06f45de29249"
+    "506493584a14"
+    "9584a6e89afc"
+    "0fac42eefdc4"
+    "5e1f14e63421"
+    "a2ca157dce3d"
+    "7de055b54b63"
+    "034ec7c15f79"
+    "2850f051d81a"
+    "8c540a13ece5"
+    "a438b1775bf0"
+    "3b9d00305074"
+    "6ea4d4ac1d99"
+    "9b5b6b227ea8"
+    "2860727058b0"
+    "f0f33314156c"
+    "dba085c40d20"
+    "fa2efd7bb647"
+    "dc651e09a506"
+    "3222561ce68f"
+    "c1e41c9b98c2"
+    "d86b0c860b67"
+    "05a9b157e8fd"
+    "0f3807200a65"
+    "3846d1091eed"
+    "cf2b84ff15ba"
+    "23313b9a4c7a"
+    "d4be96620198"
+    "3e49a16a027b"
+    "779e40db9403"
+    "ac998d736c81"
+    "8e22ae4b88b1"
+    "875df4fd624d"
+    "86ad5a4683f5"
+    "1ff6e09d9017"
+    "7b8852051dd6"
+    "a1e19ce9cac2"
+    "523e1fa021a1"
+    "bd83519003af"
+    "c0b58cfa7e41"],
+   :language :no,
+   :id "altinn-broker-technical-overview",
+   :error nil,
+   :query
+   "Hva er den tekniske arkitekturen bak Altinn Broker i overgangsfasen?",
+   :queries
+   ["Hva er den tekniske arkitekturen bak Altinn Broker i overgangsfasen?"]}
+  {:pair-id "altinn-studio-create-user",
+   :search-attribution
+   {:merged 87,
+    :retrieve-top-k 100,
+    :query-aware-boost-enabled true,
+    :content 18,
+    :dropped-by-diversity 0,
+    :chunks-after-diversity 87,
+    :phrase 73,
+    :max-per-document 10,
+    :chunks-before-diversity 87,
+    :effective-max-per-document 10,
+    :metadata 0},
+   :source-slice :altinn-docs,
+   :merged-chunk-ids [],
+   :golden-chunk-ids ["0fac42eefdc4"],
+   :retrieved-chunk-ids
+   ["05a9b157e8fd"
+    "a548f91970c3"
+    "ac4f2dd7a303"
+    "3222561ce68f"
+    "ec3d8182194e"
+    "434ca284c0bf"
+    "a12ebb8106c9"
+    "9584a6e89afc"
+    "a438b1775bf0"
+    "989cc83e5afc"
+    "d2ff39fc153a"
+    "3e49a16a027b"
+    "9f75a7784e9b"
+    "9b8c263e00d1"
+    "14d29a52b3e3"
+    "58c4de742356"
+    "bbf82de07a2f"
+    "67bb01b2b806"
+    "b088ac9af2de"
+    "2d0fde59ac05"
+    "ab3581cfc118"
+    "0fac42eefdc4"
+    "7b8852051dd6"
+    "dc651e09a506"
+    "fd3c5cddbfbb"
+    "588e7f66c44f"
+    "03a59c89426f"
+    "bf7466ce03c2"
+    "6a0f583996bb"
+    "5b7220458fe7"
+    "d4be96620198"
+    "d71da4ab5c05"
+    "2f6cee8d5f5e"
+    "1f287112d201"
+    "548c3bf390b6"
+    "a1a45b9d7585"
+    "2fdfadae4f0d"
+    "ae4d16c0c7ed"
+    "891a6d9dfb94"
+    "506493584a14"
+    "ea81db9a569d"
+    "05e9fe2c2c5b"
+    "cdd0fa0520d6"
+    "71edc1fa4e22"
+    "fe3c049029fc"
+    "875df4fd624d"
+    "756972c00c77"
+    "e21b490e680b"
+    "3685015c0f1c"
+    "86a29a595367"
+    "034ec7c15f79"
+    "f6f6ccce52bf"
+    "bd83519003af"
+    "8c540a13ece5"
+    "7de055b54b63"
+    "c48747e2b5eb"
+    "dba085c40d20"
+    "d86b0c860b67"
+    "5c9c216c8c1f"
+    "70a69fb50d45"
+    "65ac88e194a6"
+    "f0f33314156c"
+    "d81ff032aa35"
+    "fa2efd7bb647"
+    "8e22ae4b88b1"
+    "1df131e9cda4"
+    "f9f576be43d3"
+    "fb89eaf0de84"
+    "75278a49bc20"
+    "e4f6b3689263"
+    "7c12d978c7e7"
+    "779e40db9403"
+    "6ea4d4ac1d99"
+    "05045ab7c1ab"
+    "f2c87d24c5be"
+    "1e6c76f4afe0"
+    "a9ecb74f9296"
+    "c585f52be35f"
+    "35aa8782432a"
+    "6d8a6a851332"
+    "5e1f14e63421"
+    "efb70e42d46f"
+    "47cbfc828399"
+    "86ad5a4683f5"
+    "55a06b42a6a1"
+    "a1e19ce9cac2"
+    "aa36957253ca"],
+   :language :no,
+   :id "altinn-studio-create-user",
+   :error nil,
+   :query "Hvordan oppretter jeg en bruker i Altinn Studio v8?",
+   :queries ["Hvordan oppretter jeg en bruker i Altinn Studio v8?"]}]}

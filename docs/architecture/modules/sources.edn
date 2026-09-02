@@ -1,0 +1,31 @@
+{:id "sources",
+ :plane "knowledge",
+ :name "Source Loaders",
+ :note "Kudos · web · files",
+ :icon "source",
+ :color "#74a7ff",
+ :status "Knowledge plane",
+ :summary
+ "Fetches and normalizes source documents from supported external systems.",
+ :description
+ "Dedicated adapters load Kudos reports, EPiServer/Optimizely content, websites, folder trees and referenced files into a common document shape before downstream processing.",
+ :responsibilities
+ ["Fetch content from supported source systems"
+  "Normalize titles, text, URLs and metadata"
+  "Preserve provenance for later citations"],
+ :files
+ ["server/src/digdir/docs/loader.clj"
+  "server/src/digdir/docs/website.clj"
+  "server/src/digdir/docs/folder.clj"],
+ :input "Source configuration + credentials",
+ :output "Normalized documents with provenance",
+ :edges
+ [{:to "pipeline",
+   :kind :call,
+   :target :http,
+   :label "Chunk and enrich loaded documents",
+   :witness
+   {:file "server/src/digdir/docs/loader.clj",
+    :requires digdir.rag.chunking}}],
+ :keywords
+ "documents source loader kudos episerver optimizely website folder files fetch provenance"}

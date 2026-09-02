@@ -1,0 +1,37 @@
+{:id "pipeline",
+ :plane "knowledge",
+ :name "Ingestion Pipelines",
+ :note "Load · chunk · enrich",
+ :icon "pipeline",
+ :color "#659fec",
+ :status "Knowledge plane",
+ :summary
+ "Coordinates loading, chunking, enrichment and index materialization.",
+ :description
+ "Configured pipeline executions move normalized documents through chunking and search-phrase enrichment before atomically materializing per-pipeline Typesense collections. Executions and status are persisted.",
+ :responsibilities
+ ["Execute configured ingestion stages in order"
+  "Chunk and enrich documents for retrieval"
+  "Materialize collections and record execution status"],
+ :files
+ ["server/src/digdir/pipeline/executor.clj"
+  "server/src/digdir/pipeline/materialization.clj"
+  "server/src/digdir/rag/chunking.clj"],
+ :input "Pipeline config + normalized documents",
+ :output "Documents, chunks and phrases collections",
+ :edges
+ [{:to "typesense",
+   :kind :http,
+   :target :http,
+   :label "Write documents, chunks and phrases",
+   :witness
+   {:file "server/src/digdir/pipeline/executor.clj",
+    :requires digdir.pipeline.collections}}
+  {:to "data",
+   :kind :call,
+   :target :call,
+   :label "Pipeline run state",
+   :via "Datahike connection resolved at execution time",
+   :unverified true}],
+ :keywords
+ "pipeline ingestion executor chunking enrichment phrases materialization collections"}

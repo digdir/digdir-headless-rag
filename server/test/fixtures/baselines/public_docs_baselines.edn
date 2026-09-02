@@ -1,0 +1,85 @@
+;; public-docs v1 Baseline Snapshot (Phase F)
+;;
+;; Regenerated from 3 sequential `bb rerank-benchmark` runs on 2026-04-21
+;; against server/test/fixtures/rerank/public_docs_rerank_suite.edn.
+;;
+;; Refresh triggers (per suite-specs §6.2):
+;;   - 3 stable runs establish first baseline (done 2026-04-21)
+;;   - Deliberate retrieval/rerank/auto-filter tuning merged
+;;   - golden-update: retrieval-tuning commit lands
+;;
+;; Does NOT trigger refresh: source-drift, individual case noise.
+{:per-case
+ {"altinn-broker-getting-started"
+  {:rerank-position 2,
+   :context-position 2,
+   :rank-runs [2 2 2],
+   :hits 3},
+  "altinn-broker-technical-overview"
+  {:rerank-position 6,
+   :context-position 6,
+   :rank-runs [6 6 6],
+   :hits 3},
+  "altinn-dialogporten-about"
+  {:rerank-position 1,
+   :context-position 1,
+   :rank-runs [1 1 1],
+   :hits 3},
+  "altinn-studio-create-user"
+  {:rerank-position 4,
+   :context-position 4,
+   :rank-runs [4 4 4],
+   :hits 3},
+  "altinn-studio-datamodeling"
+  {:rerank-position 1,
+   :context-position 1,
+   :rank-runs [1 1 1],
+   :hits 3}},
+ :colbert-service
+ {:endpoint "https://agents-gpu-3.digdir.cloud/colbert/rerank",
+  :version "(not captured by runner; note here if pinned)"},
+ :recorded-by "bdb@itonomi.com",
+ :dataset-ref {:tenant "digdir", :dataset-config-key "public-docs"},
+ :by-source-slice
+ {:altinn-docs
+  {:cases 5,
+   :golden-present-in-retrank 5,
+   :golden-present-in-context 5,
+   :mrr 0.5833333333333333,
+   :mean-rank 2.7999999999999994,
+   :p50-rank 2,
+   :p95-rank 6}},
+ :recorded-at "2026-04-21T09:16:31.217456Z",
+ :effective-params
+ {:top-k 100,
+  :context-top-k 30,
+  :max-acceptable-rank 10,
+  :auto-filter-enabled true,
+  :limit 120},
+ :notes
+ ["V1 baseline — single-source Altinn-NO corpus; 5 stable cases promoted from 17-case exploratory (see plans/in-progress/add-evals/claude-public-docs-stability-report.md)."
+  "Post-fix baseline: includes the 2026-04-21 query-relaxation safeguard in run-benchmark-case (skip LLM relaxation when :prompt-query-relax is blank for the dataset). Without this fix, retrieval was flaky because LLM returned unrelated English queries."
+  "Per-case rerank-position is the MEDIAN across the 3 runs (integer ranks)."],
+ :suite "server/test/fixtures/rerank/public_docs_rerank_suite.edn",
+ :runner "rerank-benchmark",
+ :runs 3,
+ :aggregate
+ {:p95-rank 6.0,
+  :golden-count 5,
+  :p50-rank 2.0,
+  :mrr 0.5833333333333333,
+  :cases-succeeded 5,
+  :mean-rank 2.7999999999999994,
+  :golden-present-in-context 5,
+  :cases 5,
+  :golden-present-in-retrank 5},
+ :by-language
+ {:no
+  {:cases 5,
+   :golden-present-in-retrank 5,
+   :golden-present-in-context 5,
+   :mrr 0.5833333333333333,
+   :mean-rank 2.7999999999999994,
+   :p50-rank 2,
+   :p95-rank 6}},
+ :typesense-host "typesense-test.digdir.cloud:443"}

@@ -88,32 +88,45 @@
    Args:
      conn - Datahike connection
      tenant - Tenant identifier
-     environment - Environment
+     tenant-config-key - Environment
+     dataset-id - Target dataset ID
      pipeline-name - Pipeline name
      collection-names - Map with :docs-collection, :chunks-collection, :phrases-collection
      master-key - Encryption key"
-  [conn tenant environment pipeline-name collection-names master-key]
-  (config-db/set-value! conn
-                        {:tenant tenant
-                         :environment environment
-                         :entity pipeline-name
-                         :path "pipeline.storage.docs-collection"
-                         :value (:docs-collection collection-names)
-                         :master-key master-key})
-  (config-db/set-value! conn
-                        {:tenant tenant
-                         :environment environment
-                         :entity pipeline-name
-                         :path "pipeline.storage.chunks-collection"
-                         :value (:chunks-collection collection-names)
-                         :master-key master-key})
-  (config-db/set-value! conn
-                        {:tenant tenant
-                         :environment environment
-                         :entity pipeline-name
-                         :path "pipeline.storage.phrases-collection"
-                         :value (:phrases-collection collection-names)
-                         :master-key master-key}))
+  ([conn tenant tenant-config-key pipeline-name collection-names master-key]
+   (track-pipeline-collections! conn tenant tenant-config-key pipeline-name pipeline-name collection-names master-key))
+  ([conn tenant _tenant-config-key dataset-id pipeline-name collection-names master-key]
+   (doseq [path ["pipeline.storage.docs-collection"
+                 "pipeline.storage.chunks-collection"
+                 "pipeline.storage.phrases-collection"]]
+     (when-not (config-db/get-definition @conn path)
+       (config-db/upsert-definition! conn
+                                     {:path path
+                                      :root :dataset
+                                      :value-type :string
+                                      :description "Pipeline collection name"
+                                      :category :pipelines
+                                      :service :docs
+                                      :function :storage})))
+   (when (seq tenant)
+     (let [db @conn
+           dataset-base-node (or (config-db/get-config-node db
+                                                            (config-db/dataset-base-node-id tenant dataset-id))
+                                 (throw (ex-info "Dataset base node not found"
+                                                 {:tenant tenant
+                                                  :dataset-id dataset-id
+                                                  :pipeline-name pipeline-name})))
+           value-map {"pipeline.storage.docs-collection" (:docs-collection collection-names)
+                      "pipeline.storage.chunks-collection" (:chunks-collection collection-names)
+                      "pipeline.storage.phrases-collection" (:phrases-collection collection-names)}]
+       (doseq [[path value] value-map]
+         (config-db/set-node-value! conn
+                                    {:root :dataset
+                                     :tenant tenant
+                                     :node-id (:config.node/id dataset-base-node)
+                                     :path path
+                                     :value value
+                                     :master-key master-key}))))))
 
 (defn get-or-generate-collection-names
   "Get collection names from pipeline config, or generate if not set.
@@ -142,7 +155,8 @@
          (when (and conn master-key (:tenant pipeline-config) (:pipeline-name pipeline-config))
            (track-pipeline-collections! conn
                                         (:tenant pipeline-config)
-                                        (:environment pipeline-config)
+                                        (:tenant-config-key pipeline-config)
+                                        (or (:dataset-id pipeline-config) (:pipeline-name pipeline-config))
                                         (:pipeline-name pipeline-config)
                                         generated
                                         master-key))

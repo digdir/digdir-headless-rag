@@ -1,0 +1,3 @@
+[{:event :request/started :request-id "req-7" :query "Break"}
+ {:event :tool/call :tool-call {:tool "search_documents" :args {:queries ["x"]}}}
+ {:event :request/failed :error "Typesense unavailable"}]

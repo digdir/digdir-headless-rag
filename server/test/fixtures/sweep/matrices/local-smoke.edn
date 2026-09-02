@@ -1,0 +1,14 @@
+;; LOCAL-MODEL SMOKE: 1 question, 1 repeat, enrichment off, judged.
+;; Confirms the full agent loop (extract-intent + retrieval + synthesis + tool
+;; loop) AND the judge run end-to-end on the local Gemma model, and gives a
+;; per-run timing to size the overnight A/B. All LLM routed local via
+;; use-azure-openai-api=false + OPENAI_API_ENDPOINT/OPENAI_API_KEY env; query
+;; planner disabled (litellm-azure has no local route).
+{:configs [{:id "off", :skill-graph-id :builtin/agent-rag-graph-bundled, :skill-params {}}]
+ :repeats 1
+ :judge? true
+ :order :interleaved
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir", :dataset-config-key "default", :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-01-filoverforing-tilstander"}}}

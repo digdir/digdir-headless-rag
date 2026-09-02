@@ -1,169 +1,209 @@
 (ns digdir.api.rate-limit-test
-  (:require [clojure.test :refer [deftest testing is use-fixtures]]
-            [digdir.api.rate-limit :as rate-limit]
-            [digdir.config.accessor :as cfg]))
+  "The limiter must count what the handler reports, not what the status implies.
 
-;; Fixture to reset rate limit store between tests
-(defn reset-rate-limit-fixture [f]
-  (let [original @rate-limit/rate-limit-store]
-    (try
-      (reset! rate-limit/rate-limit-store {})
-      (f)
-      (finally
-        (reset! rate-limit/rate-limit-store original)))))
+   #211: the previous version recorded an attempt when the status was `nil`,
+   `< 200` or `>= 300`, while its own comment said \"only failed login
+   attempts\". On this login those sets are nearly opposite — a wrong
+   confirmation code renders a 200 page and a successful login is a 302 — so
+   it counted successes and ignored failures. Measured against a live server:
+   15 wrong codes, 0 blocks.
 
-(use-fixtures :each reset-rate-limit-fixture)
+   THE ONLY TEST HERE THAT COULD HAVE CAUGHT THAT is
+   `a-200-that-reports-failure-is-counted`, because the defect is in WHICH
+   RESPONSES REACH THE COUNTER. A unit test on `record-attempt!` passes
+   happily while nothing ever calls it — which is what the codebase had."
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+            [digdir.api.rate-limit :as rl]
+            [digdir.config.core :as config-core]))
 
-;; Helper to mock config accessor
+(defn- clear-store [f]
+  (reset! rl/rate-limit-store {})
+  (try (f) (finally (reset! rl/rate-limit-store {}))))
+
+(use-fixtures :each clear-store)
+
+(def ^:private guess-uri "/auth/confirm-email")
+(def ^:private send-uri "/auth")
+
+(defn- req
+  ([uri] (req uri "10.0.0.1" nil))
+  ([uri ip] (req uri ip nil))
+  ([uri ip email]
+   (cond-> {:request-method :post :uri uri :remote-addr ip}
+     email (assoc :params {"email" email}))))
+
+(defn- handler-returning [response] (fn [_] response))
+
+(def ^:private ok-page {:status 200 :body "invalid code"})
+(def ^:private redirect {:status 302 :headers {"Location" "/"}})
+
+(defn- run-n
+  "Send `n` requests through the middleware, returning the statuses."
+  [wrapped request n]
+  (mapv (fn [_] (:status (wrapped request))) (range n)))
+
+;; ---------------------------------------------------------------------------
+;; The inversion
+;; ---------------------------------------------------------------------------
+
+(deftest a-200-that-reports-failure-is-counted
+  (testing "a wrong confirmation code renders a 200 and must still be throttled"
+    (let [wrapped (rl/wrap-rate-limit
+                    (handler-returning (rl/mark-failed-attempt ok-page)))
+          statuses (run-n wrapped (req guess-uri) 12)]
+      (is (= 10 (count (filter #(= 200 %) statuses)))
+          "ten guesses allowed, then the budget is spent")
+      (is (= 429 (last statuses))
+          "the defect this whole namespace exists for: before #211 every one
+           of these was a 200 and the counter was never touched"))))
+
+(deftest a-302-success-is-not-counted
+  (testing "a successful login must not consume the guessing budget"
+    (let [wrapped (rl/wrap-rate-limit (handler-returning redirect))
+          statuses (run-n wrapped (req guess-uri) 20)]
+      (is (every? #(= 302 %) statuses)
+          "the old limiter blocked here after 10 — it counted successes"))))
+
+(deftest the-marker-never-reaches-the-client
+  (let [wrapped (rl/wrap-rate-limit
+                  (handler-returning (rl/mark-failed-attempt ok-page)))
+        response (wrapped (req guess-uri))]
+    (is (= #{:status :body} (set (keys response)))
+        "the signal is internal; it must be stripped before the response ships")))
+
+(deftest an-unmarked-failure-page-is-not-counted
+  (testing "the signal is explicit — nothing is inferred from a 200 either"
+    (let [wrapped (rl/wrap-rate-limit (handler-returning ok-page))]
+      (is (every? #(= 200 %) (run-n wrapped (req guess-uri) 15))))))
+
+;; ---------------------------------------------------------------------------
+;; Two surfaces, two budgets
+;; ---------------------------------------------------------------------------
+
+(deftest send-a-code-counts-every-request
+  (testing "the send budget is about volume, not failure — deliberately unlike the guess rule"
+    (let [wrapped (rl/wrap-rate-limit (handler-returning redirect))
+          statuses (run-n wrapped (req send-uri "10.0.0.2" "a@b.com") 8)]
+      (is (= 429 (last statuses)))
+      (is (= 5 (count (filter #(= 302 %) statuses)))
+          "per-email budget of 5 bites before the per-IP budget of 10"))))
+
+(deftest the-two-surfaces-do-not-share-a-budget
+  (testing "exhausting the guess budget leaves send untouched"
+    (let [guess (rl/wrap-rate-limit (handler-returning (rl/mark-failed-attempt ok-page)))
+          send (rl/wrap-rate-limit (handler-returning redirect))
+          ip "10.0.0.3"]
+      (run-n guess (req guess-uri ip) 12)
+      (is (= 429 (:status (guess (req guess-uri ip)))) "guessing is blocked")
+      (is (= 302 (:status (send (req send-uri ip "fresh@b.com"))))
+          "asking for a code is a different surface and still works"))))
+
+(deftest per-email-budget-follows-the-address-across-sources
+  (testing "one victim cannot be mailed repeatedly from many source addresses"
+    (let [wrapped (rl/wrap-rate-limit (handler-returning redirect))
+          victim "victim@example.com"
+          statuses (mapv (fn [i]
+                           (:status (wrapped (req send-uri (str "10.0.1." i) victim))))
+                         (range 8))]
+      (is (= 429 (last statuses)))
+      (is (= 5 (count (filter #(= 302 %) statuses)))
+          "a new IP each time, and the email budget still bites"))))
+
+(deftest per-ip-budget-bounds-enumeration-across-addresses
+  (testing "one source cannot map who works here by probing many addresses"
+    ;; The per-email budget does nothing here — every probe is a different
+    ;; address with a fresh budget. Only the IP bucket bounds it, which is
+    ;; why POST /auth carries both.
+    (let [wrapped (rl/wrap-rate-limit (handler-returning redirect))
+          ip "10.0.2.1"
+          statuses (mapv (fn [i]
+                           (:status (wrapped (req send-uri ip (str "probe" i "@example.com")))))
+                         (range 13))]
+      (is (= 10 (count (filter #(= 302 %) statuses)))
+          "ten distinct addresses probed, then the source is blocked")
+      (is (= 429 (last statuses))))))
+
+(deftest a-request-without-an-email-still-gets-an-ip-budget
+  (testing "a missing bucket value is skipped, not lumped into a shared one"
+    ;; Bucketing every anonymous caller under one placeholder key would let
+    ;; any one of them lock out all the others.
+    (let [wrapped (rl/wrap-rate-limit (handler-returning redirect))
+          statuses (run-n wrapped (req send-uri "10.0.3.1") 12)]
+      (is (= 10 (count (filter #(= 302 %) statuses))))
+      (is (= 429 (last statuses))))))
+
+(deftest unrelated-endpoints-are-untouched
+  (let [wrapped (rl/wrap-rate-limit (handler-returning redirect))]
+    (is (every? #(= 302 %) (run-n wrapped (req "/api/conversations" "10.0.4.1") 30)))
+    (is (every? #(= 302 %)
+                (mapv (fn [_] (:status (wrapped {:request-method :get :uri send-uri
+                                                 :remote-addr "10.0.4.2"})))
+                      (range 30)))
+        "GET /auth renders the form; only the POST is budgeted")))
+
+;; ---------------------------------------------------------------------------
+;; Carried over from the pre-#211 namespace
+;; ---------------------------------------------------------------------------
+;;
+;; These predate the rewrite and still hold. One of the originals is
+;; deliberately NOT carried over, and it is worth saying why, because it is
+;; the reason the inversion survived review:
+;;
+;;   test-rate-limit-only-counts-failures asserted that 20 SUCCESSFUL POST
+;;   /auth requests all pass — with a handler returning 200. It passed, and it
+;;   certified exactly the property the docstring claimed. But 200 is the
+;;   status a FAILED confirmation code returns on this login, and a real
+;;   success is a 302, so the test asserted the intent using the one status
+;;   that made the buggy code look correct. What it actually pinned was "a 200
+;;   is not counted" — which was the defect.
+;;
+;;   Its intent lives on in `a-302-success-is-not-counted`, using the status a
+;;   success actually has. `POST /auth` now counts every request by design, so
+;;   the original could not be carried over unchanged in any case.
+
 (defn- with-trust-x-forwarded-for [trust? f]
-  (with-redefs [cfg/get (fn [& args]
-                           (when (= args [:services :rate-limiting :trust-x-forwarded-for])
-                             trust?))]
+  (with-redefs [config-core/rate-limit-trust-x-forwarded-for? (constantly trust?)]
     (f)))
 
-;; ===== get-client-ip tests =====
+(deftest get-client-ip-prefers-remote-addr-when-the-proxy-is-not-trusted
+  (with-trust-x-forwarded-for false
+    #(is (= "192.168.1.1"
+            (rl/get-client-ip {:remote-addr "192.168.1.1"
+                               :headers {"x-forwarded-for" "10.0.0.1"}})))))
 
-(deftest test-get-client-ip-remote-addr
-  (testing "Returns remote-addr when X-Forwarded-For not trusted"
-    (with-trust-x-forwarded-for false
-      #(let [request {:remote-addr "192.168.1.1"
-                      :headers {"x-forwarded-for" "10.0.0.1"}}]
-         (is (= "192.168.1.1" (rate-limit/get-client-ip request)))))))
+(deftest get-client-ip-uses-x-forwarded-for-when-trusted
+  (with-trust-x-forwarded-for true
+    #(is (= "10.0.0.1"
+            (rl/get-client-ip {:remote-addr "192.168.1.1"
+                               :headers {"x-forwarded-for" "10.0.0.1"}})))))
 
-(deftest test-get-client-ip-x-forwarded-for
-  (testing "Returns X-Forwarded-For when trusted"
-    (with-trust-x-forwarded-for true
-      #(let [request {:remote-addr "192.168.1.1"
-                      :headers {"x-forwarded-for" "10.0.0.1"}}]
-         (is (= "10.0.0.1" (rate-limit/get-client-ip request)))))))
+(deftest get-client-ip-falls-back-to-unknown
+  (with-trust-x-forwarded-for false
+    #(is (= "unknown" (rl/get-client-ip {:headers {}})))))
 
-(deftest test-get-client-ip-fallback
-  (testing "Returns 'unknown' when no IP available"
-    (with-trust-x-forwarded-for false
-      #(let [request {:headers {}}]
-         (is (= "unknown" (rate-limit/get-client-ip request)))))))
+(deftest one-exhausted-source-does-not-block-another
+  (testing "buckets are per source, so one abuser cannot lock everyone out"
+    (let [wrapped (rl/wrap-rate-limit (handler-returning (rl/mark-failed-attempt ok-page)))]
+      (run-n wrapped (req guess-uri "10.0.5.1") 10)
+      (is (= 429 (:status (wrapped (req guess-uri "10.0.5.1")))))
+      (is (= 200 (:status (wrapped (req guess-uri "10.0.5.2"))))
+          "a different source has its own budget"))))
 
-;; ===== rate-limited? tests (via wrap-rate-limit) =====
+(deftest old-entries-are-cleaned-up
+  (testing "entries older than an hour are dropped"
+    (let [now (System/currentTimeMillis)]
+      (reset! rl/rate-limit-store
+              {"send-a-code|ip|old" {:attempts 5 :last-reset (- now (* 2 60 60 1000))}
+               "send-a-code|ip|recent" {:attempts 3 :last-reset (- now (* 30 60 1000))}})
+      (#'rl/cleanup-old-entries!)
+      (is (nil? (get @rl/rate-limit-store "send-a-code|ip|old")))
+      (is (some? (get @rl/rate-limit-store "send-a-code|ip|recent"))))))
 
-(deftest test-rate-limit-threshold
-  (testing "Rate limiting activates after 10 failed attempts"
-    (with-trust-x-forwarded-for false
-      #(let [handler (fn [_] {:status 401 :body "Unauthorized"})
-             wrapped (rate-limit/wrap-rate-limit handler)
-             request {:uri "/auth"
-                      :request-method :post
-                      :remote-addr "10.0.0.1"
-                      :headers {}}]
-         ;; First 10 attempts should pass through
-         (dotimes [_ 10]
-           (let [response (wrapped request)]
-             (is (= 401 (:status response)))))
-         ;; 11th attempt should be rate limited
-         (let [response (wrapped request)]
-           (is (= 429 (:status response))))))))
-
-(deftest test-rate-limit-only-counts-failures
-  (testing "Successful requests don't count toward rate limit"
-    (with-trust-x-forwarded-for false
-      #(let [call-count (atom 0)
-             handler (fn [_]
-                       (swap! call-count inc)
-                       {:status 200 :body "OK"})
-             wrapped (rate-limit/wrap-rate-limit handler)
-             request {:uri "/auth"
-                      :request-method :post
-                      :remote-addr "10.0.0.2"
-                      :headers {}}]
-         ;; 20 successful requests should all pass
-         (dotimes [_ 20]
-           (let [response (wrapped request)]
-             (is (= 200 (:status response)))))
-         (is (= 20 @call-count))))))
-
-(deftest test-rate-limit-only-auth-endpoints
-  (testing "Non-auth endpoints are not rate limited"
-    (with-trust-x-forwarded-for false
-      #(let [handler (fn [_] {:status 401 :body "Unauthorized"})
-             wrapped (rate-limit/wrap-rate-limit handler)
-             request {:uri "/api/rag"
-                      :request-method :post
-                      :remote-addr "10.0.0.3"
-                      :headers {}}]
-         ;; 20 failed requests to non-auth endpoint should all pass
-         (dotimes [_ 20]
-           (let [response (wrapped request)]
-             (is (= 401 (:status response)))))))))
-
-(deftest test-rate-limit-only-post-requests
-  (testing "GET requests to auth endpoints are not rate limited"
-    (with-trust-x-forwarded-for false
-      #(let [handler (fn [_] {:status 200 :body "OK"})
-             wrapped (rate-limit/wrap-rate-limit handler)
-             request {:uri "/auth"
-                      :request-method :get
-                      :remote-addr "10.0.0.4"
-                      :headers {}}]
-         ;; GET requests should not be counted
-         (dotimes [_ 20]
-           (let [response (wrapped request)]
-             (is (= 200 (:status response)))))))))
-
-(deftest test-rate-limit-per-ip
-  (testing "Rate limits are tracked per IP address"
-    (with-trust-x-forwarded-for false
-      #(let [handler (fn [_] {:status 401 :body "Unauthorized"})
-             wrapped (rate-limit/wrap-rate-limit handler)
-             make-request (fn [ip]
-                            {:uri "/auth"
-                             :request-method :post
-                             :remote-addr ip
-                             :headers {}})]
-         ;; Exhaust rate limit for IP1
-         (dotimes [_ 10]
-           (wrapped (make-request "10.0.0.5")))
-         ;; IP1 should be rate limited
-         (is (= 429 (:status (wrapped (make-request "10.0.0.5")))))
-         ;; IP2 should still work
-         (is (= 401 (:status (wrapped (make-request "10.0.0.6")))))))))
-
-;; ===== cleanup-old-entries! tests =====
-
-(deftest test-cleanup-old-entries
-  (testing "Old entries are removed during cleanup"
-    (let [now (System/currentTimeMillis)
-          old-time (- now (* 2 60 60 1000)) ; 2 hours ago
-          recent-time (- now (* 30 60 1000))] ; 30 minutes ago
-      ;; Set up test data directly
-      (reset! rate-limit/rate-limit-store
-              {"old-ip" {:attempts 5 :last-reset old-time}
-               "recent-ip" {:attempts 3 :last-reset recent-time}})
-      ;; Trigger cleanup by calling the private function
-      (#'rate-limit/cleanup-old-entries!)
-      ;; Old entry should be removed, recent should remain
-      (is (nil? (get @rate-limit/rate-limit-store "old-ip")))
-      (is (some? (get @rate-limit/rate-limit-store "recent-ip"))))))
-
-;; ===== Time window reset tests =====
-
-(deftest test-rate-limit-window-reset
-  (testing "Rate limit resets after 15 minute window"
-    ;; This test verifies the logic without waiting 15 minutes
-    ;; by manipulating the stored timestamp
-    (with-trust-x-forwarded-for false
-      #(let [now (System/currentTimeMillis)
-             old-time (- now (* 16 60 1000))] ; 16 minutes ago
-         ;; Set up an exhausted rate limit from 16 minutes ago
-         (reset! rate-limit/rate-limit-store
-                 {"10.0.0.7" {:attempts 10 :last-reset old-time}})
-         (let [handler (fn [_] {:status 401 :body "Unauthorized"})
-               wrapped (rate-limit/wrap-rate-limit handler)
-               request {:uri "/auth"
-                        :request-method :post
-                        :remote-addr "10.0.0.7"
-                        :headers {}}]
-           ;; Should NOT be rate limited because window has expired
-           (is (= 401 (:status (wrapped request)))))))))
-
-;; Run tests helper
-(defn run-tests []
-  (clojure.test/run-tests 'digdir.api.rate-limit-test))
+(deftest the-window-rolls-per-bucket
+  (testing "an exhausted bucket recovers once its window has passed"
+    (let [sixteen-minutes-ago (- (System/currentTimeMillis) (* 16 60 1000))]
+      (reset! rl/rate-limit-store
+              {"guess-a-code|ip|10.0.0.7" {:attempts 10 :last-reset sixteen-minutes-ago}})
+      (let [wrapped (rl/wrap-rate-limit (handler-returning (rl/mark-failed-attempt ok-page)))]
+        (is (= 200 (:status (wrapped (req guess-uri "10.0.0.7"))))
+            "the 15-minute window expired, so the bucket resets rather than blocking")))))

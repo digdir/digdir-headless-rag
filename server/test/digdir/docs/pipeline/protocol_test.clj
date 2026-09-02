@@ -1,8 +1,7 @@
 (ns digdir.docs.pipeline.protocol-test
   "Tests for digdir.docs.pipeline.protocol - DocumentSource protocol."
-  (:require [clojure.test :refer [deftest testing is are]]
+  (:require [clojure.test :refer [deftest testing is ]]
             [digdir.docs.pipeline.protocol :as proto]
-            [digdir.docs.pipeline.core :as core]
             [digdir.docs.test-fixtures :as fixtures]))
 
 ;; ============================================================================
@@ -15,13 +14,25 @@
           chunks (proto/header-based-chunks config fixtures/sample-markdown-simple)]
       (is (vector? chunks))
       (is (pos? (count chunks)))
-      (is (every? :chunk_id chunks))
       (is (every? :content_markdown chunks)))))
 
-(deftest header-based-chunks-generates-ids
-  (testing "Generates unique chunk IDs"
+(deftest header-based-chunks-does-not-assign-ids
+  (testing "Chunking yields no chunk_id — it cannot know the document"
+    ;; Ids used to be hashed from content here, which collided across
+    ;; documents and dropped rows on upsert (#72). chunk-document assigns
+    ;; them instead, where :doc_num is in hand.
     (let [config fixtures/sample-pipeline-config
           chunks (proto/header-based-chunks config fixtures/sample-markdown-simple)]
+      (is (every? #(nil? (:chunk_id %)) chunks)))))
+
+(deftest chunk-document-generates-ids
+  (testing "Generates 12-character chunk IDs"
+    (let [config fixtures/sample-pipeline-config
+          doc {:doc_num "doc-1"
+               :content_markdown fixtures/sample-markdown-simple
+               :url "/a"}
+          chunks (:chunks (proto/chunk-document config doc :url))]
+      (is (pos? (count chunks)))
       (is (every? #(= 12 (count (:chunk_id %))) chunks)))))
 
 (deftest header-based-chunks-includes-metadata
@@ -48,7 +59,7 @@
       (is (pos? (count (:chunks result)))))))
 
 (deftest chunk-document-adds-doc-info
-  (testing "Each chunk gets doc_num, chunk_index, and location"
+  (testing "Each chunk gets doc_num, chunk_index, content_length, and location"
     (let [config fixtures/sample-pipeline-config
           doc {:id "doc-1"
                :doc_num "doc-1"
@@ -58,7 +69,10 @@
           chunk (first (:chunks result))]
       (is (= "doc-1" (:doc_num chunk)))
       (is (= 0 (:chunk_index chunk)))
-      (is (= "/test.md" (:url chunk))))))
+      (is (= "/test.md" (:url chunk)))
+      (is (integer? (:content_length chunk)))
+      (is (pos? (:content_length chunk)))
+      (is (= (count (:content_markdown chunk)) (:content_length chunk))))))
 
 ;; Note: chunk-document filtering by length is tested via chunking-test.clj
 
@@ -89,7 +103,7 @@
   proto/DocumentSource
   (source-name [_] :test-source)
   (fetch-entries [_ _config] nil)
-  (entry-to-doc [_ entry] {:id "test" :doc_num "test" :type "test"})
+  (entry-to-doc [_ _entry] {:id "test" :doc_num "test" :type "test"})
   (fetch-content [_ _config _entry] nil)
   (docs-schema [_ coll-name] {:name coll-name :fields []})
   (chunks-schema [_ [_ chunks-coll _]] {:name chunks-coll :fields []})

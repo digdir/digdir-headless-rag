@@ -1,0 +1,132 @@
+;; Round 3 — agent system-prompt OFAT on Round-2 winner (phrase-top20)
+;;
+;; Per the plan's Round-3 spec ("hold the winning config from Round 2
+;; and vary the propose-* prompts: Original vs D2.21-style"). The
+;; original propose-* prompts target ingestion-time enrichment and
+;; their D2.21 alternatives don't exist in this codebase, so a faithful
+;; ingest-side rerun isn't tractable in a same-corpus sweep.
+;;
+;; We pivot to varying the closest runtime-side prompt: the agent's
+;; system prompt, which steers every LLM call in the agent loop. This
+;; is the highest-leverage prompt the agent sees, so movement here is
+;; the most informative for a single-axis prompt OFAT.
+;;
+;; Cells (3):
+;;   - prompt-baseline      — the current default-system-prompt
+;;                            (digdir.skills.builtin.agent.loop/default-system-prompt).
+;;                            Acts as control; expected to reproduce
+;;                            Round-2 phrase-top20 numbers within noise.
+;;   - prompt-minimal       — strips the 10-bullet CRITICAL RULES, the
+;;                            persistence guidance, the small-doc rule,
+;;                            and iteration-budget text. Keeps only the
+;;                            5-step (reduced to 4-step) workflow and
+;;                            the reasoning-first preamble. Tests
+;;                            whether the verbose rules are doing work
+;;                            on top of tool-descriptions + sufficiency-
+;;                            gate feedback.
+;;   - prompt-strict-budget — baseline + a hard requirement that
+;;                            generate_response cannot fire until at
+;;                            least TWO distinct search rounds have run.
+;;                            Tests whether early-finalization is the
+;;                            ceiling on Round-2's 0%-recall domains.
+;;
+;; All other knobs held at the Round-2 winning config:
+;;   - skill-graph-id        :builtin/agent-rag-graph-bundled
+;;   - strategy-weights      {:content 1.0 :phrase 2.0 :metadata 0.2}
+;;   - rerank :top-k         20
+;;   - repeats               3
+;;   - run-timeout-ms        5 min (default; never tripped in Round 1/2)
+;;
+;; Filter: chunks+answer rows only (n=18).
+;;
+;; Expected wall-clock:
+;;   prompt-baseline   ~25s mean × 18 × 3 = ~22 min
+;;   prompt-minimal    ~25s (similar to baseline; sufficiency-gate
+;;                     retries may add iterations, but each iteration
+;;                     is cheap given the smaller prompt)
+;;   prompt-strict-budget  ~40s mean (forces ≥2 search rounds = ~2x
+;;                          minimum tool calls), so ~36 min
+;;   total: ~1.5–2 h
+;;
+;; Drive from REPL:
+;;   (digdir.sweep.runner/run-from-files
+;;     {:matrix-path "test/fixtures/sweep/matrices/round-3-agent-system-prompt.edn"})
+
+{:configs
+ [{:id "prompt-baseline"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 1.0
+                                           :phrase 2.0
+                                           :metadata 0.2}}
+    :builtin/rerank    {:top-k 20}
+    ;; No :builtin/agent override — the agent skill falls through to
+    ;; loop/default-system-prompt. This cell is the control.
+    }}
+
+  {:id "prompt-minimal"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 1.0
+                                           :phrase 2.0
+                                           :metadata 0.2}}
+    :builtin/rerank    {:top-k 20}
+    :builtin/agent
+    {:system-prompt
+     "You are a research assistant with access to a document knowledge base. Answer the user's question accurately.
+
+Always include your reasoning in your message text before making tool calls. Explain what you're about to do and why.
+
+Workflow — repeat as needed:
+1. SEARCH: Use search with diverse queries. Returns metadata only — no content.
+2. READ: Use read_chunks to fetch full content of promising results.
+3. RERANK: Use rerank_results to surface the most relevant chunks in your workspace.
+4. GENERATE: Use generate_response to produce an answer.
+
+After each tool call, the system runs a sufficiency gate. If it rejects, follow the hint; if it passes, finalize."}}}
+
+  {:id "prompt-strict-budget"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 1.0
+                                           :phrase 2.0
+                                           :metadata 0.2}}
+    :builtin/rerank    {:top-k 20}
+    :builtin/agent
+    {:system-prompt
+     "You are a thorough research assistant with access to a document knowledge base.
+
+Your goal is to answer the user's question accurately. You must be persistent: complete at least TWO distinct search rounds before calling generate_response. The second search must use significantly different phrasings (synonyms, expansions, Norwegian/English variants) than the first — it is NOT enough to add one query term.
+
+IMPORTANT: Always include your reasoning in your message text before making tool calls. Begin each reasoning block with \"[search round N]\" so the round count is explicit. This is critical for debugging and observability.
+
+REQUIRED WORKFLOW — repeat this cycle:
+1. SEARCH: Use search with diverse queries (3-5 different phrasings at once). Returns metadata only — no content.
+2. READ: Use read_chunks to fetch full content of promising results from the search. Read by chunk_ids, or use doc_num + chunk_range to read adjacent chunks for more context.
+3. RERANK: Use rerank_results to surface the most relevant chunks in your workspace.
+4. GENERATE: Use generate_response only after at least two search rounds have completed.
+5. EVALUATE: After search/read/rerank, the system will run a sufficiency gate. If it rejects the evidence, follow the system hint. If it passes, finalize.
+
+CRITICAL RULES:
+- NEVER call generate_response if you haven't called read_chunks first. The workspace is empty by default.
+- NEVER call generate_response if the current reasoning still says \"[search round 1]\" — you owe at least one more diverse search.
+- If search returns results but you haven't read them yet, call read_chunks before anything else.
+- After read_chunks or rerank_results, pay attention to the system sufficiency-gate hint. If the gate rejects the evidence, do NOT finalize yet.
+- When searching, pass MULTIPLE diverse queries at once in the queries array (e.g. 3-5 variations). This is far more effective than single queries.
+- Use chunk_index and total_chunks from search metadata to decide whether to read adjacent chunks (e.g. if chunk_index=2/8, do a range read around that chunk with doc_num + chunk_range).
+- SMALL-DOC RULE: When a retrieved chunk's document is short (total_chunks <= 6) AND that chunk is in your top read candidates, prefer a SINGLE read_chunks call with doc_num + chunk_range covering the full doc (e.g. chunk_range {from: 0, to: 5}) over picking individual chunk_ids. Small docs are almost always best read end-to-end — the budget cost is similar and you avoid missing the answer in an adjacent chunk.
+- Before doing a NEW search, first consume more of the CURRENT search results: read additional unseen top hits and expand around promising chunk_index values with doc_num + chunk_range.
+- Use content_length from search metadata to estimate token cost before reading. Use max_content_length=500 in read_chunks if you just want to skim many chunks quickly.
+- If you want to use filter_by and are not certain of field names or values, call inspect_filters first.
+- If generate_response fails, vary your search terms significantly: use synonyms, expand abbreviations, try related concepts, try Norwegian AND English terms.
+- You have limited iterations. Budget them wisely: a search→read→rerank→generate cycle costs 4 iterations. Aim for 2-3 complete cycles."}}}]
+
+ :repeats 3
+ :max-clarification-rounds 2
+
+ :execution-scope
+ {:tenant "digdir"
+  :dataset-config-key "default"
+  :agent-id "builtin/agent-rag-agent"}
+
+ :question-filter {:grounding-modes #{:chunks+answer}}}

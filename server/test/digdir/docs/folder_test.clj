@@ -1,6 +1,7 @@
 (ns digdir.docs.folder-test
   "Tests for digdir.docs.folder namespace."
-  (:require [clojure.test :refer [deftest testing is are use-fixtures]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest testing is ]]
             [clojure.java.io :as io]
             [digdir.docs.folder :as folder]
             [digdir.docs.test-fixtures :as fixtures]))

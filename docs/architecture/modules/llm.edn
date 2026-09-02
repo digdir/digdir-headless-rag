@@ -1,0 +1,23 @@
+{:id "llm",
+ :plane "runtime",
+ :name "LLM Integrations",
+ :note "Provider abstraction",
+ :icon "llm",
+ :color "#7fd8bb",
+ :status "Core runtime",
+ :summary
+ "Routes model calls to Anthropic, OpenAI, Azure and configured provider backends.",
+ :description
+ "A provider abstraction normalizes messages, model parameters, structured outputs and streaming across supported LLM services. Resolved configuration chooses the provider and deployment per execution.",
+ :responsibilities
+ ["Normalize provider-specific requests and responses"
+  "Apply configured model parameters and prompt fragments"
+  "Support streaming and structured evaluation calls"],
+ :files
+ ["server/src/digdir/llm/client.clj"
+  "server/src/digdir/llm/openai.cljc"
+  "server/src/digdir/llm/anthropic.cljc"],
+ :input "Messages + resolved model config",
+ :output "Model text, tool calls or structured data",
+ :keywords
+ "llm model provider openai anthropic azure litellm prompt streaming structured"}

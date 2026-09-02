@@ -1,0 +1,44 @@
+;; Pattern D: Filter fallback — explicit filter returns 0 chunks, unfiltered retry succeeds
+;; Source: agent-trace-2026-02-09T17-35-49-476647Z.txt (filter returns 0, fallback)
+{:description "Filter fallback: explicit filter yields 0 chunks, unfiltered search succeeds"
+ :query "Hvor mange årsverk hadde Digdir i 2022?"
+ :max-iterations 10
+
+ :llm-responses
+ [;; Iteration 0: search with explicit filter_by
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "I will search with a year filter to narrow results to 2022 documents."
+                        :tool_calls [{:id "call_s1"
+                                      :type "function"
+                                      :function {:name "search_documents"
+                                                 :arguments "{\"queries\":[\"årsverk Digdir 2022\",\"antall ansatte Digitaliseringsdirektoratet 2022\",\"bemanning Digdir 2022\"],\"filter_by\":{\"fields\":[{\"field\":\"year\",\"selected_options\":[\"2022\"],\"value_type\":\"integer\"},{\"field\":\"orgs_short\",\"selected_options\":[\"Digdir\"],\"value_type\":\"string\"}]}}"}}]}}]}
+  ;; Iteration 1: rerank
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "The filtered search fell back to unfiltered. Let me rerank."
+                        :tool_calls [{:id "call_r1"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 2: generate
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Generating response with available context."
+                        :tool_calls [{:id "call_g1"
+                                      :type "function"
+                                      :function {:name "generate_response"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Final: text response
+  {:choices [{:finish_reason "stop"
+              :message {:content "Digdir hadde 330 utførte årsverk i 2022 [7]."}}]}]
+
+ :tool-results
+ [;; call_s1: filter returned 0, retried without filters
+  "Filtered retrieval returned 0 chunks; retried without filters. Retrieved 40 chunks (40 new unique). Workspace now has 40 total chunks. [0 phrase, 82 metadata, 54 content]"
+  ;; call_r1
+  "Reranked to top 10 chunks. Top results: 1. Digdir er en kompetansebedrift med 330 utførte årsverk."
+  ;; call_g1
+  "Digdir hadde 330 utførte årsverk i 2022 [7]."]
+
+ :expected {:iterations 3
+            :tool-sequence ["search_documents" "rerank_results" "generate_response"]
+            :response-pattern "330"
+            :exhausted false}}

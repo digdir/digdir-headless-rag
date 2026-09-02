@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "digdir-rag": {
+      "type": "streamable_http",
+      "url": "http://host.docker.internal:8181/api/mcp",
+      "headers": {
+        "X-API-Key": "${E2E_API_KEY}"
+      }
+    }
+  }
+}

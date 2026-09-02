@@ -1,0 +1,28 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,recall-at-5,recall-at-10,recall-at-20,citation-recall,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,steps-executed,response,error
+2fddc3f1-4bbf-4a52-a291-02931153877e,2026-05-21T23:40:30.838723Z,bundled-default,altinn-dialogporten-about,0,public-docs,public-docs-smoke,"altinn-dialogporten,exact-lookup,simple",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,7,3,1,9f75a7784e9b;aa43c73faf55;a7942896bf17;435130fc25cf;68ef460710c6;b6b14554ac7f;66335015006e,9f75a7784e9b;aa43c73faf55;435130fc25cf,9f75a7784e9b,19233,,,,3,"Dialogporten er en løsning som fungerer som et felles API og metadata-lager for digitale dialoger, og som gjør meldinger og dialoger fra Altinn 3 og andre digitale tjenesteplattformer tilgjengelige for sluttbrukersystemer i et felles format. [1][2]
+
+Kort sagt: den legger til rette for sikker og effektiv kommunikasjon mellom offentlige tjenesteplattformer og brukere ved å standardisere håndteringen av digitale dialoger og meldinger. [2]
+
+Dialogporten er også beskrevet som **kun-les** for sluttbrukere; selve oppdateringene gjøres av tjenesteplattformene på vegne av tjenesteeier. [3]",
+5a1b025b-7d98-43b7-8cf4-9d4fd7019a0a,2026-05-21T23:41:06.631816Z,bundled-default,altinn-correspondence-post-published,0,public-docs,exploratory-rerank,"altinn-correspondence,simple,factual",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,5,0,1,4236d1b1890c;2756a3f03a09;fa957b5aa28b;c0a62a9174d8;2b62d135d8d0,,068a1c1b7fa5,35792,,,,3,"Etter at en correspondence er **publisert** i Altinn, går den inn i **mottakerfasen**:
+
+- Mottakeren kan hente oversikt eller innhold, som setter status til **Fetched**
+- Når innholdet åpnes første gang, settes status til **Read**
+- Vedlegg kan lastes ned når som helst etter publisering, og da settes **AttachmentsDownloaded**
+- Hvis korrespondansen krever bekreftelse, kan mottakeren bekrefte den, som gir status **Confirmed**
+- Til slutt kan den bli slettet/purget enten av mottakeren eller av Altinn, med status **PurgedByRecipient** eller **PurgedByAltinn**
+
+Kort sagt: **publisert betyr at den er tilgjengelig for mottakeren, og deretter følger sporing av lesing, vedleggsnedlasting, bekreftelse og eventuell sletting.**
+
+Hvis du vil, kan jeg også forklare dette som en enkel statusflyt på nors…",
+16712061-b84f-4315-bd6b-d459c139af4e,2026-05-21T23:41:23.022975Z,faithful-default,altinn-dialogporten-about,0,public-docs,public-docs-smoke,"altinn-dialogporten,exact-lookup,simple",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,7,2,1,9f75a7784e9b;66335015006e;4a9ad6cd2bd1;0f76a4965326;fa42f12f0e96;15caa4bf8ead;e4deb94ea9c5,9f75a7784e9b;4a9ad6cd2bd1,9f75a7784e9b,16390,,,,3,"Dialogporten er en løsning som gjør meldinger og dialoger fra Altinn 3 og andre digitale tjenesteplattformer tilgjengelige for sluttbrukersystemer i et felles format. [1]  
+
+Det finnes også en mer teknisk beskrivelse: Dialogporten er en API-løsning for Dialogporten-funksjonalitet. [2]  
+
+Hvis du mener tjenesten som helhet, er den beste treffet altså **Dialogporten som en felles løsning for meldinger og dialoger**. [1]",
+4d2108ef-d08e-4345-bfb0-9bab4beff910,2026-05-21T23:42:25.432339Z,faithful-default,altinn-correspondence-post-published,0,public-docs,exploratory-rerank,"altinn-correspondence,simple,factual",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,8,2,1,6ea4d4ac1d99;82ad7fb84323;dacba59a3448;49362e0ed0fa;eba28b91137f;5522c19e8d3d;bd74b75c8c74;a928838518a6,6ea4d4ac1d99;82ad7fb84323,068a1c1b7fa5,62409,,,,3,"Søket fant fortsatt bare de samme sidene, så dokumentasjonen i denne samlingen ser ut til å være begrenset. Jeg kan likevel svare forsiktig og presist ut fra det som faktisk står: en correspondence er en sikker meldingstjeneste, og når den sendes må den knyttes til en Altinn-ressurs som styrer tilgang for avsender og mottaker; mottakeren må ha riktig rolle/tilgang, og for person brukes `priv`. Jeg vil nå formulere svaret med tydelig forbehold om at jeg ikke fant en eksplisitt beskrivelse av en egen «publisert»-status eller videre livssyklus i de tilgjengelige sidene.
+I dokumentasjonen jeg fant, står det at en **correspondence** i Altinn er en sikker meldingstjeneste for å sende brev/varsler/dokumenter til personer eller organisasjoner.
+
+Etter at den er sendt/publisert:
+
+- den **må være kny…",

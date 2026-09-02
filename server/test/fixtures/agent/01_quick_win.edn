@@ -1,0 +1,41 @@
+;; Pattern A: Quick win — 3 iterations, 1 search, auto-filter, success
+;; Source: agent-trace-2026-02-10T11-23-56-500249Z.txt
+{:description "Pattern A: Quick win — search, rerank, generate in 3 iterations"
+ :query "Hvor mange årsverk hadde Digdir i 2022?"
+ :max-iterations 10
+
+ :llm-responses
+ [;; Iteration 0: search for documents
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "I need to search for information about FTEs at Digdir in 2022. I will use multiple query variations."
+                        :tool_calls [{:id "call_s1"
+                                      :type "function"
+                                      :function {:name "search_documents"
+                                                 :arguments "{\"queries\":[\"årsverk Digdir 2022\",\"antall ansatte Digdir 2022\",\"bemanning Digdir 2022\",\"ressursbruk Digdir 2022\",\"Digitaliseringsdirektoratet årsverk 2022\"]}"}}]}}]}
+  ;; Iteration 1: rerank results
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Good results from the search. Let me rerank to surface the most relevant chunks."
+                        :tool_calls [{:id "call_r1"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 2: generate response
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "I now have reranked context. Let me generate the response."
+                        :tool_calls [{:id "call_g1"
+                                      :type "function"
+                                      :function {:name "generate_response"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Final: text response (no tool calls)
+  {:choices [{:finish_reason "stop"
+              :message {:content "Digdir hadde 330 utførte årsverk i 2022 [7]."}}]}]
+
+ :tool-results
+ ["Retrieved 40 chunks (40 new unique). Workspace now has 40 total chunks. [0 phrase, 82 metadata, 54 content] Auto-filtered by orgs_long: Digitaliseringsdirektoratet."
+  "Reranked to top 10 chunks. Top results: 1. Digdir er en kompetansebedrift hvor ansatte i all hovedsak har høy utdannelse."
+  "Digdir hadde 330 utførte årsverk i 2022 [7]."]
+
+ :expected {:iterations 3
+            :tool-sequence ["search_documents" "rerank_results" "generate_response"]
+            :response-pattern "330"
+            :exhausted false}}

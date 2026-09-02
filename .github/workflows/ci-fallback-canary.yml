@@ -1,0 +1,72 @@
+name: CI fallback canary (ubuntu-latest)
+
+# THE INVERSE OF WHAT THIS FILE USED TO BE, deliberately.
+#
+# Before the cutover this workflow proved the self-hosted path worked while
+# ubuntu-latest carried the real load. After the cutover that is backwards:
+# ci.yml now runs on the single self-hosted runner, so the path worth proving
+# is the one we would fall BACK to. A canary that tests the path you are
+# already on tells you nothing.
+#
+# So this runs the real CI commands on ubuntu-latest, on a weekly schedule and
+# on demand. Its job is to answer one question before you need the answer:
+# **if the runner dies, does reverting actually work?** If this goes red, the
+# escape hatch in infra/ci-runner/README.md is not an escape hatch any more,
+# and that is worth knowing while CI is still green rather than during an
+# outage.
+#
+# Run it on demand the moment you are considering a revert:
+#   gh workflow run ci-fallback-canary.yml
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays, 05:23 UTC. Off-hours and deliberately not on the hour.
+    - cron: '23 5 * * 1'
+
+concurrency:
+  group: fallback-canary-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test-hosted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Mirrors ci.yml exactly. If these drift apart, this canary stops proving
+    # that a revert would work, which is its only purpose.
+    env:
+      CONFIG_MASTER_KEY: ci-test-master-key
+      JWT_SECRET: ci-test-jwt-secret
+      DATAHIKE_FILE_PATH: /tmp/digdir-ci-db/dh
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install mise-pinned toolchain
+        uses: jdx/mise-action@v4
+
+      - name: Cache Clojure & JS deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            ~/.gitlibs
+            server/.shadow-cljs
+            server/node_modules
+          key: ${{ runner.os }}-deps-${{ hashFiles('server/deps.edn', 'server/package.json', 'server/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-
+
+      - name: Prepare config DB directory
+        run: mkdir -p /tmp/digdir-ci-db
+
+      - name: Lint (clj-kondo)
+        run: bb lint
+
+      - name: Config-resolution tests
+        run: bb test-config
+
+      - name: Unit tests
+        run: bb test

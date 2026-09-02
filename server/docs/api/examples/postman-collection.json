@@ -1,28 +1,8 @@
 {
   "info": {
     "name": "Digdir RAG API",
-    "description": "Retrieval-Augmented Generation API for querying Norwegian government documents.",
+    "description": "Public API and internal Operator Console examples.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "auth": {
-    "type": "apikey",
-    "apikey": [
-      {
-        "key": "key",
-        "value": "X-API-Key",
-        "type": "string"
-      },
-      {
-        "key": "value",
-        "value": "{{api_key}}",
-        "type": "string"
-      },
-      {
-        "key": "in",
-        "value": "header",
-        "type": "string"
-      }
-    ]
   },
   "variable": [
     {
@@ -34,60 +14,113 @@
       "key": "api_key",
       "value": "rag_your_api_key_here",
       "type": "string"
+    },
+    {
+      "key": "jwt_cookie",
+      "value": "auth-token=YOUR_JWT_TOKEN",
+      "type": "string"
     }
   ],
   "item": [
     {
-      "name": "RAG",
-      "description": "RAG and Retrieval endpoints",
+      "name": "Public API",
       "item": [
         {
-          "name": "RAG Query - Simple",
+          "name": "List Datasets",
           "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"Hva er Altinn?\"\n}"
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "X-API-Key",
+                  "type": "string"
+                },
+                {
+                  "key": "value",
+                  "value": "{{api_key}}",
+                  "type": "string"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "string"
+                }
+              ]
             },
+            "method": "GET",
             "url": {
-              "raw": "{{base_url}}/api/rag",
-              "host": ["{{base_url}}"],
-              "path": ["api", "rag"]
-            },
-            "description": "Simple RAG query with just a question"
+              "raw": "{{base_url}}/api/datasets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "datasets"
+              ]
+            }
           }
         },
         {
-          "name": "RAG Query - With Options",
+          "name": "Get Dataset",
           "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"Hva er kravene for universell utforming?\",\n  \"model\": \"gpt-4o-2024-11-20\",\n  \"context-top-k\": 5,\n  \"rerank-top-k\": 20\n}"
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "X-API-Key",
+                  "type": "string"
+                },
+                {
+                  "key": "value",
+                  "value": "{{api_key}}",
+                  "type": "string"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "string"
+                }
+              ]
             },
+            "method": "GET",
             "url": {
-              "raw": "{{base_url}}/api/rag",
-              "host": ["{{base_url}}"],
-              "path": ["api", "rag"]
-            },
-            "description": "RAG query with custom model and parameters"
+              "raw": "{{base_url}}/api/datasets/public-docs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "datasets",
+                "public-docs"
+              ]
+            }
           }
         },
         {
-          "name": "RAG Query - Continue Conversation",
+          "name": "MCP - tools/list",
           "request": {
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "X-API-Key",
+                  "type": "string"
+                },
+                {
+                  "key": "value",
+                  "value": "{{api_key}}",
+                  "type": "string"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "string"
+                }
+              ]
+            },
             "method": "POST",
             "header": [
               {
@@ -97,19 +130,43 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"query\": \"Kan du forklare mer om dette?\",\n  \"conversation-id\": \"YOUR_CONVERSATION_ID\"\n}"
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/list\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/rag",
-              "host": ["{{base_url}}"],
-              "path": ["api", "rag"]
-            },
-            "description": "Continue an existing conversation"
+              "raw": "{{base_url}}/api/mcp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "mcp"
+              ]
+            }
           }
         },
         {
-          "name": "Retrieve - Simple",
+          "name": "MCP - tools/call",
           "request": {
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "X-API-Key",
+                  "type": "string"
+                },
+                {
+                  "key": "value",
+                  "value": "{{api_key}}",
+                  "type": "string"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "string"
+                }
+              ]
+            },
             "method": "POST",
             "header": [
               {
@@ -119,75 +176,64 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"query\": \"Hva er Altinn?\",\n  \"top_k\": 5\n}"
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 2,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"builtin.agent-rag-agent__agent-rag-graph-bundled\",\n    \"arguments\": {\n      \"user-query\": \"Hva er Altinn?\",\n      \"tenant\": \"digdir\",\n      \"dataset_config_key\": \"public-docs\"\n    }\n  }\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/retrieve",
-              "host": ["{{base_url}}"],
-              "path": ["api", "retrieve"]
-            },
-            "description": "Retrieve relevant chunks without LLM generation"
-          }
-        },
-        {
-          "name": "Retrieve - Without Query Expansion",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"WCAG 2.1\",\n  \"top_k\": 10,\n  \"include_query_expansion\": false\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/retrieve",
-              "host": ["{{base_url}}"],
-              "path": ["api", "retrieve"]
-            },
-            "description": "Fast retrieval without LLM query expansion"
-          }
-        },
-        {
-          "name": "Retrieve - With Filter",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"query\": \"tilgjengelighet\",\n  \"top_k\": 5,\n  \"filter\": {\n    \"fields\": [\n      {\n        \"field\": \"owner_short\",\n        \"selected_options\": [\"Digdir\"],\n        \"value_type\": \"string\"\n      }\n    ]\n  }\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/retrieve",
-              "host": ["{{base_url}}"],
-              "path": ["api", "retrieve"]
-            },
-            "description": "Retrieve with metadata filter"
+              "raw": "{{base_url}}/api/mcp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "mcp"
+              ]
+            }
           }
         }
       ]
     },
     {
       "name": "Conversations",
-      "description": "Conversation management endpoints",
       "item": [
         {
           "name": "List Conversations",
           "request": {
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "X-API-Key",
+                  "type": "string"
+                },
+                {
+                  "key": "value",
+                  "value": "{{api_key}}",
+                  "type": "string"
+                },
+                {
+                  "key": "in",
+                  "value": "header",
+                  "type": "string"
+                }
+              ]
+            },
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "customer-user-123"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/conversations?page_size=10&page_index=0",
-              "host": ["{{base_url}}"],
-              "path": ["api", "conversations"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "conversations"
+              ],
               "query": [
                 {
                   "key": "page_size",
@@ -198,110 +244,13 @@
                   "value": "0"
                 }
               ]
-            },
-            "description": "Get paginated list of conversations"
-          }
-        },
-        {
-          "name": "Create Conversation",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-User-Email",
-                "value": "user@example.com"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"title\": \"My New Conversation\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/conversations",
-              "host": ["{{base_url}}"],
-              "path": ["api", "conversations"]
-            },
-            "description": "Create a new conversation"
-          }
-        },
-        {
-          "name": "Get Conversation",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/conversations/:id",
-              "host": ["{{base_url}}"],
-              "path": ["api", "conversations", ":id"],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "YOUR_CONVERSATION_ID"
-                }
-              ]
-            },
-            "description": "Get a specific conversation with messages"
-          }
-        },
-        {
-          "name": "Update Conversation",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"title\": \"Updated Title\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/conversations/:id",
-              "host": ["{{base_url}}"],
-              "path": ["api", "conversations", ":id"],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "YOUR_CONVERSATION_ID"
-                }
-              ]
-            },
-            "description": "Update conversation title"
-          }
-        },
-        {
-          "name": "Delete Conversation",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/conversations/:id",
-              "host": ["{{base_url}}"],
-              "path": ["api", "conversations", ":id"],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "YOUR_CONVERSATION_ID"
-                }
-              ]
-            },
-            "description": "Delete a conversation"
+            }
           }
         }
       ]
     },
     {
-      "name": "API Keys (Admin)",
-      "description": "API key management - requires JWT auth",
-      "auth": {
-        "type": "noauth"
-      },
+      "name": "Operator Console API Keys",
       "item": [
         {
           "name": "List API Keys",
@@ -310,15 +259,19 @@
             "header": [
               {
                 "key": "Cookie",
-                "value": "auth-token={{jwt_token}}"
+                "value": "{{jwt_cookie}}"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/keys",
-              "host": ["{{base_url}}"],
-              "path": ["api", "keys"]
-            },
-            "description": "List all API keys for the authenticated user"
+              "raw": "{{base_url}}/console-api/api-keys",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "console-api",
+                "api-keys"
+              ]
+            }
           }
         },
         {
@@ -327,48 +280,174 @@
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Cookie",
+                "value": "{{jwt_cookie}}"
               },
               {
-                "key": "Cookie",
-                "value": "auth-token={{jwt_token}}"
+                "key": "X-User-Email",
+                "value": "user@example.com"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"My Integration Key\",\n  \"entity-id\": \"YOUR_ENTITY_ID\"\n}"
+              "raw": "{\n  \"name\": \"Public Docs Integration\",\n  \"dataset-scopes\": [\n    {\n      \"tenant\": \"digdir\",\n      \"dataset-config-key\": \"public-docs\"\n    }\n  ],\n  \"allowed-config-keys\": [\n    {\n      \"root\": \"dataset\",\n      \"tenant\": \"digdir\",\n      \"dataset-config-key\": \"public-docs\"\n    },\n    {\n      \"root\": \"runtime\",\n      \"tenant\": \"digdir\",\n      \"runtime-config-key\": \"default\"\n    }\n  ]\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/keys",
-              "host": ["{{base_url}}"],
-              "path": ["api", "keys"]
-            },
-            "description": "Create a new API key"
+              "raw": "{{base_url}}/console-api/api-keys",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "console-api",
+                "api-keys"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Operator Console Datasets",
+      "item": [
+        {
+          "name": "List Datasets",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{jwt_cookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/console-api/datasets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "console-api",
+                "datasets"
+              ]
+            }
           }
         },
         {
-          "name": "Revoke API Key",
+          "name": "Create Dataset",
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Cookie",
-                "value": "auth-token={{jwt_token}}"
+                "value": "{{jwt_cookie}}"
+              },
+              {
+                "key": "X-User-Email",
+                "value": "user@example.com"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Public Docs\",\n  \"description\": \"Shared docs\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/console-api/datasets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "console-api",
+                "datasets"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Operator Console Pipelines",
+      "item": [
+        {
+          "name": "Create Child Pipeline",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{jwt_cookie}}"
+              },
+              {
+                "key": "X-User-Email",
+                "value": "user@example.com"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"digdir\",\n  \"dataset-config-key\": \"public-docs\",\n  \"pipeline-name\": \"assistant\",\n  \"properties\": {\n    \"name\": \"Assistant\",\n    \"sourceType\": \"website\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/console-api/datasets/ds_123/pipelines",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "console-api",
+                "datasets",
+                "ds_123",
+                "pipelines"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Execute Child Pipeline",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{jwt_cookie}}"
+              },
+              {
+                "key": "X-User-Email",
+                "value": "user@example.com"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/keys/:key-id/revoke",
-              "host": ["{{base_url}}"],
-              "path": ["api", "keys", ":key-id", "revoke"],
-              "variable": [
+              "raw": "{{base_url}}/console-api/datasets/ds_123/pipelines/assistant/execute?tenant=digdir&dataset-config-key=public-docs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "console-api",
+                "datasets",
+                "ds_123",
+                "pipelines",
+                "assistant",
+                "execute"
+              ],
+              "query": [
                 {
-                  "key": "key-id",
-                  "value": "YOUR_KEY_ID"
+                  "key": "tenant",
+                  "value": "digdir"
+                },
+                {
+                  "key": "dataset-config-key",
+                  "value": "public-docs"
                 }
               ]
-            },
-            "description": "Revoke an API key"
+            }
           }
         }
       ]

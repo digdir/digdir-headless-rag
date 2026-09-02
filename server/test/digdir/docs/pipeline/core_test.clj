@@ -1,6 +1,6 @@
 (ns digdir.docs.pipeline.core-test
   "Tests for digdir.docs.pipeline.core - shared utility functions."
-  (:require [clojure.test :refer [deftest testing is are]]
+  (:require [clojure.test :refer [deftest testing is ]]
             [clojure.string :as str]
             [digdir.docs.pipeline.core :as core]))
 

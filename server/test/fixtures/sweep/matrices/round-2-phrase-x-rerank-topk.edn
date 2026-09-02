@@ -1,0 +1,119 @@
+;; Round 2 — 2D sweep: strategy-weights × rerank input top-k
+;;
+;; Per the plan's Round-2 spec ("take the top-3 dimensions Round 1
+;; identified as impactful and cross them pairwise"), we cross the
+;; Round-1 winning weights config with the rerank input cap. The two
+;; axes are:
+;;
+;; Axis A (strategy-weights):
+;;   - default      — in-skill defaults  {:content 1.0 :phrase 0.7 :metadata 0.2}
+;;   - phrase-heavy — Round-1 winner     {:content 1.0 :phrase 2.0 :metadata 0.2}
+;;
+;; Axis B (`:builtin/rerank :top-k`):
+;;   - 20  — below the default; tests if shrinking the rerank input
+;;           hurts (and how much workspace headroom rerank actually
+;;           uses on average)
+;;   - 40  — default                    (baseline control point)
+;;   - 80  — 2x default
+;;   - 160 — 4x default
+;;
+;; Why this cross and not something else:
+;;
+;; Round 1's smoke test showed agent workspaces were 8-13 chunks for
+;; the zero-recall questions, which made me skeptical that rerank
+;; input cap could matter (input chunks come from the workspace, and
+;; 8 < 40 means the cap is already inactive there). But:
+;;
+;; - Round 1 also showed phrase-heavy CHANGES the chunks that surface.
+;;   It's plausible some questions get a noticeably larger workspace
+;;   under phrase-heavy than under default. If so, rerank-input top-k
+;;   becomes a non-trivial knob specifically on that wing of the
+;;   matrix — yielding an interaction effect, which is exactly what 2D
+;;   sweeps are meant to find.
+;;
+;; - The "below default" level (20) deliberately tests whether the
+;;   in-skill default of 40 is loose or tight against workspaces we
+;;   actually see. If recall@10 holds at top-k=20 we know rerank
+;;   trimming has slack; if it drops, the default is already near a
+;;   knee.
+;;
+;; The other two top dimensions per the plan (skill-graph,
+;; strategy-contribution-caps) are saved for a follow-up Round-2 cell
+;; — running all three at once would be ~9 hours of wall-clock and the
+;; OFAT plan calls for them serially.
+;;
+;; Cell IDs follow the pattern `<weights>-top<n>` so the leaderboard
+;; reads as a heatmap.
+;;
+;; Filter: chunks+answer only (n=18). Recall is the signal.
+;; Repeats: 3 (Round-1 confirmed the agent-loop variance demands it).
+;; Run-timeout: default (5 min). Round 1 never tripped it.
+;;
+;; Expected wall-clock:
+;;   8 configs × 18 questions × 3 repeats = 432 runs
+;;   × ~25s mean lat = ~180 min ≈ 3 hours
+;;
+;; Drive from REPL:
+;;   (digdir.sweep.runner/run-from-files
+;;     {:matrix-path "test/fixtures/sweep/matrices/round-2-phrase-x-rerank-topk.edn"})
+
+{:configs
+ [;; --- default weights × top-k ---
+  {:id "default-top20"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:strategy-weights nil}
+                  :builtin/rerank    {:top-k 20}}}
+
+  {:id "default-top40"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:strategy-weights nil}
+                  :builtin/rerank    {:top-k 40}}}
+
+  {:id "default-top80"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:strategy-weights nil}
+                  :builtin/rerank    {:top-k 80}}}
+
+  {:id "default-top160"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:strategy-weights nil}
+                  :builtin/rerank    {:top-k 160}}}
+
+  ;; --- phrase-heavy × top-k ---
+  {:id "phrase-top20"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:strategy-weights {:content 1.0
+                                                         :phrase 2.0
+                                                         :metadata 0.2}}
+                  :builtin/rerank    {:top-k 20}}}
+
+  {:id "phrase-top40"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:strategy-weights {:content 1.0
+                                                         :phrase 2.0
+                                                         :metadata 0.2}}
+                  :builtin/rerank    {:top-k 40}}}
+
+  {:id "phrase-top80"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:strategy-weights {:content 1.0
+                                                         :phrase 2.0
+                                                         :metadata 0.2}}
+                  :builtin/rerank    {:top-k 80}}}
+
+  {:id "phrase-top160"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:strategy-weights {:content 1.0
+                                                         :phrase 2.0
+                                                         :metadata 0.2}}
+                  :builtin/rerank    {:top-k 160}}}]
+
+ :repeats 3
+ :max-clarification-rounds 2
+
+ :execution-scope
+ {:tenant "digdir"
+  :dataset-config-key "default"
+  :agent-id "builtin/agent-rag-agent"}
+
+ :question-filter {:grounding-modes #{:chunks+answer}}}

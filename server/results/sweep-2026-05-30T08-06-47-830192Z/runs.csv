@@ -1,0 +1,35 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,recall-at-5,recall-at-10,recall-at-20,citation-recall,golden-in-search-pool?,golden-in-display?,golden-read?,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,cached-tokens,llm-calls,steps-executed,response,error
+d78ae495-694b-4a8e-8533-096bc71cb54f,2026-05-30T08:07:05.185447Z,bundled-default,altinn-dialogporten-about,0,public-docs,public-docs-smoke,"altinn-dialogporten,exact-lookup,simple",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,4,2,1,9f75a7784e9b;a7942896bf17;c8c68cc06fda;a7be46a88d88,9f75a7784e9b;a7942896bf17,9f75a7784e9b,17340,4187,309,4496,0,3,3,"Dialogporten er en løsning som gjør meldinger og dialoger implementert på Altinn 3 og andre digitale tjenesteplattformer tilgjengelig for sluttbruker-systemer i et felles format. [1]
+
+Mer konkret inneholder Dialogporten «dialoger», altså representasjoner av en bestemt instans av en digital tjeneste, med avsender, mottaker, referanse til en digital tjenestedefinisjon i Altinn Resource Registry, og innhold som beskriver status, hva brukeren bør gjøre, og aktivitetshistorikk. [2]",
+69cba974-e280-49e9-93a8-758424435bb3,2026-05-30T08:07:27.570239Z,bundled-default,altinn-correspondence-post-published,0,public-docs,exploratory-rerank,"altinn-correspondence,simple,factual",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,false,false,2,0,1,4236d1b1890c;2b62d135d8d0,,068a1c1b7fa5,22384,15310,610,15920,6912,5,3,"Etter at en correspondence er publisert i Altinn, går den over i en mottakerstyrt fase.
+
+Kort sagt:
+- status settes til **Publisert**
+- meldingen blir **tilgjengelig for mottakeren**
+- mottakeren kan deretter:
+  - hente meldingsdetaljer
+  - lese meldingen
+  - laste ned vedlegg
+  - bekrefte/kvittere
+  - slette eller arkivere meldingen
+
+Dokumentasjonen beskriver dette som en egen fase etter publisering, med statuser som blant annet:
+- **Hentet**
+- **Lest**
+- **Vedlegg lastet ned**
+- **Bekreftet**
+- **Slettet av mottaker**
+- **Slettet av Altinn**
+
+Hvis du vil, kan jeg også forklare hele livssyklusen fra opprettelse til sletting i én enkel oversikt.",
+474a3d88-bf9a-4538-b2ee-ecb244907027,2026-05-30T08:07:43.599883Z,faithful-default,altinn-dialogporten-about,0,public-docs,public-docs-smoke,"altinn-dialogporten,exact-lookup,simple",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,6,3,1,9f75a7784e9b;a7942896bf17;6637228820ff;fa42f12f0e96;15caa4bf8ead;e4deb94ea9c5,9f75a7784e9b;a7942896bf17;6637228820ff,9f75a7784e9b,16029,4400,415,4815,0,3,3,"Dialogporten er en løsning som gjør meldinger og dialoger implementert på Altinn 3 og andre digitale tjenesteplattformer tilgjengelige for sluttbruker-systemer i et felles format. [1]
+
+Den inneholder «dialoger», altså representasjoner av en bestemt instans av en digital tjeneste, med avsender, mottaker, referanse til en tjenestedefinisjon i Altinn Resource Registry, og metadata som beskriver status, tittel, sammendrag og aktivitetshistorikk. [2]
+
+Dialogporten er skrivebeskyttet for sluttbrukere; selve skrivingen gjøres av tjenesteplattformene på vegne av tjenesteeier. [3]",
+e1f27e84-661c-4a02-b18a-2e22d09e3ad3,2026-05-30T08:07:59.284041Z,faithful-default,altinn-correspondence-post-published,0,public-docs,exploratory-rerank,"altinn-correspondence,simple,factual",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,3,2,1,4236d1b1890c;e11adebf033b;9c58e66b93a3,4236d1b1890c;9c58e66b93a3,068a1c1b7fa5,15683,4437,445,4882,0,3,3,"Etter at en **correspondence** er publisert i Altinn, går den inn i **Mottaker Interaksjoner**-fasen, der mottakeren kan hente meldingsdetaljer, lese meldingen, laste ned vedlegg, bekrefte, eller slette/arkivere meldingen. [1]
+
+I denne fasen kan statusen blant annet bli **Hentet**, **Lest**, **Vedlegg Lastet Ned**, **Bekreftet**, **Slettet av Mottaker** eller **Slettet av Altinn**. [1]
+
+Hvis du mener noe mer spesifikt med “hva skjer” etter publisering, er det litt uklart om du spør om **statusendringer**, **mottakerhandlinger** eller **varsling**. [1][2]",

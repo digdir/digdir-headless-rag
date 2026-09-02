@@ -1,0 +1,13 @@
+;; TRUNCATION-ARTIFACT CHECK — re-run the 10 all-three-partial questions on the
+;; control model with the response cap raised 800->20000 (runner.clj), then judge
+;; the FULL responses. If verdicts flip partial->correct, the prior "partial" rate
+;; was substantially a CSV-truncation artifact of the separate judge pass.
+{:configs
+ [{:id "deployed" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params #:builtin{:retrieval {:enrichment-types [:hypothetical-questions]
+                                       :enrichment-search-targets {:hypothetical-questions "website_enrichment_hypothetical_questions_qwen_n5"}}
+                           :agent {:search-snippets true}}}]
+ :repeats 1 :judge? false :order :interleaved :concurrency 3 :max-clarification-rounds 1 :run-timeout-ms 1200000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-01-filoverforing-tilstander" "ue-broker-05-filstorrelse-grenser-multi" "ue-studio-03-datamodell-filer" "ue-studio-05-tekstressurser-sprak" "ue-notif-05-umiddelbar-varsling-otp" "ue-dialog-02-seen-log" "ue-dialog-06-skrivehandlinger" "ue-authz-06-xacml-obligation-authlevel" "ue-authz-07-bruker-typer-authorization" "ue-sys-03-brukerstyrt-vs-leverandorstyrt"}}}

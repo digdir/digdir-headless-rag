@@ -1,0 +1,6 @@
+[{:event :request/started :request-id "req-5" :query "Policies"}
+ {:event :response/finalized
+  :text "Filtered response"
+  :diagnostics {:auto-filter-applied {:fields [{:field "country"
+                                                :selected-options ["NO"]}]}
+                :auto-filter-fallback true}}]

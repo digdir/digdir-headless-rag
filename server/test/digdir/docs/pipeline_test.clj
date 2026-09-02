@@ -1,13 +1,12 @@
 (ns digdir.docs.pipeline-test
   "Tests for pipeline orchestration functions.
    Tests Missionary flow-based document processing pipelines."
-  (:require [clojure.test :refer [deftest testing is are use-fixtures]]
+  (:require [clojure.test :refer [deftest testing is ]]
             [clojure.string :as str]
             [missionary.core :as m]
             [digdir.docs.website :as website]
             [digdir.docs.folder :as folder]
-            [digdir.docs.test-fixtures :as fixtures]
-            [typesense.client :as ts]))
+            [digdir.docs.test-fixtures :as fixtures]))
 
 ;; ============================================================================
 ;; Helper Functions for Testing Missionary Flows

@@ -1,0 +1,17 @@
+;; De-risk Lever A: is the P2 clean-set regression (-0.15 recall) REAL and broad, or
+;; mostly events-03 (display-rank 2->17) + N=3 read-variance? Re-run the 11 clean
+;; (<=1000-char golden) questions, off vs windowing@2000, N=5. Short goldens are
+;; byte-identical under windowing, so any clean regression is the DISTRACTOR-LIFT
+;; (windowing raises long distractors above the short golden). judge? false -- the
+;; signal is retrieval (display-rank / recall). 2 x 11 x 5 = 110 runs, interleaved.
+{:configs
+ [{:id "off" :skill-graph-id :builtin/agent-rag-graph-bundled :skill-params {}}
+  {:id "window-2000" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:rerank-windowing true :rerank-max-chunk-length 2000}}}]
+ :repeats 5
+ :judge? false
+ :order :interleaved
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-authz-02-tilgangsliste-handlingsfilter" "ue-authz-04-opprette-tilgangsliste-medlemmer" "ue-broker-03-store-filer-virusskann" "ue-broker-04-overgang-a2-a3-forskjeller" "ue-dialog-03-unauthorized-urls" "ue-dialog-05-search-rest-graphql" "ue-dialog-07-webapi-sdk" "ue-events-03-polling-vs-webhook" "ue-notif-07-standard-avsender-sms-epost" "ue-sys-01-leverandorstyrt-og-forhold" "ue-sys-03-brukerstyrt-vs-leverandorstyrt"}}}

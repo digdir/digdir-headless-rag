@@ -1,0 +1,65 @@
+# clj-kondo: the config and imported library configs are COMMITTED on purpose —
+# CI must lint identically to a dev machine. The negation is required because a
+# global core.excludesFile may exclude the whole .clj-kondo directory, and git
+# cannot re-include a file while its parent directory is excluded.
+!**/.clj-kondo/
+**/.clj-kondo/.cache/
+.lsp/
+secretsbackup/
+
+# Local secrets. KEEP THIS RULE even though the docs no longer ask anyone to
+# make a .env: nothing loads one (#302), but the habit outlives the recipe, and
+# a .env holding CONFIG_MASTER_KEY, JWT_SECRET and provider keys still exists on
+# most machines. It must never be stageable (#22).
+.env
+.env.*
+!.env.example
+.kamal/
+mise.local.toml
+app/.yarn/
+
+# build artifacts
+server/resources/public/admin_app/js/
+# Written by every production client build (src-build/build.clj), never committed.
+server/resources/electric-manifest.edn
+
+
+# OS files
+.DS_Store
+
+# Editor lock files
+.#*
+
+# Java crash logs
+hs_err_pid*.log
+
+# Temporary files
+tmp/
+
+# YAML/JSONL dump folders produced by `bb dump-export`
+dumps/
+**/dumps/
+
+# local state
+**/server/state/
+**/server/logs/
+**/server/cache/
+
+
+# local scripts
+**/scripts/local/
+
+# why are these missing??
+.shadow-cljs/
+node_modules/
+resources/public/admin_app/
+.cpcache/
+datalevin/data/
+.calva/output-window/
+app/.yarn/
+frontend/.vite/
+config/*.json
+!config/system-import.normalized.20260821.json
+server/local-db/
+local-db/
+server/target/

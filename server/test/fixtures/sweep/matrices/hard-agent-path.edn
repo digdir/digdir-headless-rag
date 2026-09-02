@@ -1,0 +1,45 @@
+;; Hard-question agent-path matrix.
+;;
+;; Exercises the insufficiency/refinement loop and the enrichment + corpus-aware
+;; levers on corpus-grounded "really hard" questions, and reads out the
+;; agent-path behavior signal columns in runs.csv:
+;;   :search-passes :insufficiency-fired? :refinement-corpus-grounded? :enrichment-hits
+;;
+;; Two configs compare the production levers head-to-head on the same questions:
+;;   levers-off  — blind expansion, no enrichment (baseline)
+;;   levers-on   — corpus-aware-2hop expansion + hypothetical-questions enrichment
+;;                 (matches the production digdir/public-docs config). The agent
+;;                 reads :expansion-mode / :enrichment-types from these skill-params;
+;;                 retrieval self-derives the enrichment collection from
+;;                 :enrichment-types + the resolved chunks-collection.
+;;
+;; Run:
+;;   bb sweep test/fixtures/sweep/matrices/hard-agent-path.edn --repeats 3
+;;
+;; Output: server/results/sweep-<ts>/runs.csv  (5 questions × 2 configs × repeats)
+
+{:configs
+ [{:id "levers-off"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/query-planner {:enabled true :expansion-mode :blind}}}
+
+  {:id "levers-on"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/query-planner {:enabled true :expansion-mode :corpus-aware-2hop}
+                  :builtin/retrieval {:enrichment-types [:hypothetical-questions]}}}]
+
+ :repeats 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+
+ :execution-scope
+ {:tenant "digdir"
+  :dataset-config-key "default"
+  :agent-id "builtin/agent-rag-agent"}
+
+ :question-filter
+ {:ids #{"hard-sms-segment-length"
+         "hard-consent-rights-token"
+         "hard-vergemaal-not-in-prod"
+         "hard-correspondence-status-disambig"
+         "hard-represent-bridging"}}}

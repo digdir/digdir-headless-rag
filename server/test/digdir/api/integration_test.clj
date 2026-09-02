@@ -14,11 +14,12 @@
 
 (def base-url (System/getenv "RAG_API_BASE_URL"))
 (def api-key (System/getenv "RAG_API_TEST_KEY"))
+(def external-user-id "integration-test-user")
 
 (def ^:private integration-tests-configured?
   "Flag indicating whether integration tests can run"
-  (and (not (empty? base-url))
-       (not (empty? api-key))))
+  (and (seq base-url)
+       (seq api-key)))
 
 (defn skip-unless-configured
   "Prints skip message and returns true if tests should be skipped"
@@ -46,7 +47,8 @@
    (merge {:method method
            :url (api-url path)
            :headers {"X-API-Key" api-key
-                     "Content-Type" "application/json"}
+                     "Content-Type" "application/json"
+                     "X-User-Id" external-user-id}
            :throw-exceptions false
            :as :json}
           opts)))

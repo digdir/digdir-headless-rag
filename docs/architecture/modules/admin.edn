@@ -1,0 +1,35 @@
+{:id "admin",
+ :plane "experience",
+ :name "Admin Web UI",
+ :note "Electric v3 console",
+ :icon "ui",
+ :color "#8fa8ff",
+ :status "External surface",
+ :summary
+ "Operator console for datasets, configuration, permissions and imports.",
+ :description
+ "The Electric/Hyperfiddle application is the administrative surface. It synchronizes server state to the browser and provides routed views for chat, datasets, configuration, ingestion and evaluation.",
+ :responsibilities
+ ["Manage tenants, datasets, API keys and permissions"
+  "Configure skill graphs, agents and providers"
+  "Operate ingestion workflows and inspect system state"],
+ :files
+ ["server/src/digdir/ui/main.cljc"
+  "server/src/digdir/ui/routing.cljc"],
+ :input "Browser session + JWT cookie",
+ :output "Configuration and operational commands",
+ :edges
+ [{:to "auth",
+   :kind :call,
+   :target :call,
+   :label "Console session and permission checks",
+   :via "Electric server-side entrypoint",
+   :unverified true}
+  {:to "config",
+   :kind :call,
+   :target :http,
+   :label "Read and edit configuration trees",
+   :via "Electric e/server calls into the config API",
+   :unverified true}],
+ :keywords
+ "admin ui browser electric hyperfiddle console tabs operator"}

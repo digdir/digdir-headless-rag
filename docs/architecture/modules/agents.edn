@@ -1,0 +1,34 @@
+{:id "agents",
+ :plane "runtime",
+ :name "Agentic ReAct Loop",
+ :note "Plan · act · observe",
+ :icon "agent",
+ :color "#65dfca",
+ :status "Core runtime",
+ :summary
+ "Lets configured agents choose tools iteratively until the answer is sufficient.",
+ :description
+ "Agent-backed datasets use a bounded ReAct loop instead of a fixed pipeline. Agent policy and workspace state guide tool selection, while explicit sufficiency checks and iteration limits keep execution controlled.",
+ :responsibilities
+ ["Plan the next action from the current workspace"
+  "Invoke authorized retrieval and reasoning tools"
+  "Evaluate sufficiency and stop within configured bounds"],
+ :files
+ ["server/src/digdir/skills/builtin/agent/core.clj"
+  "server/src/digdir/agents/policy.clj"],
+ :input "Question + agent policy + available tools",
+ :output "Answer or next tool action",
+ :edges
+ [{:to "rag",
+   :kind :call,
+   :target :http,
+   :label "The agent loop drives retrieval",
+   :via "skill-graph id dispatch through the graph runner"}
+  {:to "llm",
+   :kind :http,
+   :target :http,
+   :label "Tool-calling completions for the loop",
+   :via "graph nodes call the configured provider",
+   :unverified true}],
+ :keywords
+ "agent agentic react loop planning tools sufficiency iteration workspace policy"}

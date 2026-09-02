@@ -1,0 +1,462 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,recall-at-5,recall-at-10,recall-at-20,citation-recall,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,steps-executed,response,error
+90311f47-6b78-4375-b322-3fe6ac5cf20c,2026-05-22T07:47:00.793943Z,bundled-default,altinn-broker-getting-started,0,public-docs,public-docs-smoke,"simple,navigational,altinn-broker",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,7,3,1,94f0fa820e54;a6b5678aa6e5;c050af21d82e;bc169ad3ed4b;be9e02a668a7;753bfeab7314;a1fcc9aae0fa,c050af21d82e;bc169ad3ed4b;be9e02a668a7,9584a6e89afc,19712,,,,3,"For å komme i gang med **Altinn Broker under overgangen til Altinn 3**, må en tjenesteeier først ha en eksisterende **Altinn 2 Broker Service** og en tilsvarende **Altinn 3 Broker Resource**. Deretter må ressursen konfigureres for overgangsløsningen, og det må bestilles en **transition agreement** for å koble Altinn 2- og Altinn 3-løsningen sammen. [1][2]
+
+Hvis du mener **Altinn Broker generelt** i Altinn 3, finnes det også en egen **Getting Started with Altinn Broker**-side med veiledning for tjenesteeiere, avsendere og mottakere. [3]
+
+Kort sagt:  
+1. Ha en Altinn 2 Broker-tjeneste. [1]  
+2. Opprett eller ha en tilsvarende Altinn 3 Broker Resource. [1]  
+3. Konfigurer ressursen for Transition Solution. [1][2]  
+4. Bestill transition agreement. [1]",
+c18afc69-108b-451d-9828-f9dd8b820a0c,2026-05-22T07:47:20.325640Z,bundled-default,altinn-broker-technical-overview,0,public-docs,public-docs-smoke,"exact-lookup,simple,open-ended,altinn-broker",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,10,3,1,c050af21d82e;bc169ad3ed4b;3815339142c4;e71b5a7bc1ff;01fdec6b497d;a6b5678aa6e5;b555599db80f;63e3857a5897;b65c1dda9cdb;94f0fa820e54,01fdec6b497d;63e3857a5897;b65c1dda9cdb,63c3d3e28820,19531,,,,3,"Den tekniske arkitekturen bak **Altinn Broker i overgangsfasen** er at **Altinn 2 Broker Service** kan peke mot **Altinn 3 Broker Resource** via en **intern Altinn 2 bridge** som overfører Broker-forespørsler fra Altinn 2 til Altinn 3 for en gitt request, basert på **ServiceCode/ServiceEditionCode-kombinasjonen**. Dette er beskrevet som en implementasjon av **soft shift solution**. [2]
+
+I praksis betyr dette at:
+- sluttbrukere fortsatt kan bruke Broker-tjenester fra Altinn 2, men data lagres i Altinn 3 i stedet for Altinn 2. [1][3]
+- autentisering og autorisasjon skjer primært i API-endepunktet som kalles, altså i Altinn 2 eller Altinn 3, før kallene rutes videre. [1]
+- når overgangsløsningen er aktivert, vil nye filer og statusendringer skje i Altinn 3 Broker Service Solution, og filer so…",
+832e1dfe-6872-4907-8a49-60320e0881d7,2026-05-22T07:47:35.430833Z,bundled-default,altinn-dialogporten-about,0,public-docs,public-docs-smoke,"altinn-dialogporten,exact-lookup,simple",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,2,2,1,9f75a7784e9b;4a9ad6cd2bd1,9f75a7784e9b;4a9ad6cd2bd1,9f75a7784e9b,15104,,,,3,"Dialogporten er en løsning som tillater meldinger og dialoger implementert på Altinn 3 og andre digitale tjenesteplattformer å være tilgjengelig for sluttbruker-systemer i et felles format. [1]
+
+Det finnes også en egen **Dialogporten API**-referanse for funksjonaliteten. [2]",
+36323216-08db-4d8f-881f-0388663c0940,2026-05-22T07:47:56.134531Z,bundled-default,altinn-studio-create-user,0,public-docs,public-docs-smoke,"simple,altinn-studio,navigational",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,11,2,1,1dc794bca3d7;9ae89177238d;9755632d1ef5;d4c496b15ba4;008bece2be96;79fcd70d01e9;ae8295fb1ae4;399dd12914ed;7a010b4280f0;f460db60d7b4;f03ec7160b50,1dc794bca3d7;79fcd70d01e9,0fac42eefdc4,20703,,,,3,"For å opprette en bruker i Altinn Studio v8, følger du disse stegene [2]:
+
+1. Gå til [altinn.studio](https://altinn.studio) og klikk **""Create new user""**. [2]  
+2. Registrer deg via **Ansattporten**. [2]  
+3. Logg inn i Ansattporten med f.eks. **BankID** eller **MinID**. [2]  
+4. Opprett en Altinn Studio-bruker ved å fylle inn **username**, **email**, **password**, captcha, og klikk **""Complete""**. Brukeren i Altinn Studio blir koblet til din Ansattporten-bruker. [2]  
+5. Aktiver kontoen din via e-posten du får til adressen du oppga. Hvis aktiveringslenken er ugyldig eller utløpt, kan du prøve å logge inn igjen via Ansattporten. [2]  
+6. Gi Altinn Studio-applikasjonen tilgang til brukerkontoen din. [2]
+
+Etter at kontoen er aktivert, kan du klikke på logoen øverst til venstre for å gå til …",
+683a4f4c-737c-4351-b2e7-83192ea6d332,2026-05-22T07:48:36.544863Z,bundled-default,altinn-studio-datamodeling,0,public-docs,public-docs-smoke,"simple,altinn-studio,navigational",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,9,4,1,8152e6f125e6;1ce045e4ea2f;ace59cbcb651;c1d87e2b05fc;bc2e044238be;c3d2a8c818f9;071cbb5c2747;91c581a42208;1c5fa1dec610,8152e6f125e6;c1d87e2b05fc;071cbb5c2747;91c581a42208,2f6cee8d5f5e,40409,,,,3,"I Altinn Studio v8 definerer du en datamodell i **Datamodell**-fanen i Altinn Studio, der du jobber med en JSON Schema-basert modell som kan generere både XSD- og C#-modeller. [2][3]
+
+Kort fremgangsmåte:
+1. Logg inn i Altinn Studio og gå til **Datamodell**-fanen. [2]
+2. Velg eller opprett en modell/type i venstre panel. [1][2]
+3. Legg til felter med **Legg til** for rot-noden, eller bruk **+** for å legge til underfelter. [1]
+4. Du kan også dra en type fra venstre panel inn i trevisningen for å lage et nytt felt med valgt type. [4]
+5. Rediger egenskaper for type eller felt i høyre panel. [1][4]
+6. Når modellen er klar, kan du trykke **Generate Models** for å generere modellfiler. [4]
+
+Hvis du mener noe mer spesifikt med “definerer jeg en datamodell” — for eksempel hvordan du oppretter en n…",
+f5930a87-91e3-4904-b127-996924e19cf6,2026-05-22T07:49:46.500551Z,bundled-default,altinn3-lansert-when,0,public-docs,altinn3-stability,"exact-lookup,simple,altinn-3-general,temporal",complete,0,false,chunks+answer,false,0.0,0.0,0.0,0.0,3,2,1,3b9d00305074;f9f576be43d3;24ba94a179c3,3b9d00305074;f9f576be43d3,8e22ae4b88b1,69955,,,,3,"Jeg fant ikke en eksplisitt lanseringsdato i dokumentene jeg rakk å lese.
+
+Det jeg kunne bekrefte er at Altinn 3 beskrives som “tredje generasjon plattform”, men kildene jeg traff på ga ikke en tydelig “lansert dd.mm.åååå”-setning. Hvis du vil, kan jeg fortsette og lete mer målrettet etter en presis lanseringsdato for Altinn 3.",
+eff9a288-2db8-4e41-839e-5d28ab15d703,2026-05-22T07:50:04.673478Z,bundled-default,altinn-correspondence-post-published,0,public-docs,exploratory-rerank,"altinn-correspondence,simple,factual",complete,0,false,chunks+answer,true,0.0,1.0,1.0,0.0,11,3,1,5e236f159fb8;fa957b5aa28b;4d401e4429c6;2756a3f03a09;23313b9a4c7a;baca3ca2a832;068a1c1b7fa5;b2d5bb1a67a8;3e5d3ec39d0e;4236d1b1890c;e11adebf033b,5e236f159fb8;fa957b5aa28b;2756a3f03a09,068a1c1b7fa5,18172,,,,3,"Etter at en correspondence er publisert i Altinn, går den inn i **Recipient Interactions**-fasen, der mottakeren kan samhandle med den [2][3].
+
+Typiske handlinger er:
+- **Fetched**: settes automatisk når mottakeren kaller **GetOverview** eller **GetContent** [1][3].
+- **Read**: settes enten automatisk ved første tilgang til innholdet eller eksplisitt via **`/markasread`**; denne statusen er valgfri [1][3].
+- **Confirmed**: krever eksplisitt handling via **`/confirm`** og forutsetter **Fetched**-status [1][3].
+- **AttachmentsDownloaded**: kan skje fra enhver tilstand etter **Published** [1][3].
+- Deretter kan correspondence eventuelt bli **PurgedByRecipient** eller **PurgedByAltinn** [2][3].
+
+Hvis du mener “hva skjer” mer generelt, er det altså at den publiserte correspondence blir tilgjeng…",
+a4c5909f-9986-496e-9d53-32b80d120021,2026-05-22T07:50:22.549411Z,bundled-default,altinn-systemuser-api-model,0,public-docs,exploratory-rerank,"altinn-systemuser,exact-lookup,simple",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,8,3,1,74fc02526720;a245b733b3f3;e6f7545a1adc;a79a59ed2586;fffd1547fdeb;c7ab72da02fb;6f4a1ef342c8;f33ae6ec350b,74fc02526720;e6f7545a1adc;fffd1547fdeb,6d8a6a851332,17875,,,,3,"Datamodellen for en **system user** i Altinn ser ut til å inneholde minst disse feltene, basert på kildene:
+
+- **System user ID**: en unik identifikator generert av Altinn når system user opprettes. [1]
+- **Name**: et brukervennlig navn som leverandøren oppgir ved opprettelse; hvis den opprettes via portalen, settes den som standard til systemnavnet. [1]
+- **Organization number**: den unike identifikatoren til organisasjonen som system user er knyttet til. [1]
+
+Kildene du har gitt viser også at system user er knyttet til opprettelsesflyt og autorisasjon, men de beskriver ikke en komplett, eksplisitt JSON-/API-modell i utdraget. Derfor er dette den nærmeste modellen vi kan utlede fra teksten, og det er litt uklart om det finnes flere felter i den fullstendige modellen enn de som vises her. …",
+738339b6-3fea-4f0d-89be-390f1d68dc3f,2026-05-22T07:50:39.155383Z,bundled-default,altinn-systemuser-api-opprett,0,public-docs,exploratory-rerank,"altinn-systemuser,simple,navigational",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,9,3,1,ccaa38f7f58e;16049c347d69;fd72a28afd94;63528e131071;ad408ff1ae47;e6f7545a1adc;cb349d28b827;6f4a1ef342c8;fffd1547fdeb,16049c347d69;e6f7545a1adc;fffd1547fdeb,70a69fb50d45,16606,,,,3,"Du oppretter en systembruker via Altinn system user API ved å la enten sluttbrukeren eller leverandøren initiere opprettelsen, avhengig av hvilken modell du bruker. [2][3]
+
+**To mulige opprettelsesmodeller:**
+- **Brukerstyrt opprettelse:** Sluttbrukeren logger inn i Altinn og velger hvilket system det skal opprettes systembruker for. Sluttbrukeren får se de forhåndsdefinerte tilganger systemet ber om, og må godkjenne dem. [2]
+- **Leverandørstyrt opprettelse:** Sluttbrukersystem-leverandøren (SBSL) sender en forespørsel til Altinn om å opprette systembruker. Forespørselen spesifiserer hvilke tilganger som trengs, og sluttbrukeren må godkjenne forespørselen i Altinn før systembrukeren opprettes. [1][3]
+
+**Kort sagt:**  
+1. Velg om opprettelsen skal være **brukerstyrt** eller **leverandørstyr…",
+8cce9a77-1b62-404f-917f-26a8457b2fbd,2026-05-22T07:50:57.240547Z,bundled-default,altinn-systemuser-accept-request,0,public-docs,exploratory-rerank,"altinn-systemuser,simple,navigational",complete,0,false,chunks+answer,true,1.0,1.0,1.0,0.0,8,4,1,0991d2695b2e;92e285d662e5;ffb35e69a2df;bbf82de07a2f;c1e41c9b98c2;d4be96620198;034ec7c15f79;34c66fb104a3,0991d2695b2e;92e285d662e5;ffb35e69a2df;034ec7c15f79,bbf82de07a2f,18085,,,,3,"En sluttbruker aksepterer en forespørsel om **systemtilgang / system user** i Altinn ved å åpne godkjenningslenken og godkjenne forespørselen i Altinn-portalen. For å kunne godkjenne må brukeren ha rollen **Tilgangsstyrer** i valgt organisasjon og også ha de forespurte fullmaktene [1][2].
+
+Hvis brukeren ikke har nødvendige fullmakter, kan vedkommende velge **Ja, send videre** for å videresende forespørselen til en bruker som har riktige fullmakter [3][4].
+
+Etter at forespørselen er godkjent eller avvist, blir sluttbrukeren logget ut. Hvis leverandøren har satt opp en verifisert videresending, sendes brukeren til leverandørens kvitteringsside; ellers sendes brukeren til Altinns utloggede side [1][2].",
+64a5941b-2789-4c51-afb3-91ec841520f0,2026-05-22T07:51:17.599261Z,bundled-default,altinn-systemuser-delegate-clients,0,public-docs,exploratory-rerank,"altinn-systemuser,simple,navigational",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,7,6,1,12bbe5cf4a58;887493c9defa;f72f6145110d;e31340bfc131;a477d593a569;5668e6b76cdd;bc1792daed8b,12bbe5cf4a58;887493c9defa;e31340bfc131;a477d593a569;5668e6b76cdd;bc1792daed8b,434ca284c0bf,20358,,,,3,"For å delegere klienter til en **system user for client relationships** i Altinn, bruker du klientdelegerings-API-et. Dette gjelder når du oppretter en systembruker for klientforhold; klienter kan da legges til enten i Altinn-portalen eller via API. [1]
+
+### Kort fortalt
+Du må:
+1. Ha en **systembruker for klientforhold** med riktige **access packages** som samsvarer med rollene dine i Enhetsregisteret. [2]
+2. Hente tilgjengelige klienter. [3]
+3. Dele ut en klient til systembrukeren med `POST`. [4]
+4. Eventuelt fjerne en klient med `DELETE`. [5]
+
+### API-er du bruker
+- **Hent systembrukere for klientforhold**: `GET authentication/api/v1/enduser/systemuser/agents` [3]
+- **Hent tilgjengelige klienter**: `GET authentication/api/v1/enduser/systemuser/clients/available` [3]
+- **Hent allerede del…",
+27d5b947-685c-4b13-9e9e-5b3905cbea53,2026-05-22T07:51:34.843987Z,bundled-default,altinn-authorization-accessgroups-knytning,0,public-docs,exploratory-rerank,"simple,navigational,altinn-authorization",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,10,1,1,3dc5f7a90912;75ab1f3c2fdd;2398386b8f5a;4b2e378eef53;612e151202bd;08c657a6a448;0d7ba5491806;d25d5cd69901;ce494e7ca5e9;b63277fd4ce4,d25d5cd69901,a438b1775bf0,17244,,,,3,"Man knytter en organisasjon til en tilgangsgruppe ved å bruke **parti-id** for organisasjonen, altså ved å slå opp partiet og deretter bruke det i tilgangsgruppen. Registeret beskriver at man kan hente et parti med `GET /parties/{partyId}` og gjøre oppslag av parti-id basert på **organisasjonsnummer** via `GET /parties/lookup` eller `GET /parties/lookupObject` [1].  
+
+Hvis du mener selve koblingen i Altinns tilgangsstyring, er det altså **partiet som representerer organisasjonen** som legges til i tilgangsgruppen, ikke organisasjonsnummeret direkte [1].  
+
+Hvis du vil, kan jeg også vise et konkret eksempel på flyten fra organisasjonsnummer til parti-id og videre til tilgangsgruppe.",
+a443529c-bd33-4c69-add2-0da795f9252a,2026-05-22T07:51:51.500261Z,bundled-default,altinn-authorization-tilgangslister,0,public-docs,exploratory-rerank,"exact-lookup,simple,altinn-authorization",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,10,4,1,808e5f6f8202;4b909d757fe8;7c5e87028e37;10bc164048ad;e71360b09497;bfa6c0c3ef06;e91fd8c828ab;ba3cbd8327ae;b05d5ecc10ff;0b72efa29c30,808e5f6f8202;e71360b09497;e91fd8c828ab;0b72efa29c30,2850f051d81a,16656,,,,3,"Tilgangslister i Altinn Authorization er lister over hvilke **parter** en autentisert bruker kan representere, sammen med hvilke **roller/tilgangspakker** og **service-/instansrettigheter** brukeren har for hver part [1].  
+
+De brukes i Dialogporten for å vise **list views** og for å avgjøre hvilke ressurser og handlinger brukeren kan få tilgang til, basert på Altinn Authorization [1][2].  
+
+Det finnes litt ulike beskrivelser i kildene: noen steder omtales dette som en liste over parter med tilhørende roller og rettigheter [1], mens Altinn Authorization generelt beskrives som et ABAC-basert autorisasjonssystem som brukes til alle autorisasjonsbeslutninger [3][4].",
+8bdbad66-08a6-4482-81d2-8c184b2b22ee,2026-05-22T07:52:09.575337Z,bundled-default,altinn-authorization-regler,0,public-docs,exploratory-rerank,"exact-lookup,altinn-authorization,hard",complete,0,false,chunks+answer,false,0.0,0.0,0.0,0.0,8,4,1,0b72efa29c30;a17ce69bcbf1;4b909d757fe8;d315106a6957;bb2b7266e447;ff69b65719f0;53164e34415c;cfc9233eef06,4b909d757fe8;d315106a6957;bb2b7266e447;ff69b65719f0,86a29a595367,18075,,,,3,"Tilgangsregler i Altinn Authorization er **autorisasjonsregler** som defineres i henhold til **XACML 3.0-standarden**. De brukes til å bestemme hvem som får utføre hvilke handlinger på en ressurs, basert på regler og roller som er satt av tjenesteeieren. [2][3][4]
+
+Kort sagt: de er reglene som styrer **hvem som har rett til å gjøre hva** i Altinn. [1][2]",
+4f18a74e-adb0-492b-8285-fe774280f669,2026-05-22T07:53:21.884722Z,bundled-default,altinn-broker-rest-usage,0,public-docs,exploratory-rerank,"simple,navigational,altinn-broker",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,8,0,1,989cc83e5afc;967ae193620b;0207c382654c;01c25eac752e;40450a7ba0a4;5d02570ab377;702ec5c8ecd5;753bfeab7314,,0f3807200a65,72309,,,,3,"Rerankingen bekrefter at de mest relevante bevisene er: Broker er et API-basert managed file transfer-produkt, og tilgang skjer via Maskinporten-klienter med scopes `altinn:broker.write` og `altinn:broker.read`. Jeg kan nå gi et praktisk, men forsiktig svar basert på dokumentasjonen jeg har.
+Slik bruker du Altinn Broker med REST-API, basert på dokumentasjonen:
+
+## Kort fortalt
+Altinn Broker er en API-basert tjeneste for sikker filoverføring. Både avsender og mottaker bruker API-er for å integrere Broker i egne systemer.
+
+## Før du begynner
+Du må:
+
+1. **Registrere en Maskinporten-klient**
+   - Klienten brukes til autentisering mot Broker API.
+   - Dette gjøres i Samarbeidsportalen / Maskinporten selvbetjening.
+
+2. **Få riktige scopes**
+   - `altinn:broker.write` for klienter som sender file…",
+03880ae1-f9c0-4061-a89b-89b7f5c2e113,2026-05-22T07:53:39.418766Z,bundled-default,altinn-events-architecture,0,public-docs,exploratory-rerank,"exact-lookup,simple,altinn-events",complete,0,false,chunks+answer,true,0.0,1.0,1.0,1.0,9,4,1,0aa1011098c0;d432b7fcca5b;2db072be14eb;56ad5c15e3a8;d09b57d63bf0;c2d8a3944413;7d33c4c5baf1;e0a1f799e73a;3018b3b4b1cd,2db072be14eb;d09b57d63bf0;7d33c4c5baf1;3018b3b4b1cd,7d33c4c5baf1,17533,,,,3,"Altinn Events er arkitektonisk bygget opp som en **hendelsesplattform med publisering, lagring, abonnement og videresending**. Kildene viser flere deler av oppbygningen:
+
+- **API-kontrollere for app-hendelser**: `AppController` publiserer, lagrer og henter app-hendelser. [3]
+- **API-kontrollere for intern bruk i Notification-løsningen**: `StorageController` lagrer innkommende hendelser til persistent lagring, `InboundController` sender hendelser til `_events-inbound_-køen`, og `OutboundController` håndterer videre utsending. [4]
+- **Vedvarende lagring**: Hendelsesdata lagres i en **PostgreSQL-database**, og skjemaet har blant annet tabellene `events` og `subscription`. [2]
+- **Abonnement og distribusjon**: Altinn Events støtter opprettelse og administrasjon av event-abonnementer, inkludert…",
+b86eedb4-032f-4325-bff7-817a3de66ab6,2026-05-22T07:53:56.943057Z,bundled-default,altinn-studio-grouping-repeating,0,public-docs,exploratory-rerank,"paraphrase,altinn-studio,compare",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,4,4,1,7160541e6edd;7b43791d8016;222157401bc8;7c459c76633e,7160541e6edd;7b43791d8016;222157401bc8;7c459c76633e,9d621302f88b,17523,,,,3,"I Altinn Studio er **repeterende grupper** grupper som kan ha flere forekomster av samme gruppe, altså flere rader/innslag av samme type data. Dette brukes blant annet når man har flere familie-medlemmer eller flere erfaringer i en liste. [1][2]
+
+**Ikke-repeterende grupper** er derimot vanlige grupper som bare finnes én gang i skjemaet, uten flere gjentakelser. Det kommer indirekte fram i kildene ved at oppsettet for dynamikk og vedlegg beskrives spesielt for **repeterende grupper**, mens vanlig oppsett gjelder uten denne ekstra strukturen. [1][2][3]
+
+Kort sagt:
+- **Repeterende grupper** = samme gruppe kan gjentas flere ganger. [1][2]
+- **Ikke-repeterende grupper** = gruppen vises bare én gang. [3][4]
+
+Hvis du vil, kan jeg også forklare forskjellen med et konkret eksempel fra datamodell og…",
+4e0fc545-7a67-4478-a3ce-5bb2025311c3,2026-05-22T07:54:50.080196Z,bundled-default,altinn-studio-grouping-repeating-edit,0,public-docs,exploratory-rerank,"simple,altinn-studio,navigational",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,4,3,1,9cde6495c0ea;bc2e044238be;1ce045e4ea2f;ace59cbcb651,9cde6495c0ea;1ce045e4ea2f;ace59cbcb651,3685015c0f1c,53137,,,,3,"I kildene du har gitt, finnes det ikke en konkret beskrivelse av **hvordan du redigerer en repeterende gruppe i Altinn Studio v8**. Det nærmeste treffet er at **file uploading components in repeating groups** krever ekstra oppsett, og at dette **ikke er integrert i Altinn Studio ennå**; oppsettet må gjøres manuelt for nå [1].
+
+Hvis du egentlig mener **oppsett av vedlegg i en repeterende gruppe**, må du manuelt koble filopplastingskomponenten til datamodellen, for eksempel med `simpleBinding` til ett vedlegg eller `list` hvis flere filer er tillatt [1].  
+
+Hvis du mener noe annet med “redigere en repeterende gruppe” i Studio, er spørsmålet litt underspesifisert, og kildene her dekker ikke selve redigeringsflyten i UI-et [1][2][3].",
+aa875b87-d19e-44c4-851a-43838b19ad57,2026-05-22T07:55:13.038076Z,bundled-default,altinn3-what-is-new,0,public-docs,new,"altinn-3-general,open-ended,compare",complete,0,false,answer-only,true,,,,,13,8,0,d81ff032aa35;9b5b6b227ea8;8e22ae4b88b1;63c3d3e28820;80906254af5f;0163c135d55c;3260b6da8872;b12d744af484;f9f576be43d3;5c9c216c8c1f;5d9c89c1afec;c48747e2b5eb;baa5a2c83539,d81ff032aa35;9b5b6b227ea8;8e22ae4b88b1;63c3d3e28820;80906254af5f;0163c135d55c;b12d744af484;f9f576be43d3,,22957,,,,3,"Hovedforskjellene som kommer fram i kildene er:
+
+- **Altinn 3 er en ny plattform for å bygge og kjøre digitale tjenester**, med **Altinn Studio** for å bygge tjenester, **Altinn Apps** for å kjøre dem, og **Altinn Platform** for standardfunksjonalitet som lagring, autorisasjon og autentisering [3][8].
+- **Altinn 3 er laget for å være mer moderne, skalerbar og sikker**, og kan kjøres som containere i tjenesteeiers egen isolerte skyinfrastruktur [1][8].
+- **Altinn 3 legger til rette for gjenbruk** av data, brukergrensesnitt, API-er og funksjonalitet, og er en kjent plattform for sluttbrukerne [1].
+- **Altinn 3 har åpen kildekode**, noe som er eksplisitt nevnt som en fordel [1][3].
+- **Altinn 3 gir tilgang til så godt som alle privatpersoner og virksomheter i Norge** [1].
+
+For **Altinn 2** vi…",
+4e5ea381-2dcf-4a9f-8b15-f2bcb6c54b6f,2026-05-22T07:56:05.563412Z,bundled-default,altinn3-deprecated-services,0,public-docs,new,"compound,altinn-3-general,list",complete,0,false,answer-only,false,,,,,10,3,0,469de0a98201;e2adc1655711;864a1c25a701;2888f654f5f5;50c1c04dbf11;1acd30939aee;ccb65efdb7d5;a8badd56f41d;116b0cef082e;54c3ecef4140,50c1c04dbf11;2888f654f5f5;54c3ecef4140,,52525,,,,3,,
+ebad189d-1b1f-4dcb-9cac-e79633f5ed31,2026-05-22T07:56:25.782924Z,bundled-default,altinn-authorization-policy-shape,0,public-docs,new,"simple,open-ended,altinn-authorization",complete,0,false,answer-only,true,,,,,8,2,0,f7e6beb1608e;0b59b7d558d4;0c25e3f9beaf;903bb0f97c81;64e0accf6d5c;7f9430d5a733;cff916b3803d;c2cbd71c194a,0b59b7d558d4;0c25e3f9beaf,,20218,,,,3,"En autorisasjonspolicy i Altinn 3 er bygd opp av **én eller flere regler** [1].
+
+Hver regel består av tre hoveddeler [1][2]:
+
+- **Resources**: beskriver hvilken ressurs regelen gjelder for, for eksempel en app, en ressurs i ressursregisteret, en bestemt oppgave eller andre underressurser [1].
+- **Action**: beskriver hvilke handlinger regelen gjelder for, for eksempel _read_, _write_, _sign_, _fire_ eller _Opendoor_ [1].
+- **Subject**: beskriver hvem regelen gjelder for, for eksempel en rolle, tilgangsgruppe, organisasjonsnummer eller en bestemt bruker [1][2].
+
+I tillegg kan policyen også inneholde [2]:
+
+- **Obligation**: tilleggsinformasjon, for eksempel krav til minimum autentiseringsnivå [2].
+- **Condition**: ytterligere vilkår, for eksempel at avgiver må være registrert i SRR/RRR for de…",
+be5a4c78-b67b-491f-9ff2-52d242d06e5f,2026-05-22T07:56:43.897913Z,bundled-default,altinn-authorization-delegation,0,public-docs,new,"simple,open-ended,altinn-authorization",complete,0,false,answer-only,true,,,,,3,2,0,d9e8e94ec5ef;16a8cb5de871;a96a923eae19,d9e8e94ec5ef;16a8cb5de871,,18114,,,,3,"Ja, men det kommer an på **hvilke rettigheter** du mener. I kildene beskrives to relevante måter å delegere på:
+
+- Du kan **gi brukere klientrettigheter for en klient ved å videredelegere tilgangspakker**. Dette er en del av API-et for tilgangsstyring i Altinn [1].
+- Du kan også **delegere og tilbakekalle roller og rettigheter** generelt i Tilgangsstyring, men dette er beskrevet som et arbeid som pågår og er derfor ikke nødvendigvis ferdig funksjonalitet [2].
+
+For å bruke API-et må du være **innlogget som klientadministrator for tjenestetilbyderen**, via en **ID-porten-klient**, og ID-porten-tokenet må veksles inn til et **Altinn-token** [1].
+
+Hvis du vil delegere til en annen bruker i praksis, viser kilden at du kan:
+1. finne riktig `partyUuid` for tjenestetilbyderen,
+2. bruke API-et for …",
+21f282c7-926f-49ed-b7f4-c7a9c9c45783,2026-05-22T07:57:03.958154Z,bundled-default,altinn-events-subscribe,0,public-docs,new,"lookup,simple,altinn-events",complete,0,false,answer-only,true,,,,,11,4,0,c1ef5ee35ec8;c4464cc8c17e;af6f8ec6f366;ee4e3b2757df;cb774c9cc765;e58150ad083a;0b06325825a5;96bbdee09cd4;0384a04931e5;54076a283ae5;b7410058f353,c4464cc8c17e;af6f8ec6f366;cb774c9cc765;0b06325825a5,,20060,,,,3,"Du abonnerer på hendelser i Altinn Events ved å opprette en **subscription** mot API-et `POST /subscriptions` og peke den til en egen **webhook/endpoint** som skal motta hendelsene [2][4].
+
+Kort fortalt:
+- Registrer en webhook i ditt eget API som kan ta imot **HTTP POST** [1][4].
+- Webhook-endpointet må bruke **HTTPS** og ha et offentlig betrodd TLS-sertifikat; self-signed sertifikater støttes ikke [1][4].
+- Send en forespørsel til `POST /subscriptions` med filtere som passer det du vil motta, for eksempel:
+  - `resourceFilter` for ressurs
+  - `sourceFilter` for kilde
+  - `subjectFilter`, `alternativeSubjectFilter`, `typeFilter` som valgfrie filtere [3][4]
+- Altinn sender en **valideringshendelse** til webhooken for å sjekke at den fungerer, og først når den er validert begynner Altinn å p…",
+089004ab-9ed3-4d0b-8b00-7e93b4ad512e,2026-05-22T07:58:18.134704Z,bundled-default,altinn-notifications-channels,0,public-docs,new,"altinn-notifications,simple,list",complete,0,false,answer-only,true,,,,,2,1,0,65c7128a702a;0940d389bd9e,65c7128a702a,,74176,,,,3,"Lesebudsjettet er brukt opp, så jeg kan ikke hente mer tekst. Jeg har likevel nok indikasjoner til å svare forsiktig: dokumentasjonen peker på e-post og SMS som kanalene for varsler. Jeg svarer med en kort formulering og nevner at “notification channel” i eksemplene er satt til Email, mens varseldefinisjonen beskriver både e-post og SMS.
+Altinn Notifications støtter **e-post og SMS** som kanaler for varsler.
+
+I dokumentasjonen beskrives et varsel som en enkelt forekomst av en **e-post eller SMS** sendt til en mottaker, og eksemplene bruker også `notificationChannel: ""Email""`.",
+8de9dc5b-2464-4992-a96f-19c2eadfd89f,2026-05-22T07:58:33.658137Z,bundled-default,altinn-correspondence-purpose,0,public-docs,new,"altinn-correspondence,open-ended,compare",complete,0,false,answer-only,true,,,,,4,2,0,9f75a7784e9b;fa42f12f0e96;15caa4bf8ead;3133c3dc4f6f,9f75a7784e9b;15caa4bf8ead,,15523,,,,3,"Altinn Correspondence brukes til **meldingstjenester** der **metadata om meldingen er tilgjengelig i Dialogporten**, mens **selve meldingen hentes fra Altinn Correspondence** [2].  
+
+Forskjellen fra **Dialogporten** er at Dialogporten er en løsning som gjør meldinger og dialoger fra Altinn 3 og andre digitale tjenesteplattformer tilgjengelige for sluttbrukersystemer i et **felles format** [1]. Med andre ord fungerer Dialogporten som et felles grensesnitt/metadata-lag, mens Altinn Correspondence er tjenesten der selve meldingsinnholdet ligger for denne kategorien tjenester [2].",
+275a0914-e89c-46e6-bd5d-43367cb6b3bb,2026-05-22T07:58:50.942717Z,bundled-default,altinn-studio-deploy-app,0,public-docs,new,"simple,open-ended,altinn-studio",complete,0,false,answer-only,true,,,,,7,3,0,20cfd06e88cb;d52d823b2cd0;2a639da77a32;5a58b0d3e740;54ba6a15c4b8;789969485da2;d2c29a05ebaa,20cfd06e88cb;d52d823b2cd0;2a639da77a32,,17284,,,,3,"For å distribuere en Altinn-app fra Altinn Studio til **produksjon**, bruker du **_Deploy_-fanen** i Altinn Studio, på samme måte som ved testmiljø, men med valg av produksjonsmiljøet i oversikten over tilgjengelige miljøer. [1][3]
+
+Fremgangsmåten er:
+
+1. **Bygg appen først**, slik at alle nødvendige filer samles i en deploybar pakke. [2]  
+2. Gå til **_Deploy_-fanen** i Altinn Studio. [1][2][3]  
+3. Velg **versjonen av appen** du vil deploye fra nedtrekkslisten under det aktuelle miljøet. [3]  
+4. Trykk på **_Deploy ny versjon_**. [3]
+
+Merk at kildene du har fått beskriver **deploy til testmiljø** eksplisitt, og sier at det finnes en oversikt over miljøer og versjoner i _Deploy_-fanen. De sier ikke uttrykkelig i utdraget at produksjon deployes med en egen, annen prosess, så den nærmeste b…",
+085408c1-c417-4f1a-81f2-83c075b9cb06,2026-05-22T07:59:23.878949Z,bundled-default,altinn-dialogporten-followup-actor,0,public-docs,new,"altinn-dialogporten,followup,open-ended",complete,0,false,answer-only,true,,,,,6,0,0,2f88d52cd306;6bba36c38e7f;88905aabd06b;ce32efe29ce5;ac532154d141;034c1ab67141,,,32935,,,,3,"Ja — i Dialogporten er dialogene ikke åpne for alle.
+
+Kort sagt:
+
+- **Sluttbrukeren** kan se dialoger som er tilgjengelige for dem i sluttbruker-API-et.
+- **Tjenesteeier** kan fortsatt se dialoger i tjenesteeier-API-ene, også når en dialog er blitt utilgjengelig for sluttbrukeren.
+- Når du **impersonerer en bruker**, gjelder en annen synlighet: utilgjengelige dialoger er da **ikke** synlige i tjenesteeier-API-ene.
+- Dialoger inneholder også metadata som er ment for visning i brukergrensesnittet, men selve innsynet styres av API-tilgang og dialogens status.
+
+Det dokumentasjonen konkret sier er at:
+
+- `expiresAt` gjør dialogen **utilgjengelig i sluttbruker-API-et** når tidspunktet er passert.
+- Slike dialoger er **fortsatt synlige i tjenesteeier-API-ene**, bortsett fra ved impersonering.
+
+Hv…",
+6c9846c9-a283-4f5b-940f-0c8904b77d01,2026-05-22T07:59:44.565258Z,bundled-default,altinn-out-of-scope-weather,0,public-docs,new,"negative,altinn-3-general,hard",complete,0,false,refusal-expected,false,,,,,0,0,0,,,,20686,,,,3,"Jeg har nå bekreftet at korpuset ikke inneholder en tydelig værkilde eller en Oslo-prognose jeg kan stole på. Jeg kan derfor ikke gi en faktisk værmelding uten å finne på noe. Jeg svarer kort og tydelig med denne begrensningen, og kan tilby å hjelpe deg med å formulere et søk eller tolke en værmelding hvis du limer inn en kilde.
+Jeg kan dessverre ikke hente sanntidsvær herfra, og jeg fant ingen pålitelig værkilde for Oslo i dokumentene.
+
+Hvis du vil, kan jeg:
+- hjelpe deg å finne riktig værmelding på nett
+- tolke en værmelding du limer inn
+- lage et kort søkeforslag for Yr eller Meteorologisk institutt",
+c21f723a-377e-465c-8609-c5948687bcd4,2026-05-22T08:01:11.040764Z,bundled-default,altinn-out-of-scope-pricing,0,public-docs,new,"negative,altinn-broker,hard",complete,0,false,refusal-expected,true,,,,,6,4,0,9221b1f02039;9fb411afc088;14d38d41ea63;13326795eb74;0127378417da;989cc83e5afc,9221b1f02039;9fb411afc088;14d38d41ea63;0127378417da,,86475,,,,3,"Jeg fant ingen offentlig pris for Altinn Broker i dokumentasjonen, og det ser ikke ut til at prisen er knyttet til antall ansatte.
+
+Det dokumentasjonen faktisk sier er at Altinn Broker er en **managed service** for sikker filoverføring, med fokus på funksjonalitet, sikkerhet og skalerbarhet — ikke en per-ansatt lisensmodell. Derfor kan jeg ikke gi et konkret beløp for en bedrift med 50 ansatte ut fra kildene jeg fant.
+
+Kort svar:
+- **Ingen offentlig pris funnet**
+- **Ikke pris per ansatt**
+- Kostnad ser ut til å være mer knyttet til **bruk/implementering/avtale** enn til antall ansatte
+
+Hvis du vil, kan jeg hjelpe deg med å finne:
+1. om det finnes en egen pris-/avtalepage for Altinn Broker, eller  
+2. hvem du bør kontakte i Altinn for et konkret tilbud.",
+97aef6de-d8e5-45b4-9755-71d8a88869fb,2026-05-22T08:02:21.338934Z,bundled-default,altinn-broker-vs-correspondence,0,public-docs,new,"compound,compare,altinn-broker",complete,0,false,answer-only,true,,,,,8,4,0,13326795eb74;9fb411afc088;9221b1f02039;82ad7fb84323;d3fe7cc88bf6;29d2607ef0bd;8b9a47dadc7f;546f77aaecba,9fb411afc088;9221b1f02039;82ad7fb84323;29d2607ef0bd,,70297,,,,3,"Bruk **Altinn Broker** når behovet ditt er **filoverføring / Managed File Transfer (MFT)** — altså å sende **store filer** sikkert fra én avsender til én eller flere mottakere.
+
+Bruk **Altinn Correspondence** når behovet er **meldingsformidling / korrespondanse** — altså å sende **én-til-én meldinger**, eventuelt **batch** til flere mottakere, med funksjoner som:
+- varsling via e-post eller SMS
+- kvittering/åpnet-status
+- vedlegg
+- lagring i innboks
+- dialog-/meldingsflyt
+
+Kort sagt:
+
+- **Broker = filer**
+- **Correspondence = meldinger/dokumenter**
+
+Velg derfor **Broker fremfor Correspondence** hvis hovedoppgaven er å **transportere filer robust og sikkert**, særlig når du tenker på:
+- store filer
+- mange mottakere
+- filoverføring som primær funksjon
+- behov for MFT-lignende mønstre
+
+Velg …",
+20a8bfe6-b0b1-4bb8-8ff4-7b7d55d6a3c7,2026-05-22T08:02:57.636304Z,bundled-default,altinn-2-sunset-date,0,public-docs,new,"simple,altinn-3-general,temporal,hard",complete,0,false,answer-only,true,,,,,12,2,0,be276e956836;bc169ad3ed4b;c205a444b6ab;e7d20c409f7b;58d1e0d9bccd;4d2ad2ba5cad;9d20bbcdd150;73e075cf955b;ffa886c75d0a;86fef7ece316;6f70f7b0bdce;84d91a6756f2,9d20bbcdd150;ffa886c75d0a,,36297,,,,3,"Altinn 2 skal etter planen legges ned **innen midten av 2026**. Kildene sier at serviceeiere og brukere skal være overført til Altinn 3 **“by mid-2026”**, og at **Altinn 2-plattformen da vil bli shut down** [1][2].
+
+Hvis du mener et mer presist tidspunkt enn dette, oppgir ikke kildene en eksakt dato, bare denne tidsrammen [1][2].",
+e2dbd6ef-b17a-4aff-8868-95c071e8879b,2026-05-22T08:03:20.551500Z,faithful-default,altinn-broker-getting-started,0,public-docs,public-docs-smoke,"simple,navigational,altinn-broker",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,14,5,1,7cb98e5ee894;02448e8b52b3;a1fcc9aae0fa;68bb403c3395;6a7d541f9b8b;be9e02a668a7;d03f96e6fc68;0a36ce72e13b;94f0fa820e54;9269cd53c390;f9ee273be3a9;a83186a0b089;4918ffcef015;ef73ed289c2a,a1fcc9aae0fa;be9e02a668a7;d03f96e6fc68;94f0fa820e54;9269cd53c390,9584a6e89afc,22915,,,,3,"Du kommer i gang med **Altinn Broker under overgangen til Altinn 3** via **Altinn 3 Broker Transition Solution**. [4]
+
+Hvis du bruker **Soft shift**-alternativet, skjer overgangen til Altinn 3 **på individnivå når brukere og End User Systems er klare**, og i overgangsperioden vil opplastede filer **alltid lagres i Altinn 3 Broker Storage**. [1]
+
+For å forstå hvordan Broker API-et fungerer og hvilke avhengigheter og konfigurasjonssteg som kreves, viser dokumentasjonen til at du må ha fulgt **Getting started**-stegene for å sette opp tilgangskravene. [5]
+
+Hvis du vil, kan jeg også oppsummere **konkrete oppstartssteg** for:
+- **service owner**
+- **sender**
+- **recipient** [2][3]",
+3d275b68-dc1b-4fc5-9438-70b9364d6c62,2026-05-22T08:03:43.994223Z,faithful-default,altinn-broker-technical-overview,0,public-docs,public-docs-smoke,"exact-lookup,simple,open-ended,altinn-broker",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,11,5,1,b35b658d8c9b;c050af21d82e;bc169ad3ed4b;3815339142c4;5a6f79fe08ae;e71b5a7bc1ff;01fdec6b497d;a6b5678aa6e5;63e3857a5897;94f0fa820e54;8aba253d24c8,b35b658d8c9b;3815339142c4;e71b5a7bc1ff;01fdec6b497d;63e3857a5897,63c3d3e28820,23442,,,,3,"Den tekniske arkitekturen bak **Altinn Broker i overgangsfasen** er **Altinn 3 Broker Transition Solution**, som lar tjenesteeiere med broker-tjenester i Altinn 2 peke disse tjenestene mot Altinn 3 via en **intern Altinn 2 bridge**. [2]
+
+Mer konkret beskrives dette som at **Altinn 2 Broker Transition service bridge** er en intern komponent i Altinn 2 som overfører Broker-forespørsler fra Altinn 2 til Altinn 3 for en gitt forespørsel, basert på **ServiceCode/ServiceEditionCode**-kombinasjonen. [5]
+
+Løsningen er altså en **soft shift** fra Altinn 2 til Altinn 3, der sluttbrukere i Altinn 2 fortsatt kan gjøre BrokerService-forespørsler, men filene lagres i Altinn 3 og blir tilgjengelige for både Altinn 2- og Altinn 3-brukere. [4][5]
+
+Det er også verdt å merke seg at dokumentasjonen sier at **…",
+26a1a288-b520-48c3-813c-629dc29bd9c1,2026-05-22T08:04:00.846190Z,faithful-default,altinn-dialogporten-about,0,public-docs,public-docs-smoke,"altinn-dialogporten,exact-lookup,simple",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,7,2,1,9f75a7784e9b;66335015006e;4a9ad6cd2bd1;0f76a4965326;fa42f12f0e96;15caa4bf8ead;e4deb94ea9c5,9f75a7784e9b;66335015006e,9f75a7784e9b,16852,,,,3,"Dialogporten er en løsning som gjør meldinger og dialoger implementert på Altinn 3 og andre digitale tjenesteplattformer tilgjengelige for sluttbrukersystemer i et felles format. [1]
+
+I den engelske kilden beskrives det tilsvarende som “a solution that allows messages and dialogs implemented on Altinn 3 and other digital service platforms accessible to end-user systems in a common format.” [2]
+
+Hvis du vil, kan jeg også forklare hva Dialogporten brukes til i praksis.",
+a7197eef-80fe-481f-b72e-f8a34fd9d18c,2026-05-22T08:04:21.854836Z,faithful-default,altinn-studio-create-user,0,public-docs,public-docs-smoke,"simple,altinn-studio,navigational",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,5,1,1,79fcd70d01e9;610b6c1759c8;0a1eb3cfdc80;33eaaea74c85;829b010fc712,79fcd70d01e9,0fac42eefdc4,21008,,,,3,"For å opprette en bruker i **Altinn Studio v8** gjør du dette: [1]
+
+1. Gå til **altinn.studio** og klikk **“Create new user”**. [1]  
+2. Registrer deg via **Ansattporten**. [1]  
+3. Logg inn med legitimasjon i Ansattporten, for eksempel **BankID** eller **MinID**. [1]  
+4. Opprett en Altinn Studio-bruker ved å fylle inn **brukernavn, e-post, passord og captcha**, og klikk **“Complete”**. Brukeren blir koblet til Ansattporten-brukeren din. [1]  
+5. Aktiver kontoen din via lenken du får på e-post. Hvis aktiveringslenken er ugyldig eller utløpt, kan du prøve å logge inn via Ansattporten igjen. [1]  
+6. Gi **Altinn Studio application** tilgang til brukerkontoen din. [1]
+
+Når kontoen er aktivert, kan du klikke på logoen øverst til venstre for å gå til **service dashboard**. [1]
+
+Hvis du vil, ka…",
+77809217-6fa0-4942-96f5-596edf07b955,2026-05-22T08:05:12.034191Z,faithful-default,altinn-studio-datamodeling,0,public-docs,public-docs-smoke,"simple,altinn-studio,navigational",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,3,3,1,bc2e044238be;6ffccfc7fd2a;ace59cbcb651,bc2e044238be;6ffccfc7fd2a;ace59cbcb651,2f6cee8d5f5e,50179,,,,3,"Jeg finner ikke en konkret beskrivelse i kildene av **hvordan du definerer en datamodell i Altinn Studio v8**. Kildene handler om **Repository**, **Designer**, og generell **deployment architecture**, men de beskriver ikke selve prosessen for datamodellering i v8 [1][2][3].
+
+Det nærmeste relevante begrepet i kildene er at **Designer** er den webbaserte editoren for apputvikling, inkludert UI, workflow og rules, og at utviklere kan bruke **lokalt installert IDE** og kommunisere direkte med **repository** [3]. Men dette sier ikke eksplisitt hvordan en datamodell opprettes eller defineres i v8 [3].
+
+Hvis du vil, kan jeg hjelpe deg med å formulere et svar basert på generell Altinn Studio-kunnskap, men da må jeg gå utover det som står i disse kildene.",
+29fc8b1e-6f93-44f0-8405-5ee8cf0245db,2026-05-22T08:06:26.571120Z,faithful-default,altinn3-lansert-when,0,public-docs,altinn3-stability,"exact-lookup,simple,altinn-3-general,temporal",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,5,1,1,24ba94a179c3;2840be59c8d4;3b9d00305074;d81ff032aa35;8e22ae4b88b1,8e22ae4b88b1,8e22ae4b88b1,74537,,,,3,Altinn 3 ble lansert i **juni 2020**; kilden sier også at de første applikasjonene på løsningen ble satt i produksjon **19. juni 2020** [1].,
+766bea00-3908-458b-96aa-20d07dae9118,2026-05-22T08:07:36.770879Z,faithful-default,altinn-correspondence-post-published,0,public-docs,exploratory-rerank,"altinn-correspondence,simple,factual",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,8,0,1,6ea4d4ac1d99;82ad7fb84323;dacba59a3448;49362e0ed0fa;bd74b75c8c74;5522c19e8d3d;eba28b91137f;a928838518a6,,068a1c1b7fa5,70199,,,,3,"Jeg har fortsatt ikke fått lesbare bevis, og lese-budsjettet er brukt opp. Jeg må derfor være conservative og svare bare med det dokumentasjonen faktisk støtter: at Correspondence er en meldingstjeneste for sikker utveksling mellom avsender og mottaker, og at den er knyttet til en ressurs som styrer tilgang for både sendere og mottakere. Jeg kan ikke bekrefte mer detaljerte statusendringer uten ytterligere kilder.
+Dokumentasjonen jeg fant sier bare dette med sikkerhet:
+
+- En **correspondence** i Altinn er en **meldingstjeneste** for sikker utveksling av korrespondanse mellom offentlige etater og personer/bedrifter.
+- Når du sender en correspondence, må den være knyttet til en **Altinn-ressurs**.
+- Denne ressursen styrer **tilgangskontrollen** for correspondence, og den evalueres for både *…",
+d3f78882-26f3-4522-a0f0-ffcbf1bdaee1,2026-05-22T08:08:00.595714Z,faithful-default,altinn-systemuser-api-model,0,public-docs,exploratory-rerank,"altinn-systemuser,exact-lookup,simple",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,8,1,1,74fc02526720;a245b733b3f3;e6f7545a1adc;fffd1547fdeb;6f4a1ef342c8;f33ae6ec350b;a79a59ed2586;fd72a28afd94,74fc02526720,6d8a6a851332,23824,,,,3,"Datamodellen for en **system user** i Altinn ser ut til å inneholde disse feltene, basert på kildene:
+
+- **systemUserId**: en unik identifikator generert av Altinn når system user opprettes. [1]
+- **name**: et brukervennlig navn gitt av leverandøren ved opprettelse av system user; hvis den opprettes via portalen, er standardverdien systemnavnet. [1]
+- **systemId**: den unike identifikatoren til systemet, generert av Altinn når systemet opprettes. [1]
+- **systemName**: et brukervennlig navn for systemet. [1]
+- **partyId**: partyid til organisasjonen som eier system user. [1]
+- **partyOrgNo**: organisasjonsnummeret til organisasjonen som eier system user. [1]
+- **created**: datoen system user ble opprettet. [1]
+- **isDeleted**: angir om system user er slettet; `True` betyr slettet og `False`…",
+689d3710-2acc-406a-ad6d-220bfb312edd,2026-05-22T08:08:19.978213Z,faithful-default,altinn-systemuser-api-opprett,0,public-docs,exploratory-rerank,"altinn-systemuser,simple,navigational",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,11,3,1,9bc9b92a27cc;ccaa38f7f58e;16049c347d69;c61c1f46fe63;63528e131071;ad408ff1ae47;a79a59ed2586;ad001426b658;e6f7545a1adc;cb349d28b827;fffd1547fdeb,16049c347d69;c61c1f46fe63;cb349d28b827,70a69fb50d45,19382,,,,3,"For å opprette en systembruker via **Altinn system user API**, må du først avklare **hvem som initierer opprettelsen**, fordi prosessen er forskjellig for **brukerstyrt opprettelse** og **leverandørstyrt opprettelse**. [1][2]
+
+- Ved **brukerstyrt opprettelse** er det sluttbrukeren selv som logger inn i Altinn og velger systemet som skal få en systembruker. Sluttbrukeren får presentert de forhåndsdefinerte tilgangene og godkjenner opprettelsen. [2]
+- Ved **leverandørstyrt opprettelse** er det sluttbrukersystem-leverandøren (SBSL) som sender en forespørsel til Altinn om å opprette systembrukeren, og sluttbrukeren må deretter godkjenne forespørselen i Altinn. [1]
+
+Hvis du spør som **tjenesteeier / API-tilbyder**, må du også ha disse forutsetningene på plass: avtale med Maskinporten som **Tjen…",
+e5bf48ee-3e0b-4d2f-9ae7-b2c01c9c3d95,2026-05-22T08:08:42.691872Z,faithful-default,altinn-systemuser-accept-request,0,public-docs,exploratory-rerank,"altinn-systemuser,simple,navigational",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,10,6,1,1abd09cfd180;43e801d8644e;ffb35e69a2df;1d998a97413e;a67e7d9494e5;0991d2695b2e;e6f7545a1adc;92e285d662e5;6f4a1ef342c8;fffd1547fdeb,43e801d8644e;ffb35e69a2df;0991d2695b2e;e6f7545a1adc;92e285d662e5;fffd1547fdeb,bbf82de07a2f,22713,,,,3,"En sluttbruker aksepterer en forespørsel om **systemtilgang / system user** i Altinn ved å logge inn og godkjenne forespørselen i Altinn-portalen. For å kunne gjøre dette må brukeren ha rollen **Tilgangsstyrer** i den valgte organisasjonen, og også ha de **nødvendige rettighetene** som forespørselen krever. [3][5]
+
+Hvis brukeren som åpner godkjenningslenken **ikke** har nødvendige rettigheter, kan vedkommende sende forespørselen videre ved å klikke **Ja, send videre**. Da finner tilgangsstyrer den eskalerte forespørselen under **Systemtilganger** i Altinn og godkjenner den der. [2]
+
+Det finnes også to måter systemtilgang kan opprettes på: **brukerstyrt opprettelse** og **leverandørstyrt opprettelse**. I begge tilfeller må sluttbrukeren godkjenne i Altinn, men ved brukerstyrt opprettelse st…",
+f38b0fff-bc23-432d-a717-23f47a74507f,2026-05-22T08:09:04.083147Z,faithful-default,altinn-systemuser-delegate-clients,0,public-docs,exploratory-rerank,"altinn-systemuser,simple,navigational",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,8,4,1,12bbe5cf4a58;887493c9defa;bc1792daed8b;20b1f847a2ec;c8d80100704c;e6f7545a1adc;fffd1547fdeb;6f4a1ef342c8,12bbe5cf4a58;887493c9defa;bc1792daed8b;c8d80100704c,434ca284c0bf,21391,,,,3,"Du kan delegere klienter til en system user på to måter: i **Altinn-portalen** eller via **API**. Dette gjelder når du oppretter en system user for **client relationships**; det gjelder ikke for en system user for **your own system**. [1]
+
+Hvis du vil gjøre det via API, bruker du **Client Delegation API**. API-et er laget for å administrere klienter for en agent system user fra et tredjepartssystem, og du må autentisere med en **bearer token** som er en **id-porten token** med riktig scope, som deretter byttes til en Altinn-token. [3]
+
+For å hente hvilke agent system users som er knyttet til organisasjonen, brukes:
+`GET authentication/api/v1/enduser/systemuser/agents?party=...` med scope **altinn:clientdelegations.read**. [4]
+
+Når du oppretter en system user for client relationships, må du…",
+4837dae3-c9a3-4d3e-9568-4f830dae0436,2026-05-22T08:10:39.233613Z,faithful-default,altinn-authorization-accessgroups-knytning,0,public-docs,exploratory-rerank,"simple,navigational,altinn-authorization",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,8,7,1,21bc4314309a;08c657a6a448;ea879b816498;f59d8a478b7d;d25d5cd69901;3dc5f7a90912;60f68864a102;7f5aae1c643d,21bc4314309a;ea879b816498;f59d8a478b7d;d25d5cd69901;3dc5f7a90912;60f68864a102;7f5aae1c643d,a438b1775bf0,95150,,,,3,"Jeg fikk en nyttig setning: tilgangsgruppe kan være en mulig Subject i XACML, men det svarer fortsatt ikke direkte på hvordan organisasjonen knyttes til gruppen. Siden lesebudsjettet er nesten brukt opp, bruker jeg det jeg har og svarer med en presis avgrensning: dokumentasjonen jeg fant beskriver registeroppslag og at tilgangsgrupper kan brukes som subject, men ikke en eksplisitt registeroperasjon for å koble organisasjon til tilgangsgruppe.
+I dokumentasjonen jeg fant, ser det **ikke ut til at organisasjonen knyttes direkte til en tilgangsgruppe i register-APIet**.
+
+Det som er dokumentert er:
+
+- Registeret kan slå opp **organisasjoner** via `GET /organizations/{orgNr}`.
+- Registeret kan slå opp **partier** via `GET /parties/{partyId}` og `GET /parties/lookup`.
+- I XACML-dokumentasjonen st…",
+8c9b0344-951f-409f-b3db-3850baa49480,2026-05-22T08:10:54.522370Z,faithful-default,altinn-authorization-tilgangslister,0,public-docs,exploratory-rerank,"exact-lookup,simple,altinn-authorization",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,3,2,1,14d29a52b3e3;548c3bf390b6;295f615f2c0d,548c3bf390b6;295f615f2c0d,2850f051d81a,15288,,,,3,"I konteksten som er gitt, blir **tilgangslister** ikke definert eksplisitt med akkurat det navnet. Det som beskrives er at Dialogporten bruker **Authorized Parties API** for å hente en liste over alle parter den autentiserte brukeren kan representere, sammen med alle **roller/tilgangspakker** og **tjeneste-/instansrettigheter** brukeren har for hver part [1].
+
+Så, ut fra kildene, er den nærmeste betydningen av **tilgangslister** i Altinn Autorisering en oversikt over hvilke parter og tilhørende rettigheter en bruker har, og de brukes i Dialogporten til **alle listevisninger** [1]. For **dialogdetaljer** brukes derimot **PDP API** for finkornet autorisering av handlinger og overføringer [2].
+
+Hvis du mener et mer spesifikt Altinn-begrep med navnet **tilgangslister**, er det ikke tydelig def…",
+cf636e86-1485-4990-b413-fd2d422b9a11,2026-05-22T08:11:16.422089Z,faithful-default,altinn-authorization-regler,0,public-docs,exploratory-rerank,"exact-lookup,altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,9,4,1,d91556a2e875;4543ab64826c;e246b621f86c;789d3428317a;73a819db1dd9;ddfbe673e229;7eddf219a393;824153a6cb8c;01625e64a3ff,4543ab64826c;e246b621f86c;789d3428317a;ddfbe673e229,86a29a595367,21899,,,,3,"Tilgangsregler i Altinn Authorization er **autorisasjonsregler** som bestemmer **hvem som har rett til å utføre handlinger på en gitt ressurs** i en Altinn-app. En policy kan inneholde én eller flere slike regler for et sett med ressurser, og den beskrives som et **XACML 3.0 Policy document**. [3]
+
+I Altinn Apps består en regel av flere elementer, blant annet:
+- **resource**: hvilken ressurs regelen gjelder for
+- **subject**: hvem som får tilgang
+- **action**: hva de kan gjøre
+- **effect**: om tilgangen er tillatt eller avslått
+- **obligation**: ekstra informasjon som PEP skal bruke, for eksempel krav til autentiseringsnivå [3][2]
+
+Hvis du mener “tilgangsregler” i betydningen hvordan de settes opp i en app, så ligger de i **`App/config/authorization/policy.xml`** i app-repositoriet. [1][4]…",
+d90f030e-d138-4157-a776-b9d917a659f0,2026-05-22T08:11:31.011079Z,faithful-default,altinn-broker-rest-usage,0,public-docs,exploratory-rerank,"simple,navigational,altinn-broker",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,1,1,1,702ec5c8ecd5,702ec5c8ecd5,0f3807200a65,14589,,,,3,"For å bruke **Altinn Broker med REST-API**, viser kilden til **OpenAPI (swagger) for Formidling** som dokumentasjonen for tjenesten [1].  
+
+Det betyr at du kan bruke REST-grensesnittet ved å følge API-spesifikasjonen her: **/nb/api/broker/spec/** [1].  
+
+Kilden gir ikke flere detaljer om konkrete endepunkter, autentisering eller eksempler i utdraget du har delt, så hvis du vil ha en mer praktisk veiledning, må vi se på selve OpenAPI-spesifikasjonen [1].",
+ab7475eb-9fe8-4373-a0e6-e4ccebcdf24c,2026-05-22T08:11:51.984867Z,faithful-default,altinn-events-architecture,0,public-docs,exploratory-rerank,"exact-lookup,simple,altinn-events",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,9,4,1,d432b7fcca5b;a61921e48409;2db072be14eb;d0bc6af3271d;56ad5c15e3a8;c31c5a61a1e6;c0b2f69fcfa6;baf91868a9cf;76e81d02ad8f,d432b7fcca5b;a61921e48409;c31c5a61a1e6;baf91868a9cf,7d33c4c5baf1,20973,,,,3,"Altinn Events er arkitektonisk bygget opp som en **ASP.NET MVC Application** som eksponerer et **REST API** til Altinn Apps og andre Altinn-tjenester. Den er deployet som en **Docker container** til en **Kubernetes cluster**, og består også av et sett med **functions i en Azure Function App**. [4]
+
+Når en publish request sendes til **`/app`-endepunktet**, blir eventet først lagret i **`events-registration`-køen** for operasjonell robusthet og fleksibilitet. [2] Når en event retrieval request kommer inn, hentes resultatene fra den interne **relasjonelle databasen** som brukes til event-persistens. [2]
+
+Arkitekturen inkluderer også integrasjoner med **Altinn Authorization** for tilgangskontroll og **Altinn Register** for oppslag på alternativ subject. [3] I tillegg brukes **Azure Kubernetes …",
+588a1d8f-5d78-4162-9b2c-264ef8d7fb07,2026-05-22T08:12:32.107954Z,faithful-default,altinn-studio-grouping-repeating,0,public-docs,exploratory-rerank,"paraphrase,altinn-studio,compare",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,4,1,1,fd3c5cddbfbb;6ffccfc7fd2a;bc2e044238be;ace59cbcb651,fd3c5cddbfbb,9d621302f88b,40122,,,,3,"Forskjellen er at **repeterende grupper** kan gjentas flere ganger, mens **ikke-repeterende grupper** bare er én fast gruppe av felter. I kilden står det at en gruppe blir repeterende når `maxCount` er satt til et antall større enn 0, og at `maxCount` må utelates eller settes til `0` for **ikke-repeterende grupper**. [1]
+
+For **ikke-repeterende grupper** brukes `type: ""group""` for å registrere gruppen, og gruppen samler flere felter under én felles gruppe uten at den kan legges til flere ganger. [1]
+
+For **repeterende grupper** kan gruppen ha `dataModelBindings.group`, `maxCount` og gjentas et bestemt antall ganger, for eksempel 3 ganger i eksemplet. [1]
+
+Kort sagt:
+- **Ikke-repeterende gruppe** = én gruppe, ingen gjentakelse. [1]
+- **Repeterende gruppe** = samme gruppe kan opprettes flere…",
+a7b0e74c-b52c-4e11-93ad-1f936b503c98,2026-05-22T08:13:46.348457Z,faithful-default,altinn-studio-grouping-repeating-edit,0,public-docs,exploratory-rerank,"simple,altinn-studio,navigational",complete,0,false,chunks+answer,false,0.0,0.0,0.0,0.0,5,4,1,7160541e6edd;9cde6495c0ea;bc2e044238be;6ffccfc7fd2a;ace59cbcb651,7160541e6edd;9cde6495c0ea;6ffccfc7fd2a;ace59cbcb651,3685015c0f1c,74240,,,,3,,
+6f248dc2-be8d-4164-b45e-be9bf3f8932a,2026-05-22T08:14:00.670618Z,faithful-default,altinn3-what-is-new,0,public-docs,new,"altinn-3-general,open-ended,compare",complete,0,false,answer-only,false,,,,,1,1,0,864a1c25a701,864a1c25a701,,14321,,,,3,"Jeg kan ikke gi en presis sammenligning av **Altinn 2** og **Altinn 3** ut fra det utdraget som er tilgjengelig her, fordi kilden bare viser en side om **Altinn 2** og overgangsguider til **Altinn Studio**. Den sier at dette er guider knyttet til overgangen fra **Altinn 2 til Altinn Studio**, og nevner blant annet utvikling av datamodell, erstatning for Seres og migrering av tjenester [1].
+
+Hvis du vil, kan jeg likevel hjelpe på to måter:
+1. **Gi en generell, ikke-kildebasert forklaring** av forskjellene mellom Altinn 2 og Altinn 3, eller  
+2. **Sammenligne dem nøyaktig** hvis du deler en kilde som beskriver Altinn 3 også.",
+ade1a949-bdd5-496f-8f4b-579cc3b3a712,2026-05-22T08:14:30.365907Z,faithful-default,altinn3-deprecated-services,0,public-docs,new,"compound,altinn-3-general,list",complete,0,false,answer-only,true,,,,,10,5,0,a7688c9b4543;ccb65efdb7d5;a6af4bc79f60;e0bfc75b41df;a8badd56f41d;c61d95fcd2d1;f290a83f2282;e5497adee959;54c3ecef4140;686ebf7be3c2,a7688c9b4543;a6af4bc79f60;e0bfc75b41df;c61d95fcd2d1;f290a83f2282,,29694,,,,3,"Det som fases ut i overgangen til Altinn 3 er **tjenester som i dag bruker Altinn som autorisasjonsløsning** og må flyttes fra Altinn 2 til Altinn 3-plattformen. Dette omtales i kildene som blant annet **lenketjenester**, **samtykketjenester**, **Formidlingstjenester** og **Delegerbare API ressurser**. [4][5][2][3]
+
+Hvis du mener **hvilken tjenestetype** som konkret er omtalt i den mest direkte formuleringen, er svaret at **alle tjenester som i dag bruker Altinn som autorisasjonsløsning** skal migreres, men kildene viser at dette skjer i ulike spor for ulike tjenestetyper. [4][5]
+
+Det er også en viktig nyanse:  
+- For **samtykketjenester** står det at det ikke er avklart om de flyttes én og én eller i én operasjon. [5]  
+- For **Formidlingstjenester** står det at det heller ikke er bestemt…",
+4d46259f-e073-4ad0-b992-b693fffffc38,2026-05-22T08:14:54.962312Z,faithful-default,altinn-authorization-policy-shape,0,public-docs,new,"simple,open-ended,altinn-authorization",complete,0,false,answer-only,true,,,,,7,2,0,7f9430d5a733;c28fc018e0d0;e40ba14c0fa9;cb60e62b281f;669df3bd802f;1ecdaed16c5c;05a972c7d79a,7f9430d5a733;c28fc018e0d0,,24596,,,,3,"En autorisasjonspolicy i Altinn 3 er bygd opp etter XACML 3.0-prinsippet med en **Policy** som består av **1–mange rules**, og hver **rule** består av tre deler: **Resource**, **Action** og **Subject**. I tillegg kan policyen ha **ObligationExpressions** for krav som må oppfylles, for eksempel minimum authentication level. [2][1]
+
+Kort forklart:
+
+- **Subject**: hvem regelen gjelder for, for eksempel **RoleType**, **org**, og ved delegering også **userid**, **partyid** og **keyroleforpartyid**. [1]
+- **Action**: hva subject kan gjøre, for eksempel **Read**, **Write**, **Sign**, **Confirm** og **Delete**. [1]
+- **Resource**: hvilken ressurs regelen gjelder for, for eksempel en app, en ressurs i Resource Registry, en spesifikk task eller andre sub-resources. [2]
+- **Condition**: ekstra vilkår…",
+c7a05722-a894-49c6-b65c-78b6fbe6e994,2026-05-22T08:15:18.758747Z,faithful-default,altinn-authorization-delegation,0,public-docs,new,"simple,open-ended,altinn-authorization",complete,0,false,answer-only,true,,,,,10,6,0,579748d83ae8;6a0f583996bb;875df4fd624d;bf7466ce03c2;d5a757f4aafd;86a29a595367;079db3098ab3;16a8cb5de871;f6f6ccce52bf;588e7f66c44f,6a0f583996bb;875df4fd624d;bf7466ce03c2;079db3098ab3;16a8cb5de871;588e7f66c44f,,23796,,,,3,"Ja, i Altinn kan du delegere rettigheter til andre brukere, og dette kalles **å gi fullmakt**. [1][6]
+
+Du kan gjøre det på flere måter, avhengig av hva du vil delegere: [1][2][3]
+
+- **Direkte til en enkelttjeneste**. [2]
+- **Til en tilgangspakke** eller **rolle** som tjenesten tilhører, slik at fullmakten automatisk gjelder alle tjenester og ressurser som inngår i den. [2]
+- I den nye **Tilgangsstyring / Access Management**-løsningen kan brukere også delegere tilgangspakker og administrere tilgangsgrupper. [5]
+
+Det er verdt å merke seg at **tilgangspakker** brukes for fullmakter til flere tjenester innen samme område, mens **administratorfullmakter** er egne tilgangspakker som gir rett til å administrere fullmakter, men **ikke** tilgang til tjenester. [1][4]
+
+Hvis du vil, kan jeg også fork…",
+b229592a-4d96-4102-8ded-827cbcc758a3,2026-05-22T08:15:39.993231Z,faithful-default,altinn-events-subscribe,0,public-docs,new,"lookup,simple,altinn-events",complete,0,false,answer-only,true,,,,,9,4,0,af6f8ec6f366;ee4e3b2757df;cb774c9cc765;e58150ad083a;1e76b7265ace;0b06325825a5;0384a04931e5;54076a283ae5;b7410058f353,af6f8ec6f366;cb774c9cc765;1e76b7265ace;0b06325825a5,,21234,,,,3,"For å abonnere på hendelser i Altinn Events må du opprette et abonnement med `POST /subscriptions` og sende inn en webhook-URL (`EndPoint`) samt relevante filtre for hvilke hendelser du vil motta, for eksempel `SourceFilter`, `SubjectFilter` eller `resourceFilter` avhengig av hva du abonnerer på. [1][2][4]
+
+Kort fortalt:  
+- Abonnementet krever autentisering. [1][4]  
+- For generiske hendelser kreves Maskinporten-scope `altinn:events.subscribe`. [1]  
+- Hvis du abonnerer som tjenesteeier, kreves også `altinn:serviceowner`. [1]  
+- Webhook-endepunktet må støtte HTTPS og bruke offentlig betrodde TLS-sertifikater; selvsignerte sertifikater støttes ikke. [3][4]  
+- Når abonnementet er registrert, sender Altinn Events en valideringshendelse til webhooken, og først etter at denne er validert beg…",
+4323d439-3f47-42c1-9840-5229cc88027c,2026-05-22T08:16:00.494326Z,faithful-default,altinn-notifications-channels,0,public-docs,new,"altinn-notifications,simple,list",complete,0,false,answer-only,true,,,,,4,2,0,6867b929f5ec;92386014f6a3;30e16cfa3f81;9c58e66b93a3,30e16cfa3f81;9c58e66b93a3,,20501,,,,3,"Altinn Notifications støtter to kanaler for varsler: **e-post** og **SMS** [2].  
+
+Hvis du mener **umiddelbar varsling**, er endepunktene spesifikt for **SMS** og **e-post** [1].",
+164a649d-ad7d-442c-add0-afb2b4efa0ea,2026-05-22T08:16:26.585007Z,faithful-default,altinn-correspondence-purpose,0,public-docs,new,"altinn-correspondence,open-ended,compare",complete,0,false,answer-only,true,,,,,8,3,0,fa42f12f0e96;15caa4bf8ead;e4deb94ea9c5;8730e03855c8;82ad7fb84323;6ea4d4ac1d99;eba28b91137f;a928838518a6,15caa4bf8ead;82ad7fb84323;6ea4d4ac1d99,,26090,,,,3,"Altinn Correspondence brukes til sikker utveksling av korrespondanse, som offisielle brev, varsler og andre dokumenter, mellom offentlige etater og enkeltpersoner eller bedrifter. [2][3] Det er altså en meldingstjeneste, ikke bare et metadataregister. [2][3]
+
+Dialogporten er derimot en felles portal/API for dialoger og metadata fra mange ulike tjenester, der ulike tjenestetyper kan være tilgjengelige, for eksempel AltinnApp, CorrespondenceService og GenericAccessResource. [1] For CorrespondenceService ligger metadata om meldingen i Dialogporten, mens selve meldingen hentes fra Altinn Correspondence. [1]
+
+Kort sagt: Altinn Correspondence håndterer selve meldingen/korrespondansen, mens Dialogporten samler og eksponerer metadata og oversikt over dialoger på tvers av tjenester. [1][2][3]",
+013fa876-35cf-44c1-9953-c948f60f9522,2026-05-22T08:16:47.296522Z,faithful-default,altinn-studio-deploy-app,0,public-docs,new,"simple,open-ended,altinn-studio",complete,0,false,answer-only,true,,,,,2,2,0,b06ce7d745bc;5a58b0d3e740,b06ce7d745bc;5a58b0d3e740,,20711,,,,3,"For å distribuere en Altinn-app til produksjon fra Altinn Studio, bygger du appen og deretter deployer du den til ønsket miljø via **Deploy**-knappen i Altinn Studio. Apputvikleren kan bygge og deploye apper til alle test- og produksjonsmiljøer som er tilgjengelige for organisasjonen, og når builden er ferdig kan den deployes til et gitt miljø. [1]
+
+Bygget baseres på den nyeste kildekoden som er sjekket inn på **master branch** for den aktuelle appen, og hver build kan ha en beskrivelse. [1] I deploy-pipelinen brukes blant annet disse flaggene: `APP_COMMIT_ID`, `APP_DEPLOY_TOKEN`, `APP_ENVIRONMENT`, `APP_OWNER`, `APP_REPO`, `GITEA_ENVIRONMENT`, `should_build` og `should_deploy`. [2]
+
+Hvis du mener selve produksjonsmiljøet, er det altså **deploy til et gitt miljø** etter at builden er fullf…",
+854abad3-35c1-433c-9a50-de74ce06ffdb,2026-05-22T08:17:09.336735Z,faithful-default,altinn-dialogporten-followup-actor,0,public-docs,new,"altinn-dialogporten,followup,open-ended",complete,0,false,answer-only,true,,,,,5,2,0,88905aabd06b;ac532154d141;58f0c390b6ef;85619e6037c5;ce32efe29ce5,88905aabd06b;ce32efe29ce5,,22040,,,,3,"Dialogene som opprettes i Dialogporten kan sees av autoriserte parter, men kilden sier ikke eksplisitt hvem disse er i denne teksten. Den sier at dialogen inneholder mottaker, status, handlinger og at all interaksjon skjer mot tjenesteleverandørens UI eller API, og at tjenesteeieren kan oppdatere dialogen når som helst [1]. Den sier også at forsendelser normalt arver autorisasjonspolicyen for dialogen, og at enkelte forsendelser kan være utilgjengelige hvis sluttbruker mangler rettigheter [2].
+
+Hvis du mener “hvem kan se dialogene” i betydningen tilgangsstyring, er det altså **autoriserte parter / sluttbrukere med rettigheter**, men denne teksten spesifiserer ikke en konkret rolle eller gruppe [1][2].",
+ef87ee9d-e836-47f6-8a00-31db7fc9d282,2026-05-22T08:17:48.984138Z,faithful-default,altinn-out-of-scope-weather,0,public-docs,new,"negative,altinn-3-general,hard",complete,0,false,refusal-expected,true,,,,,3,0,0,3df923dddc27;2e8d3af8e24c;9218be71cbb9,,,39647,,,,3,"Jeg har nå bekreftet at treffene er generelle dokumenter, ikke værmeldinger. Det finnes ingen evidens i det jeg har lest for en faktisk Oslo-værmelding. Jeg vil derfor ikke dikte opp vær. Jeg kan enten hjelpe deg med å finne en ekstern værkilde hvis du vil, eller si tydelig at kunnskapsbasen ikke inneholder værmeldingen.
+Jeg finner ikke en faktisk værmelding for Oslo i dokumentbasen jeg har tilgang til her.
+
+Det jeg fant var bare generelle Altinn-dokumenter, ikke værdata. Så jeg kan ikke gi deg en pålitelig prognose uten en ekstern værkilde.
+
+Hvis du vil, kan jeg:
+- hjelpe deg med å formulere et søk etter værmelding hos en ekstern tjeneste, eller
+- gi deg en kort mal for hvordan du finner værmeldingen selv raskt.",
+57005a1c-d8c1-4e32-8e0b-128b7893de5f,2026-05-22T08:19:33.857579Z,faithful-default,altinn-out-of-scope-pricing,0,public-docs,new,"negative,altinn-broker,hard",complete,0,false,refusal-expected,true,,,,,7,5,0,8aba253d24c8;be9e02a668a7;5e0a3bec4e53;13326795eb74;9fb411afc088;da85a86a3f0d;0127378417da,8aba253d24c8;be9e02a668a7;5e0a3bec4e53;9fb411afc088;0127378417da,,104873,,,,3,"Jeg finner ikke noen offentlig pris per ansatt for Altinn Broker i dokumentasjonen jeg har tilgang til.
+
+Det dokumentasjonen sier er:
+- Altinn Broker er en managed file transfer-løsning.
+- Kostnader ser ut til å være knyttet til bruk av Altinn/Azure-ressurser og fakturering via **Altinn Billing**.
+- Det står også at du kan overvåke eget forbruk av cloud resources.
+
+Så for en bedrift med **50 ansatte** finnes det ikke noe grunnlag i dokumentasjonen for å si “det koster X kroner”. Antall ansatte ser heller ikke ut til å være prisdriveren; det er mer sannsynlig at kostnaden avhenger av:
+- faktisk bruk / volum
+- lagring
+- trafikk / overføring
+- eventuelle tilknyttede tjenester og integrasjoner
+
+Kort svar: **Det er ikke oppgitt en fast pris per ansatt, og jeg kan ikke beregne en konkret kostnad…",
+7264dd62-7013-4baf-b3e2-ed986bafaecd,2026-05-22T08:21:10.985292Z,faithful-default,altinn-broker-vs-correspondence,0,public-docs,new,"compound,compare,altinn-broker",complete,0,false,answer-only,true,,,,,7,3,0,13326795eb74;9fb411afc088;7fcc0669c880;9221b1f02039;a6b5678aa6e5;c050af21d82e;29d2607ef0bd,9fb411afc088;9221b1f02039;29d2607ef0bd,,97127,,,,3,"Bruk **Altinn Broker** når behovet ditt er **filoverføring**, spesielt hvis du skal sende **store filer** eller distribuere en fil til **én eller flere mottakere**.
+
+Bruk **Altinn Correspondence** når du skal sende **meldinger/korrespondanse** fra én avsender til **én mottaker**, eller når du vil sende samme korrespondanse til flere mottakere som separate mottakere i batch.
+
+Kort tommelfingerregel:
+
+- **Broker** = dokument-/filtransport, managed file transfer, store filer, én-til-mange, robust overføring
+- **Correspondence** = meldinger/varsler/korrespondanse, én-til-én, evt. batch til flere mottakere
+
+Det som skiller dem tydeligst i dokumentasjonen er at:
+
+- **Altinn Broker** beskrives som hovedsakelig for **Managed File Transfer (MFT)** og **sikker overføring av store filer**.
+- **Altinn…",
+af2f4a2b-6331-4139-ae45-69eb14aa48df,2026-05-22T08:21:55.254938Z,faithful-default,altinn-2-sunset-date,0,public-docs,new,"simple,altinn-3-general,temporal,hard",complete,0,false,answer-only,true,,,,,15,2,0,32fd0d58477f;a6f014c5fffc;a8fdebbd8b1c;e7d20c409f7b;58d1e0d9bccd;9d20bbcdd150;acd4b81bf0f8;ffa886c75d0a;6fe25fb74adf;34d264e3b7ea;7fcc0669c880;6f70f7b0bdce;f4cf576e3402;b969dd2ca950;84d91a6756f2,9d20bbcdd150;ffa886c75d0a,,44269,,,,3,"Altinn 2-plattformen skal være helt nedlagt **innen midten av 2026** (“by mid-2026”) ifølge planen for Altinn 3 Correspondence/Broker. [1][2]
+
+Det er altså ikke oppgitt en helt eksakt dato i kildene, bare et tidsrom: **midten av 2026**. [1][2]",

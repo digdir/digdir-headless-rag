@@ -1,0 +1,37 @@
+{:id "mcp",
+ :plane "experience",
+ :name "MCP Gateway",
+ :note "JSON-RPC tools/call",
+ :icon "gateway",
+ :color "#7bbcf5",
+ :status "External surface",
+ :summary
+ "The primary tool-oriented entry point for configured agents and skill graphs.",
+ :description
+ "The MCP transport parses JSON-RPC, advertises available tools and maps tools/call invocations to an authorized agent and skill graph. Progress can stream as MCP notifications over SSE.",
+ :responsibilities
+ ["Handle MCP initialize, tools/list and tools/call"
+  "Map public tools to agent and skill-graph identities"
+  "Stream progress notifications and support cancellation"],
+ :files
+ ["server/src/digdir/mcp/transport.clj"
+  "server/src/digdir/mcp/tools.clj"
+  "server/src/digdir/mcp/streaming.clj"],
+ :input "MCP JSON-RPC envelope",
+ :output "Tool results + progress events",
+ :edges
+ [{:to "auth",
+   :kind :call,
+   :target :call,
+   :label "API-key authentication for MCP sessions",
+   :via "reitit middleware chain, wired at router construction",
+   :unverified true}
+  {:to "scope",
+   :kind :call,
+   :target :call,
+   :label "Dataset scoping for tool calls",
+   :via
+   "request context assembled by middleware before the tool handler",
+   :unverified true}],
+ :keywords
+ "mcp json rpc tools call streaming cancellation agent skill graph"}

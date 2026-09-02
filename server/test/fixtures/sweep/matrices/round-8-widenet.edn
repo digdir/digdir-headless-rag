@@ -1,0 +1,95 @@
+;; Round 8 — Production sweep on the wider-net retrieval config
+;;
+;; Diagnostics 3-5 (this session) showed the production plateau at 27.8%
+;; recall@10 was caused by an upstream merge config (`phrase-only` weights
+;; + strict contribution caps) that dropped 10 of 18 goldens before they
+;; ever reached the reranker. Diag-3 (oracle on a wider candidate pool)
+;; got 72.2%; Diag-5 (ColBERT on the same wider pool) got 44.4% at
+;; recall@10 / 61.1% at recall@20.
+;;
+;; Round 8 tests the wider-net config in a real end-to-end production
+;; sweep (with the agent loop in play, not just direct retrieval), against
+;; the Round-5 winner as a control. Includes a third cell that uses the
+;; newly-implemented `:per-strategy-rerank?` mode — three ColBERT calls in
+;; parallel against the three strategy hit lists, then merged by round-
+;; robin interleave + dedupe.
+;;
+;; Cells (3):
+;;   r8-control            — Round-5 winner (phrase-only weights + caps,
+;;                           retrieve-top-k=100, rerank top-k=20, context-top-k=10)
+;;   r8-widenet            — wider net: default weights, no caps,
+;;                           retrieve-top-k=300, rerank-candidate-k=100,
+;;                           context-top-k=40
+;;   r8-widenet-parallel   — wider net + per-strategy parallel rerank,
+;;                           context-top-k=40
+;;
+;; All cells use `:builtin/agent-rag-graph-faithful` (Round-5 winner) and
+;; the minimal default system prompt (committed Round 3).
+;;
+;; Adjustments from the user's instructions:
+;;   1. `:context-top-k 40` on the rerank skill — was 10. Lets the agent
+;;      access top-40 ranked chunks. Diag-5 showed several goldens at
+;;      ColBERT ranks 11-18 (studio-create-user=18, studio-grouping=11,
+;;      studio-grouping-edit=13); context-top-k=40 captures these.
+;;   2. Per-strategy rerank runs the 3 ColBERT calls in parallel via
+;;      futures (see apply-per-strategy-colbert-rerank in retrieval.clj).
+;;      Total latency ≈ slowest single call, not 3× sequential.
+;;
+;; Expected wall-clock:
+;;   3 cells × 18 questions × 3 repeats = 162 runs
+;;   r8-control      ~25s mean → ~22 min
+;;   r8-widenet      ~30s mean (larger candidate pool, slightly slower rerank)
+;;   r8-widenet-parallel ~30s mean (parallelisation cancels the 3x rerank work)
+;;   total ~80 min
+;;
+;; Drive from REPL:
+;;   (digdir.sweep.runner/run-from-files
+;;     {:matrix-path "test/fixtures/sweep/matrices/round-8-widenet.edn"})
+
+{:configs
+ [{:id "r8-control"
+   :skill-graph-id :builtin/agent-rag-graph-faithful
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 0.0
+                                           :phrase 1.0
+                                           :metadata 0.0}
+                        :strategy-contribution-caps {:phrase 5
+                                                     :content 0
+                                                     :metadata 0}
+                        :retrieve-top-k 100}
+    :builtin/rerank    {:top-k 20
+                        :context-top-k 10}}}
+
+  {:id "r8-widenet"
+   :skill-graph-id :builtin/agent-rag-graph-faithful
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 1.0
+                                           :phrase 2.0
+                                           :metadata 0.2}
+                        :retrieve-top-k 300
+                        :rerank-candidate-k 100}
+    :builtin/rerank    {:top-k 40
+                        :context-top-k 40}}}
+
+  {:id "r8-widenet-parallel"
+   :skill-graph-id :builtin/agent-rag-graph-faithful
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 1.0
+                                           :phrase 2.0
+                                           :metadata 0.2}
+                        :retrieve-top-k 300
+                        :rerank-candidate-k 40
+                        :per-strategy-rerank? true
+                        :rerank-final-cap 40}
+    :builtin/rerank    {:top-k 40
+                        :context-top-k 40}}}]
+
+ :repeats 3
+ :max-clarification-rounds 2
+
+ :execution-scope
+ {:tenant "digdir"
+  :dataset-config-key "default"
+  :agent-id "builtin/agent-rag-agent"}
+
+ :question-filter {:grounding-modes #{:chunks+answer}}}

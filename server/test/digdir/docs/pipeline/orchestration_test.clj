@@ -1,6 +1,6 @@
 (ns digdir.docs.pipeline.orchestration-test
   "Tests for digdir.docs.pipeline.orchestration - Missionary flow patterns."
-  (:require [clojure.test :refer [deftest testing is are use-fixtures]]
+  (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [missionary.core :as m]
             [digdir.docs.pipeline.orchestration :as orch]
             [digdir.docs.pipeline.telemetry :as telemetry]))
