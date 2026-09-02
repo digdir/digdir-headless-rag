@@ -1,0 +1,31 @@
+{:id "auth",
+ :plane "control",
+ :name "Authentication & ABAC",
+ :note "Identity + authorization",
+ :icon "shield",
+ :color "#f1a46a",
+ :status "Cross-cutting",
+ :summary
+ "Authenticates users and API keys, then constrains every request to allowed resources.",
+ :description
+ "Browser users authenticate with JWT-backed cookies while integrations use scoped API keys. Attribute-based checks evaluate tenant, dataset, agent and skill-graph access before execution.",
+ :responsibilities
+ ["Issue and validate browser authentication cookies"
+  "Validate hashed API keys and normalize scopes"
+  "Enforce permission checks across configuration and runtime access"],
+ :files
+ ["server/src/digdir/auth/core.clj"
+  "server/src/digdir/config/permissions.clj"
+  "server/src/digdir/config/api_keys.clj"],
+ :input "JWT cookie or X-API-Key",
+ :output "Authorized principal + scopes",
+ :edges
+ [{:to "data",
+   :kind :call,
+   :target :call,
+   :label "Persisted keys, sessions and permissions",
+   :witness
+   {:file "server/src/digdir/auth/core.clj",
+    :requires digdir.data.db}}],
+ :keywords
+ "auth authentication authorization abac jwt cookie api key permission scopes security"}

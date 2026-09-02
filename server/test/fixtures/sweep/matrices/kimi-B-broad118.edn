@@ -1,0 +1,20 @@
+;; B — KIMI BROAD-SET GENERALIZATION (118 frontier goldens, deployed config,
+;; FIXED query-planner). Does the +0.090 ceiling-break hold beyond the 42-Q tuning
+;; set? Bare deployed arm (inherits the prod defaults: snippet-AB + corpus-aware-2hop +
+;; guard; NO qwen_n5 enrichment — that collection is 42-Q-specific and D4 showed it
+;; does not transfer to the broad set). Identical config to the running degraded-planner
+;; baseline (kimi-goldens.edn) EXCEPT N=3 and the planner now actually fires — so the
+;; pair (running N=1 broken-planner vs this N=3 fixed-planner) also isolates the planner fix.
+;; 1 config × 118 Q × N=3 = 354 runs, conc-48, judge? false.
+{:configs
+ [{:id "kimi-deployed"
+   :skill-graph-id :builtin/agent-rag-graph-bundled}]
+ :repeats 3
+ :judge? false
+ :order :interleaved
+ :concurrency 48
+ :max-clarification-rounds 1
+ :run-timeout-ms 3000000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :questions-path "test/fixtures/sweep/questions-website-goldens.edn"
+ :question-filter {:dataset :public-docs}}

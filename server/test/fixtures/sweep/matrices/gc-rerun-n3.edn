@@ -1,0 +1,18 @@
+;; Re-run of 25 golden-chunk-tuning queries (lifted into questions.edn) to
+;; confirm end-to-end performance. Marginal enrichment A/B (corpus-aware ON in
+;; both; enrichment is the only delta) × N=3 — consistent with the eval-sweep
+;; methodology. ~150 agent runs.
+;;   bb sweep test/fixtures/sweep/matrices/gc-rerun-n3.edn
+{:configs
+ [{:id "enrichment-off"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/query-planner {:enabled true :expansion-mode :corpus-aware-2hop}}}
+  {:id "enrichment-on"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/query-planner {:enabled true :expansion-mode :corpus-aware-2hop}
+                  :builtin/retrieval {:enrichment-types [:hypothetical-questions]}}}]
+ :repeats 3
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"gc-01-conditional-field-visibility" "gc-02-dialogporten-what-is" "gc-03-system-acts-for-company" "gc-04-notify-instead-of-polling" "gc-05-dropdown-options-code-list" "gc-06-send-official-letter-to-company" "gc-07-let-bought-software-act-for-my-company" "gc-08-let-my-bank-fetch-my-income-data" "gc-09-api-to-link-customers-to-accountant-integration" "gc-10-stop-a-program-from-accessing-my-company" "gc-11-create-a-consent-request-via-api" "gc-12-got-an-approval-request-but-cant-approve-it" "gc-13-validate-system-user-token-and-authorize-with-pdp" "gc-14-steps-to-start-sharing-data-with-consent" "gc-15-what-files-make-up-a-data-model" "gc-16-change-the-error-text-shown-to-users" "gc-17-auto-fill-name-and-address-from-registers" "gc-18-add-a-payment-step-to-the-process" "gc-19-let-users-attach-documents" "gc-20-configure-layout-sets-and-page-order" "gc-21-start-a-new-instance-via-api-with-prefill" "gc-22-which-test-logins-when-running-locally" "gc-23-what-info-government-stores-about-messages" "gc-24-group-related-letters-under-one-inbox-item" "gc-25-message-blocks-me-from-opening-attachment-or-button" }}}

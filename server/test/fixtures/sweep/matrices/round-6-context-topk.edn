@@ -1,0 +1,71 @@
+;; Round 6 — rerank output cap (context-top-k) on the Round-5 winner
+;;
+;; The recall plateau at 27.8% across Round 4 + Round 5 best cells
+;; is suspicious — same number, different mechanisms (merge-tuning
+;; vs skill-graph). Two possibilities:
+;;   (a) we're finding the right goldens; the agent loop has nothing
+;;       more to give without code changes (F4 / F6 from the
+;;       Arc A diagnostic).
+;;   (b) more goldens are in the workspace than recall@10 sees,
+;;       because the rerank output is capped at 10 and the recall
+;;       scorer only looks at what survives that cap.
+;;
+;; Earlier smoke tests showed bumping :context-top-k above 10 with
+;; default merge-tuning was a no-op (workspaces had ≤10 chunks anyway).
+;; But Round 4 stacked / Round 5 faithful both expand the workspace
+;; meaningfully (5-10 chunks pre-cap typically; sometimes 14). Round 6
+;; tests whether raising the output cap surfaces additional goldens.
+;;
+;; Hold all Round-5 winning params constant on r5-faithful base:
+;;   - skill-graph-id        :builtin/agent-rag-graph-faithful
+;;   - strategy-weights      {:content 0 :phrase 1 :metadata 0}
+;;   - strategy-contribution-caps {:phrase 5 :content 0 :metadata 0}
+;;   - retrieve-top-k        100
+;;   - rerank :top-k         20
+;;
+;; Vary only :context-top-k:
+;;   r6-ctop10 — current default (control; reproduces r5-faithful)
+;;   r6-ctop30 — 3x output cap; recall@20 / recall@30 become non-trivial
+;;
+;; If r6-ctop30 lifts recall@10 by some delta and recall@20 by a larger
+;; delta, we know F6 is real and the workspace contains usable signal
+;; the current output cap throws away.
+;;
+;; 2 × 18 × 3 = 108 runs ≈ 1h.
+
+{:configs
+ [{:id "r6-ctop10"
+   :skill-graph-id :builtin/agent-rag-graph-faithful
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 0.0
+                                           :phrase 1.0
+                                           :metadata 0.0}
+                        :strategy-contribution-caps {:phrase 5
+                                                     :content 0
+                                                     :metadata 0}
+                        :retrieve-top-k 100}
+    :builtin/rerank    {:top-k 20
+                        :context-top-k 10}}}
+
+  {:id "r6-ctop30"
+   :skill-graph-id :builtin/agent-rag-graph-faithful
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 0.0
+                                           :phrase 1.0
+                                           :metadata 0.0}
+                        :strategy-contribution-caps {:phrase 5
+                                                     :content 0
+                                                     :metadata 0}
+                        :retrieve-top-k 100}
+    :builtin/rerank    {:top-k 20
+                        :context-top-k 30}}}]
+
+ :repeats 3
+ :max-clarification-rounds 2
+
+ :execution-scope
+ {:tenant "digdir"
+  :dataset-config-key "default"
+  :agent-id "builtin/agent-rag-agent"}
+
+ :question-filter {:grounding-modes #{:chunks+answer}}}

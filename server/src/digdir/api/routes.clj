@@ -2,1532 +2,538 @@
   "RAG API endpoints and handlers for the headless API.
 
   This namespace provides:
-  - RAG query endpoint (/api/rag)
-  - Skills query endpoints (/api/skills/*)
+  - Skill execution (POST /api/skills/:id/execute)
   - Conversation management endpoints
   - API key management endpoints
   - User management endpoints
-  - API key authentication middleware"
+  - API key authentication middleware
+
+  RAG query traffic goes through the MCP endpoint (POST /api/mcp),
+  defined in digdir.api.routes.endpoints."
   (:require
-   [digdir.config.api-keys :as api-keys]
-   [digdir.auth.core :as auth]
-   [digdir.rag.core :as rag]
-   [digdir.config.permissions :as perms]
-   [digdir.pipeline.core :as pipeline]
-   [digdir.pipeline.collections :as collections]
-   [digdir.pipeline.skills.api :as skills-api]
-   [cheshire.core :as json]
-   [clojure.tools.logging :as log]
-   [clojure.string :as str]
-   [datahike.api :as d]
-   [digdir.data.db :as db]
-   [nano-id.core :refer [nano-id]]
-   [ring.util.response :as res]
-   [reitit.ring :as ring]
-   [digdir.config.accessor :as cfg]))
+   [digdir.api.context :as api-ctx]
+   [digdir.api.routes.handlers :as handlers]
+   [digdir.api.routes.conversations :as conversations]
+   [digdir.api.routes.datasets :as datasets]
+   [digdir.api.routes.endpoints.debug :as debug-handlers]
+   [digdir.api.routes.endpoints :as endpoints]
+   [digdir.api.util :as api-util]))
 
 ;; ===== Utilities =====
 
-(defn get-entity-by-id
-  "DEPRECATED: Get entity configuration by ID.
-   Delegates to cfg/get-entity which supports both DB mode and legacy EDN fallback.
-   Use get-pipeline-config instead for new code."
-  [entity-id]
-  (cfg/get-entity entity-id))
+(defn compact-map
+  "Remove keys with nil values from a map."
+  [m]
+  (api-util/compact-map m))
 
-(defn get-pipeline-config
-  "Get pipeline configuration by ID or construct from entity (backwards compat).
+(defn api-error-body
+  "Build a standardized error response body from an exception."
+  [e]
+  (api-util/api-error-body e))
 
-   Args:
-     pipeline-id - Pipeline ID in format tenant:env:pipeline-name, OR
-     entity-id - (Backwards compat) Entity ID to convert to pipeline config
-
-   Returns: Pipeline config map with all properties"
-  [id]
-  (if (and id (str/includes? id ":"))
-    ;; New format: pipeline-id (tenant:env:pipeline-name)
-    (let [parsed (pipeline/parse-pipeline-id id)
-          db @(db/get-conn)
-          master-key (cfg/get :services :config :master-key)]
-      (pipeline/get-pipeline db
-                             (:tenant parsed)
-                             (:environment parsed)
-                             (:pipeline-name parsed)
-                             master-key))
-    ;; Backwards compat: entity-id - convert to entity config
-    (get-entity-by-id id)))
-
-;; ===== RAG API Handler =====
-
-(defn api-rag-handler
-  "Handle RAG API requests. Expects JSON body with 'query' field.
-  Optional fields: conversation-id, model, rerank-top-k, context-top-k
-
-  Supports both pipeline-id (new) and entity-id (backwards compatibility)."
+(defn require-external-api-user-id!
+  "Extract the external user ID from the request or throw if missing."
   [ring-req]
-  (try
-    (let [;; Support both new pipeline-id and old entity-id for backwards compatibility
-          pipeline-id (or (get ring-req :api-key/pipeline-id)
-                          (get ring-req :api-key/entity-id))
-          body (slurp (:body ring-req))
-          params (json/parse-string body true)
+  (api-util/require-external-api-user-id! ring-req))
 
-          ;; Validate required parameters
-          user-query (:query params)
+(defn require-api-conversation-owner!
+  "Verify that the external user ID matches the conversation owner."
+  [conversation convo-id external-user-id]
+  (api-util/require-api-conversation-owner! conversation convo-id external-user-id))
 
-          _ (when-not user-query
-              (throw (ex-info "Missing required field: query" {:status 400})))
+(defn find-api-conversation!
+  "Find a conversation by ID and verify ownership."
+  [conn convo-id external-user-id]
+  (api-util/find-api-conversation! conn convo-id external-user-id))
 
-          _ (when-not pipeline-id
-              (throw (ex-info "API key missing pipeline or entity ID" {:status 401})))
+(defn camel->kebab-keyword
+  "Convert a camelCase string to a kebab-case keyword."
+  [k]
+  (api-util/camel->kebab-keyword k))
 
-          ;; Get pipeline configuration (works with both pipeline-id and entity-id)
-          config (get-pipeline-config pipeline-id)
+(defn normalize-request-key
+  "Normalize a request map key to kebab-case keyword."
+  [k]
+  (api-util/normalize-request-key k))
 
-          _ (when-not config
-              (throw (ex-info (str "Pipeline or entity not found: " pipeline-id) {:status 404})))
+(defn normalize-request-keys
+  "Deeply normalize map keys in a request body to kebab-case keywords."
+  [x]
+  (api-util/normalize-request-keys x))
 
-          ;; Build RAG pipeline parameters
-          convo-id (or (:conversation-id params) (nano-id))
-          selected-model (or (:model params) "gpt-4o-2024-11-20")
+(defn non-blank-value
+  "Returns v if it is a non-blank string, else nil."
+  [v]
+  (api-util/non-blank-value v))
 
-          ;; RAG params use 3-level precedence: API param > pipeline config > global default
-          ;; Pipeline config already includes global defaults via 8-level inheritance
-          rag-params {:conversation-id convo-id
-                     :entity-id pipeline-id  ; Keep for backwards compat in rag-pipeline
-                     :pipeline-id pipeline-id  ; New field
-                     :original_user_query user-query
-                     :translated_user_query user-query
-                     :user_query_language_name "Norwegian"
-                     :selected-model selected-model
-                     ;; Rerank parameters
-                     :rerankTopkChunks (or (:rerank-top-k params)
-                                           (:rerank-top-k config))
-                     :rerankMaxChunkLength (or (:rerank-max-chunk-length params)
-                                               (:rerank-max-chunk-length config))
-                     :rerankMaxLength (or (:rerank-max-length params)
-                                          (:rerank-max-total-length config))
-                     ;; Context parameters
-                     :contextTopkChunks (or (:context-top-k params)
-                                            (:context-top-k config))
-                     :contextMaxChunkLength (or (:context-max-chunk-length params)
-                                                (:context-max-chunk-length config))
-                     :maxContextLength (or (:max-context-length params)
-                                           (:context-max-total-length config))
-                     ;; Collection names
-                     :docsCollectionName (:docs-collection config)
-                     :chunksCollectionName (:chunks-collection config)
-                     :phrasesCollectionName (:phrases-collection config)
-                     ;; Prompts (use new kebab-case property names)
-                     :promptRagQueryRelax (:prompt-query-relax config)
-                     :promptRagGenerate (:prompt-rag-generate config)
-                     :phrase-gen-prompt (:phrase-gen-prompt config)
-                     ;; Streaming
-                     :stream_callback_msg1 nil
-                     :stream_callback_msg2 nil
-                     :streamCallbackFreqSec 2.0
-                     :maxResponseTokenCount nil}
+(defn param-value
+  "Extract a parameter value by either keyword or string key."
+  [params k]
+  (api-util/param-value params k))
 
-          ;; Execute RAG pipeline
-          conn (db/get-conn)
-          result (rag/rag-pipeline rag-params conn)
+(defn dataset-ref-key
+  "Returns a canonical string key for a dataset-ref."
+  [dataset-ref]
+  (api-ctx/dataset-ref-key dataset-ref))
 
-          ;; Extract relevant information from result
-          response-data {:answer (:english_answer result)
-                        :conversation-id convo-id
-                        :model selected-model
-                        :chunks-used (mapv (fn [chunk]
-                                            {:chunk-id (:chunk_id chunk)
-                                             :doc-title (get-in chunk [(keyword (:docsCollectionName config)) :title])
-                                             :doc-num (:doc_num chunk)
-                                             :content-markdown (:content_markdown chunk)})
-                                          (:chunks result))}]
+(defn public-dataset-scope
+  "Returns a public-safe version of a dataset scope."
+  [dataset-ref]
+  (api-ctx/public-dataset-scope dataset-ref))
 
-      (log/info "RAG API request successful" {:pipeline-id pipeline-id :conversation-id convo-id})
+(defn normalize-dataset-ref
+  "Normalize a dataset-ref map to use standardized keys."
+  [dataset-ref]
+  (api-ctx/normalize-dataset-ref dataset-ref))
 
-      (-> (res/response (json/generate-string response-data))
-          (res/status 200)
-          (res/content-type "application/json")))
+(defn request-dataset-ref
+  "Extract a dataset-ref from request parameters."
+  [params]
+  (api-ctx/request-dataset-ref params))
 
-    (catch clojure.lang.ExceptionInfo e
-      (let [data (ex-data e)
-            status (or (:status data) 500)]
-        (log/error e "RAG API request failed")
-        (-> (res/response
-              (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
+(defn request-explicit-dataset-ref
+  "Extract a dataset scope from request parameters, requiring explicit tenant and dataset-config-key."
+  [params]
+  (api-ctx/request-explicit-dataset-ref params))
 
-    (catch Exception e
-      (log/error e "Unexpected error in RAG API")
-      (-> (res/response
-            (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+(defn normalize-agent-ref
+  "Normalize an agent-ref map to use standardized keys."
+  [agent-ref]
+  (api-ctx/normalize-agent-ref agent-ref))
 
-;; ===== Retrieval-Only API Handler =====
+(defn normalize-agent-refs
+  "Normalize a collection of agent-ref maps."
+  [agent-refs]
+  (api-ctx/normalize-agent-refs agent-refs))
 
-(defn api-retrieve-handler
-  "Handle retrieval-only API requests. Returns ranked chunks without LLM generation.
-   Expects JSON body with 'query' field.
-   Optional fields: include_query_expansion (default true), top_k, filter
+(defn request-agent-id
+  "Extract an agent-id from request parameters."
+  [params]
+  (api-ctx/request-agent-id params))
 
-   Supports both pipeline-id (new) and entity-id (backwards compatibility)."
-  [ring-req]
-  (try
-    (let [;; Support both new pipeline-id and old entity-id for backwards compatibility
-          pipeline-id (or (get ring-req :api-key/pipeline-id)
-                          (get ring-req :api-key/entity-id))
-          body (slurp (:body ring-req))
-          params (json/parse-string body true)
+(defn normalize-dataset-scopes!
+  "Normalize a collection of dataset-scope maps."
+  [dataset-scopes]
+  (api-ctx/normalize-dataset-scopes! dataset-scopes))
 
-          ;; Validate required parameters
-          user-query (:query params)
-          _ (when-not user-query
-              (throw (ex-info "Missing required field: query" {:status 400})))
+(defn root-config-key-param
+  "Returns the expected parameter name for a given config root's tenant-config-key."
+  [root]
+  (api-ctx/root-config-key-param root))
 
-          _ (when-not pipeline-id
-              (throw (ex-info "API key missing pipeline or entity ID" {:status 401})))
+(defn normalize-allowed-config-key
+  "Normalize one allowed-config-key map."
+  [allowed-config-key]
+  (api-ctx/normalize-allowed-config-key allowed-config-key))
 
-          ;; Get pipeline configuration (works with both pipeline-id and entity-id)
-          config (get-pipeline-config pipeline-id)
-          _ (when-not config
-              (throw (ex-info (str "Pipeline or entity not found: " pipeline-id) {:status 404})))
+(defn normalize-allowed-config-keys!
+  "Normalize a collection of allowed-config-key maps."
+  [allowed-config-keys]
+  (api-ctx/normalize-allowed-config-keys! allowed-config-keys))
 
-          ;; Build retrieval params (subset of RAG params, no database needed)
-          retrieval-params {:entity-id pipeline-id  ; Keep for backwards compat
-                            :pipeline-id pipeline-id  ; New field
-                            :original_user_query user-query
-                            :translated_user_query user-query
-                            :include-query-expansion (get params :include_query_expansion true)
-                            :selected-model (or (:model params) "gpt-4o-2024-11-20")
+(defn request-config-key
+  "Extract a tenant-config-key for a root from request parameters."
+  [params root]
+  (api-ctx/request-config-key params root))
 
-                            ;; Rerank parameters
-                            :rerankTopkChunks (or (:top_k params)
-                                                  (:rerank-top-k config)
-                                                  20)
-                            :rerankMaxChunkLength (or (:rerank-max-chunk-length config) 4000)
-                            :rerankMaxLength (or (:rerank-max-total-length config) 32000)
+(defn require-request-config-key!
+  "Extract a tenant-config-key for a root from request parameters, or throw if missing."
+  [params root message]
+  (api-ctx/require-request-config-key! params root message))
 
-                            ;; Context parameters (for rerank-chunks compatibility)
-                            :contextTopkChunks (or (:top_k params)
-                                                   (:context-top-k config)
-                                                   10)
-                            :contextMaxChunkLength (or (:context-max-chunk-length config) 4000)
-                            :maxContextLength (or (:context-max-total-length config) 32000)
+(defn normalize-request-paths
+  "Normalize a list of paths from request parameters."
+  [params]
+  (api-util/normalize-request-paths params))
 
-                            ;; Collection names
-                            :docsCollectionName (:docs-collection config)
-                            :chunksCollectionName (:chunks-collection config)
-                            :phrasesCollectionName (:phrases-collection config)
+(defn resolve-request-config-node!
+  "Resolve a config node from request context and verify access."
+  [ring-req conn opts]
+  (api-ctx/resolve-request-config-node! ring-req conn opts))
 
-                            ;; Prompts
-                            :promptRagQueryRelax (:prompt-query-relax config)
-                            :phrase-gen-prompt (:phrase-gen-prompt config)
+(defn filter-dataset-scopes
+  "Filter dataset scopes against an allowed set."
+  [dataset-scopes allowed-dataset-scopes]
+  (api-ctx/filter-dataset-scopes dataset-scopes allowed-dataset-scopes))
 
-                            ;; Filter (optional)
-                            :filter-by (when-let [filter-input (:filter params)]
-                                         {:fields (mapv (fn [f]
-                                                          {:field (:field f)
-                                                           :selected-options (set (:selected_options f))
-                                                           :value-type (keyword (or (:value_type f) "string"))})
-                                                        (:fields filter-input))})}
+(defn available-dataset-scopes-for-error
+  "Build a helpful error message with available dataset scopes."
+  [effective-granted-scopes]
+  (api-ctx/available-dataset-scopes-for-error effective-granted-scopes))
 
-          ;; Execute retrieval pipeline (stateless - no database connection needed)
-          result (rag/retrieval-pipeline retrieval-params)
+(defn select-request-dataset-ref!
+  "Select a dataset-ref from request context, authorizing against API key grants."
+  ([ring-req params]
+   (api-ctx/select-request-dataset-ref! ring-req params))
+  ([ring-req params opts]
+   (api-ctx/select-request-dataset-ref! ring-req params opts)))
 
-          ;; Format response with rich metadata
-          docs-collection-kw (keyword (:docsCollectionName retrieval-params))
-          response-data {:chunks (mapv (fn [chunk]
-                                         {:chunk_id (:chunk_id chunk)
-                                          :content_markdown (:content_markdown chunk)
-                                          :metadata (rag/format-metadata-headers (:metadata chunk))
-                                          :metadata_raw (:metadata chunk)
-                                          :document {:doc_num (:doc_num chunk)
-                                                     :title (get-in chunk [docs-collection-kw :title])
-                                                     :url (get-in chunk [docs-collection-kw :url])}
-                                          :relevance {:rerank_position (:rerank-position chunk)
-                                                      :original_position (:original-index chunk)
-                                                      :normalized_score (:original-rank chunk)
-                                                      :search_types (mapv name (or (:search-types chunk) []))
-                                                      :hit_count (:hit-count chunk)}})
-                                       (:chunks result))
-                         :query_expansion {:enabled (:include-query-expansion retrieval-params)
-                                           :expanded_queries (or (:expanded-queries result) [])}
-                         :search_stats (:search-attribution result)}]
+(defn resolve-request-dataset-context!
+  "Resolve full dataset context (ref + config) from request parameters."
+  ([ring-req params]
+   (api-ctx/resolve-request-dataset-context! ring-req params))
+  ([ring-req params opts]
+   (api-ctx/resolve-request-dataset-context! ring-req params opts)))
 
-      (log/info "Retrieval API request successful"
-                {:entity-id pipeline-id
-                 :chunks-count (count (:chunks result))})
+(defn select-request-agent!
+  "Select an agent-id from request parameters, verifying authorization."
+  ([ring-req params]
+   (api-ctx/select-request-agent! ring-req params))
+  ([ring-req params opts]
+   (api-ctx/select-request-agent! ring-req params opts)))
 
-      (-> (res/response (json/generate-string response-data))
-          (res/status 200)
-          (res/content-type "application/json")))
+(defn load-agent!
+  "Load agent record from database."
+  [agent-id]
+  (api-ctx/load-agent! agent-id))
 
-    (catch clojure.lang.ExceptionInfo e
-      (let [data (ex-data e)
-            status (or (:status data) 500)]
-        (log/error e "Retrieval API request failed")
-        (-> (res/response (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
+(defn resolve-request-agent-policy!
+  "Resolve agent policy for the current request."
+  ([ring-req params]
+   (api-ctx/resolve-request-agent-policy! ring-req params))
+  ([ring-req params current-agent-id]
+   (api-ctx/resolve-request-agent-policy! ring-req params current-agent-id)))
 
-    (catch Exception e
-      (log/error e "Unexpected error in Retrieval API")
-      (-> (res/response (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+(defn validate-agent-refs!
+  "Verify that agent-refs exist in the database."
+  [agent-refs]
+  (api-ctx/validate-agent-refs! agent-refs))
+
+(defn require-api-key-scope!
+  "Verify that the current API key has the required scope."
+  [ring-req required-scope]
+  (api-util/require-api-key-scope! ring-req required-scope))
+
+(defn wrap-required-api-key-scope
+  "Middleware to require a specific API key scope."
+  [required-scope handler]
+  (api-util/wrap-required-api-key-scope required-scope handler))
+
+(defn normalize-pipeline-properties
+  "Normalize pipeline properties to kebab-case keywords."
+  [properties]
+  (api-util/normalize-pipeline-properties properties))
+
+;; build-rag-skill-params is re-exported for the Playground (see
+;; digdir.playground.core/build-playground-skill-params); it remains
+;; the canonical builder even though the HTTP /api/rag handler that
+;; shared it was retired in Phase 0.
+(defn build-rag-skill-params
+  "Build skill parameters for RAG workflows.
+
+   Two-arity preserves the legacy call shape; three-arity threads the
+   resolved agent's :skill-params between dataset config and per-call
+   params (highest wins: params > agent > config > defaults)."
+  ([config params]
+   (api-util/build-rag-skill-params config params))
+  ([config params agent-skill-params]
+   (api-util/build-rag-skill-params config params agent-skill-params)))
 
 ;; ===== API Key Management Handlers =====
 
 (defn create-api-key-handler
   "Create a new API key for the authenticated user"
   [ring-req]
-  (try
-    (let [user-id (:user/id ring-req)
-          body (slurp (:body ring-req))
-          params (json/parse-string body true)
-
-          name (:name params)
-          entity-id (:entity-id params)
-
-          _ (when-not name
-              (throw (ex-info "Missing required field: name" {:status 400})))
-          _ (when-not entity-id
-              (throw (ex-info "Missing required field: entity-id" {:status 400})))
-
-          ;; Verify entity exists
-          entity (get-entity-by-id entity-id)
-          _ (when-not entity
-              (throw (ex-info (str "Entity not found: " entity-id) {:status 404})))
-
-          ;; Generate and store API key
-          new-key (api-keys/generate-api-key)
-          conn (db/get-conn)
-          user-email (:user/email ring-req)
-          result (api-keys/store-api-key conn new-key name user-id
-                                         {:entities [entity-id]
-                                          :user-email user-email})]
-
-      (log/info "API key created" {:user-id user-id :api-key-id (:api-key-id result) :entity-id entity-id})
-
-      (-> (res/response
-            (json/generate-string
-              {:api-key-id (:api-key-id result)
-               :api-key (:api-key result)
-               :name name
-               :entity-id entity-id
-               :warning "This is the only time you will see this API key. Store it securely."}))
-          (res/status 201)
-          (res/content-type "application/json")))
-
-    (catch clojure.lang.ExceptionInfo e
-      (let [data (ex-data e)
-            status (or (:status data) 500)]
-        (log/error e "Failed to create API key")
-        (-> (res/response
-              (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Unexpected error creating API key")
-      (-> (res/response
-            (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (handlers/create-api-key-handler ring-req))
 
 (defn list-api-keys-handler
   "List all API keys for the authenticated user"
   [ring-req]
-  (try
-    (let [user-id (:user/id ring-req)
-          conn (db/get-conn)
-          keys (api-keys/list-api-keys conn user-id)]
-
-      (-> (res/response (json/generate-string {:api-keys keys}))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch Exception e
-      (log/error e "Failed to list API keys")
-      (-> (res/response
-            (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (handlers/list-api-keys-handler ring-req))
 
 (defn revoke-api-key-handler
   "Revoke an API key"
   [ring-req]
-  (try
-    (let [user-id (:user/id ring-req)
-          user-email (:user/email ring-req)
-          api-key-id (get-in ring-req [:path-params :key-id])
+  (handlers/revoke-api-key-handler ring-req))
 
-          _ (when-not api-key-id
-              (throw (ex-info "Missing API key ID" {:status 400})))
-
-          ;; Get key info to verify ownership
-          conn (db/get-conn)
-          key-info (api-keys/get-api-key-info conn api-key-id)
-
-          _ (when-not key-info
-              (throw (ex-info "API key not found" {:status 404})))
-
-          ;; Verify user owns this key
-          _ (when-not (= user-id (:api-key/created-by key-info))
-              (throw (ex-info "Unauthorized" {:status 403})))
-
-          ;; Revoke the key
-          _ (api-keys/revoke-api-key conn api-key-id
-                                     {:user-email user-email :user-id user-id})]
-
-      (log/info "API key revoked" {:user-id user-id :api-key-id api-key-id})
-
-      (-> (res/response (json/generate-string {:success true :message "API key revoked"}))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch clojure.lang.ExceptionInfo e
-      (let [data (ex-data e)
-            status (or (:status data) 500)]
-        (log/error e "Failed to revoke API key")
-        (-> (res/response
-              (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Unexpected error revoking API key")
-      (-> (res/response
-            (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+(defn update-api-key-allowed-config-keys-handler
+  "Replace the allowed config keys for an API key owned by the authenticated user."
+  [ring-req]
+  (handlers/update-api-key-allowed-config-keys-handler ring-req))
 
 ;; ===== Conversation Management Handlers =====
 
-(defn list-conversations-handler
-  "List conversations with pagination support. If X-User-Email header is provided, returns user's conversations; otherwise returns all conversations."
+(defn parse-page-params
+  "Extract page-size and page-index from ring request query params."
   [ring-req]
-  (try
-    (let [user-email (get-in ring-req [:headers "x-user-email"])
-          conn (db/get-conn)
-          db @conn
-          page-size (try (Integer/parseInt (get-in ring-req [:params "page_size"] "50"))
-                         (catch Exception _ 50))
-          page-index (try (Integer/parseInt (get-in ring-req [:params "page_index"] "0"))
-                          (catch Exception _ 0))
-          result (if user-email
-                   ;; User-specific conversations
-                   (do
-                     (when-not (d/entity db [:user/email user-email])
-                       (auth/create-new-user {:email user-email}))
-                     (let [user-id (:user/id (d/pull db '[:user/id] [:user/email user-email]))]
-                       (db/conversations-by-user-paginated db user-id page-size page-index)))
-                   ;; All users
-                   (db/conversations-paginated db page-size page-index))
-          response-data (mapv (fn [conv]
-                               {:id (:conversation/id conv)
-                                :topic (:conversation/topic conv)
-                                :entityId (:conversation/entity-id conv)
-                                :userId (:conversation/user-id conv)
-                                :folder (:conversation/folder conv)
-                                :created (:conversation/created conv)})
-                             (:conversations result))]
+  (conversations/parse-page-params ring-req))
 
-      (log/info "Listed conversations" {:user-email user-email :page-size page-size :page-index page-index :total (:total result)})
+(defn format-conversation-list-response
+  "Build a JSON Ring response from a paginated db result."
+  [result]
+  (conversations/format-conversation-list-response result))
 
-      (-> (res/response (json/generate-string {:conversations response-data
-                                                :total (:total result)
-                                                :pageSize (:page-size result)
-                                                :pageIndex (:page-index result)}))
-          (res/status 200)
-          (res/content-type "application/json")))
+(defn list-conversations-handler
+  "List conversations with pagination support for the caller-provided external API user id."
+  [ring-req]
+  (conversations/list-conversations-handler ring-req))
 
-    (catch Exception e
-      (log/error e "Failed to list conversations")
-      (-> (res/response (json/generate-string {:error "Failed to list conversations"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+(defn admin-list-conversations-handler
+  "List all conversations across all users with pagination (admin-only, JWT-authenticated)."
+  [ring-req]
+  (conversations/admin-list-conversations-handler ring-req))
 
 (defn create-conversation-handler
   "Create a new conversation"
   [ring-req]
-  (try
-    (let [user-email (get-in ring-req [:headers "x-user-email"])
-
-          _ (when-not user-email
-              (throw (ex-info "Missing X-User-Email header" {:status 400})))
-
-          ;; Ensure user exists, create if needed
-          conn (db/get-conn)
-          db @conn
-          _ (when-not (d/entity db [:user/email user-email])
-              (auth/create-new-user {:email user-email}))
-
-          user-id (:user/id (d/pull db '[:user/id] [:user/email user-email]))
-          entity-id (get ring-req :api-key/entity-id)
-          body (slurp (:body ring-req))
-          params (json/parse-string body true)
-
-          entity-config (get-entity-by-id entity-id)
-          filter-value (or (:filterValue params)
-                          (:default-filter-value entity-config))
-
-          result (db/transact-new-msg-thread conn entity-id user-id filter-value)
-          convo-id (:conversation-id result)
-
-          ;; Optionally update title if provided
-          _ (when-let [title (:title params)]
-              (db/rename-convo-topic conn convo-id title))
-
-          ;; Get the created conversation
-          conversation (db/conversation-by-id @conn convo-id)
-
-          response-data {:id (:conversation/id conversation)
-                        :topic (:conversation/topic conversation)
-                        :entityId (:conversation/entity-id conversation)
-                        :userId (:conversation/user-id conversation)
-                        :created (:conversation/created conversation)}]
-
-      (log/info "Created conversation" {:user-email user-email :conversation-id convo-id})
-
-      (-> (res/response (json/generate-string {:conversation response-data}))
-          (res/status 201)
-          (res/content-type "application/json")))
-
-    (catch Exception e
-      (log/error e "Failed to create conversation")
-      (-> (res/response (json/generate-string {:error "Failed to create conversation"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (conversations/create-conversation-handler ring-req))
 
 (defn get-conversation-handler
   "Get a specific conversation with its messages"
   [ring-req]
-  (try
-    (let [convo-id (get-in ring-req [:path-params :id])
-          conn (db/get-conn)
-          conversation (db/conversation-by-id @conn convo-id)
-
-          _ (when-not conversation
-              (throw (ex-info "Conversation not found" {:status 404})))
-
-          messages (db/fetch-convo-messages-mapped @conn convo-id)
-
-          response-data {:conversation {:id (:conversation/id conversation)
-                                        :topic (:conversation/topic conversation)
-                                        :entityId (:conversation/entity-id conversation)
-                                        :userId (:conversation/user-id conversation)
-                                        :created (:conversation/created conversation)}
-                        :messages (mapv (fn [msg]
-                                         {:id (:message/id msg)
-                                          :text (or (:message/text msg) "")
-                                          :role (some-> (:message/role msg) name)
-                                          :created (:message/created msg)
-                                          :filterValue (:message.filter/value msg)
-                                          :chunks (mapv (fn [chunk]
-                                                         {:chunkId (:chunk/chunk-id chunk)
-                                                          :docTitle (or (:chunk/doc-title chunk) "")
-                                                          :docNum (:chunk/doc-num chunk)
-                                                          :contentMarkdown (or (:chunk/content-markdown chunk) "")})
-                                                       (or (:message/chunks msg) []))})
-                                       messages)}]
-
-      (log/info "Retrieved conversation" {:conversation-id convo-id :message-count (count messages)})
-
-      (-> (res/response (json/generate-string response-data))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch clojure.lang.ExceptionInfo e
-      (let [status (or (:status (ex-data e)) 500)]
-        (log/error e "Failed to get conversation")
-        (-> (res/response (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Failed to get conversation")
-      (-> (res/response (json/generate-string {:error "Failed to get conversation"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (conversations/get-conversation-handler ring-req))
 
 (defn update-conversation-handler
-  "Update a conversation (rename, move to folder, etc.)"
+  "Update a conversation's topic or metadata"
   [ring-req]
-  (try
-    (let [convo-id (get-in ring-req [:path-params :id])
-          body (slurp (:body ring-req))
-          params (json/parse-string body true)
-          conn (db/get-conn)
-
-          ;; Update title if provided
-          _ (when-let [title (:title params)]
-              (db/rename-convo-topic conn convo-id title))
-
-          ;; Get updated conversation
-          conversation (db/conversation-by-id @conn convo-id)
-
-          response-data {:id (:conversation/id conversation)
-                        :topic (:conversation/topic conversation)
-                        :entityId (:conversation/entity-id conversation)
-                        :userId (:conversation/user-id conversation)
-                        :folder (:conversation/folder conversation)
-                        :created (:conversation/created conversation)}]
-
-      (log/info "Updated conversation" {:conversation-id convo-id})
-
-      (-> (res/response (json/generate-string {:conversation response-data}))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch Exception e
-      (log/error e "Failed to update conversation")
-      (-> (res/response (json/generate-string {:error "Failed to update conversation"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (conversations/update-conversation-handler ring-req))
 
 (defn delete-conversation-handler
   "Delete a conversation"
   [ring-req]
-  (try
-    (let [convo-id (get-in ring-req [:path-params :id])
-          conn (db/get-conn)
-          conversation (db/conversation-by-id @conn convo-id)
-
-          _ (when-not conversation
-              (throw (ex-info "Conversation not found" {:status 404})))
-
-          ;; Delete by entity ID
-          _ (db/delete-convo conn (:db/id conversation))]
-
-      (log/info "Deleted conversation" {:conversation-id convo-id})
-
-      (-> (res/response (json/generate-string {:success true}))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch clojure.lang.ExceptionInfo e
-      (let [status (or (:status (ex-data e)) 500)]
-        (log/error e "Failed to delete conversation")
-        (-> (res/response (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Failed to delete conversation")
-      (-> (res/response (json/generate-string {:error "Failed to delete conversation"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (conversations/delete-conversation-handler ring-req))
 
 ;; ===== User Management Handlers =====
 
 (defn list-users-handler
-  "List all users with their permissions (admin only)"
+  "List all users (admin only)"
   [ring-req]
-  (try
-    (let [conn (db/get-conn)
-          db @conn
-          users (d/q '[:find [(pull ?u [:user/id :user/email :user/created
-                                         {:user/permissions [:permission/id :permission/name]}]) ...]
-                       :where [?u :user/id]]
-                     db)
-          response-data (mapv (fn [user]
-                               {:id (:user/id user)
-                                :email (:user/email user)
-                                :created (:user/created user)
-                                :permissions (mapv (fn [p]
-                                                    {:id (:permission/id p)
-                                                     :name (:permission/name p)})
-                                                  (:user/permissions user))})
-                             users)]
-
-      (log/info "Listed users" {:count (count users)})
-
-      (-> (res/response (json/generate-string {:users response-data}))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch Exception e
-      (log/error e "Failed to list users")
-      (-> (res/response (json/generate-string {:error "Failed to list users"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (conversations/list-users-handler ring-req))
 
 (defn create-user-handler
   "Create a new user with initial permissions (admin only)"
   [ring-req]
-  (try
-    (let [admin-id (:user/id ring-req)
-          body (slurp (:body ring-req))
-          params (json/parse-string body true)
-
-          email (:email params)
-          permission-ids (or (:permissions params) [])
-
-          _ (when-not email
-              (throw (ex-info "Missing required field: email" {:status 400})))
-
-          ;; Create the user
-          conn (db/get-conn)
-          result (auth/create-new-user {:email email :creator-id admin-id})]
-
-      (if (:error result)
-        (throw (ex-info (:error result) {:status 409}))
-
-        (let [;; Get the newly created user
-              user (auth/user-by-email email)
-              user-id (:user/id user)
-
-              ;; Grant permissions
-              _ (doseq [perm-id permission-ids]
-                  (perms/grant-permission! conn user-id perm-id))
-
-              ;; Get updated user with permissions
-              db @conn
-              updated-user (d/q '[:find (pull ?u [:user/id :user/email :user/created
-                                                   {:user/permissions [:permission/id :permission/name]}]) .
-                                  :in $ ?user-id
-                                  :where [?u :user/id ?user-id]]
-                               db user-id)]
-
-          (log/info "Created user" {:email email :user-id user-id :permissions permission-ids})
-
-          (-> (res/response
-                (json/generate-string
-                  {:user {:id (:user/id updated-user)
-                          :email (:user/email updated-user)
-                          :created (:user/created updated-user)
-                          :permissions (mapv (fn [p]
-                                              {:id (:permission/id p)
-                                               :name (:permission/name p)})
-                                            (:user/permissions updated-user))}}))
-              (res/status 201)
-              (res/content-type "application/json")))))
-
-    (catch clojure.lang.ExceptionInfo e
-      (let [data (ex-data e)
-            status (or (:status data) 500)]
-        (log/error e "Failed to create user")
-        (-> (res/response (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Unexpected error creating user")
-      (-> (res/response (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (conversations/create-user-handler ring-req))
 
 (defn get-user-handler
   "Get a specific user with their permissions (admin only)"
   [ring-req]
-  (try
-    (let [user-id (get-in ring-req [:path-params :id])
-          conn (db/get-conn)
-          db @conn
-          user (d/q '[:find (pull ?u [:user/id :user/email :user/created
-                                       {:user/permissions [:permission/id :permission/name]}]) .
-                      :in $ ?user-id
-                      :where [?u :user/id ?user-id]]
-                   db user-id)]
-
-      (if user
-        (-> (res/response
-              (json/generate-string
-                {:user {:id (:user/id user)
-                        :email (:user/email user)
-                        :created (:user/created user)
-                        :permissions (mapv (fn [p]
-                                            {:id (:permission/id p)
-                                             :name (:permission/name p)})
-                                          (:user/permissions user))}}))
-            (res/status 200)
-            (res/content-type "application/json"))
-        (-> (res/response (json/generate-string {:error "User not found"}))
-            (res/status 404)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Failed to get user")
-      (-> (res/response (json/generate-string {:error "Failed to get user"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (conversations/get-user-handler ring-req))
 
 (defn update-user-permissions-handler
   "Update a user's permissions (admin only)"
   [ring-req]
-  (try
-    (let [user-id (get-in ring-req [:path-params :id])
-          body (slurp (:body ring-req))
-          params (json/parse-string body true)
-
-          permissions-to-add (:add params)
-          permissions-to-remove (:remove params)
-
-          conn (db/get-conn)
-          db @conn
-
-          ;; Verify user exists
-          user (d/q '[:find ?u .
-                      :in $ ?user-id
-                      :where [?u :user/id ?user-id]]
-                   db user-id)
-
-          _ (when-not user
-              (throw (ex-info "User not found" {:status 404})))
-
-          ;; Grant new permissions
-          _ (doseq [perm-id permissions-to-add]
-              (perms/grant-permission! conn user-id perm-id))
-
-          ;; Revoke permissions
-          _ (doseq [perm-id permissions-to-remove]
-              (perms/revoke-permission! conn user-id perm-id))
-
-          ;; Get updated user
-          updated-db @conn
-          updated-user (d/q '[:find (pull ?u [:user/id :user/email :user/created
-                                               {:user/permissions [:permission/id :permission/name]}]) .
-                              :in $ ?user-id
-                              :where [?u :user/id ?user-id]]
-                           updated-db user-id)]
-
-      (log/info "Updated user permissions" {:user-id user-id :added permissions-to-add :removed permissions-to-remove})
-
-      (-> (res/response
-            (json/generate-string
-              {:user {:id (:user/id updated-user)
-                      :email (:user/email updated-user)
-                      :created (:user/created updated-user)
-                      :permissions (mapv (fn [p]
-                                          {:id (:permission/id p)
-                                           :name (:permission/name p)})
-                                        (:user/permissions updated-user))}}))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch clojure.lang.ExceptionInfo e
-      (let [data (ex-data e)
-            status (or (:status data) 500)]
-        (log/error e "Failed to update user permissions")
-        (-> (res/response (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Unexpected error updating user permissions")
-      (-> (res/response (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (conversations/update-user-permissions-handler ring-req))
 
 (defn delete-user-handler
   "Delete a user (admin only)"
   [ring-req]
-  (try
-    (let [target-user-id (get-in ring-req [:path-params :id])
-          requesting-user-id (:user/id ring-req)
-
-          ;; Prevent self-deletion
-          _ (when (= target-user-id requesting-user-id)
-              (throw (ex-info "Cannot delete your own account" {:status 400})))
-
-          conn (db/get-conn)
-          db @conn
-
-          ;; Find user entity
-          user-eid (d/q '[:find ?u .
-                          :in $ ?user-id
-                          :where [?u :user/id ?user-id]]
-                       db target-user-id)
-
-          _ (when-not user-eid
-              (throw (ex-info "User not found" {:status 404})))
-
-          ;; Retract all user attributes
-          _ (d/transact conn {:tx-data [[:db/retractEntity user-eid]]})]
-
-      (log/info "Deleted user" {:user-id target-user-id :deleted-by requesting-user-id})
-
-      (-> (res/response (json/generate-string {:success true :message "User deleted"}))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch clojure.lang.ExceptionInfo e
-      (let [data (ex-data e)
-            status (or (:status data) 500)]
-        (log/error e "Failed to delete user")
-        (-> (res/response (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Unexpected error deleting user")
-      (-> (res/response (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (conversations/delete-user-handler ring-req))
 
 (defn list-permissions-handler
   "List all available permissions (admin only)"
   [ring-req]
-  (try
-    (let [conn (db/get-conn)
-          db @conn
-          permissions (perms/get-all-permissions db)
-          response-data (mapv (fn [p]
-                               {:id (:permission/id p)
-                                :name (:permission/name p)
-                                :description (:permission/description p)})
-                             permissions)]
+  (conversations/list-permissions-handler ring-req))
 
-      (-> (res/response (json/generate-string {:permissions response-data}))
-          (res/status 200)
-          (res/content-type "application/json")))
+;; ===== Dataset Materialization Handlers =====
 
-    (catch Exception e
-      (log/error e "Failed to list permissions")
-      (-> (res/response (json/generate-string {:error "Failed to list permissions"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+(defn authorize-config-request!
+  "Verify that the user is authorized to access the requested config node."
+  [ring-req conn path tenant action]
+  (datasets/authorize-config-request! ring-req conn path tenant action))
 
-;; ===== Pipeline Management Handlers =====
+(defn authorize-dataset-materialization-request!
+  "Verify that the user is authorized to materialize the requested dataset."
+  [ring-req conn opts]
+  (datasets/authorize-dataset-materialization-request! ring-req conn opts))
+
+(defn list-public-datasets-handler
+  "List the datasets visible to the current API key through dataset scopes."
+  [ring-req]
+  (datasets/list-public-datasets-handler ring-req))
+
+(defn get-public-dataset-handler
+  "Get one visible dataset."
+  [ring-req]
+  (datasets/get-public-dataset-handler ring-req))
+
+(defn list-config-nodes-handler
+  "List config nodes reachable through the API key's allowed config keys for a tenant/root."
+  [ring-req]
+  (datasets/list-config-nodes-handler ring-req))
+
+(defn resolve-runtime-config-handler
+  "Resolve runtime config explicitly against a tenant runtime config key."
+  [ring-req]
+  (datasets/resolve-runtime-config-handler ring-req))
+
+(defn resolve-dataset-config-handler
+  "Resolve dataset config explicitly against a tenant dataset config key."
+  [ring-req]
+  (datasets/resolve-dataset-config-handler ring-req))
+
+(defn dataset-materialization-record!
+  "Create or update a dataset materialization record."
+  [db dataset-id pipeline-id]
+  (datasets/dataset-materialization-record! db dataset-id pipeline-id))
+
+(defn required-console-materialization-context
+  "Verify that the console request has the required context for materialization."
+  [ring-req]
+  (datasets/required-console-materialization-context ring-req))
+
+(defn list-datasets-handler
+  "List durable parent datasets for the operator console."
+  [ring-req]
+  (datasets/list-datasets-handler ring-req))
+
+(defn get-dataset-handler
+  "Get a durable parent dataset and its child materialization pipeline summaries."
+  [ring-req]
+  (datasets/get-dataset-handler ring-req))
+
+(defn create-dataset-handler
+  "Create a durable parent dataset for operator workflows."
+  [ring-req]
+  (datasets/create-dataset-handler ring-req))
+
+(defn update-dataset-handler
+  "Update mutable attributes on a durable parent dataset."
+  [ring-req]
+  (datasets/update-dataset-handler ring-req))
 
 (defn list-pipelines-handler
-  "List all pipelines for a tenant/environment"
+  "List child materialization pipelines for a durable parent dataset."
   [ring-req]
-  (try
-    (let [tenant (get-in ring-req [:params "tenant"])
-          environment (get-in ring-req [:params "environment"])
-          conn (db/get-conn)
-          db @conn
-          master-key (cfg/get :services :config :master-key)
-          pipeline-names (pipeline/list-pipelines db tenant environment)
-
-          ;; Load full config for each pipeline
-          pipelines (mapv (fn [name]
-                           (pipeline/get-pipeline db tenant environment name master-key))
-                         pipeline-names)
-
-          response-data (mapv (fn [p]
-                               {:id (:id p)
-                                :name (:name p)
-                                :description (:description p)
-                                :sourceType (:source-type p)
-                                :tenant (:tenant p)
-                                :environment (:environment p)})
-                             pipelines)]
-
-      (-> (res/response (json/generate-string {:pipelines response-data}))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch Exception e
-      (log/error e "Failed to list pipelines")
-      (-> (res/response (json/generate-string {:error "Failed to list pipelines"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (datasets/list-pipelines-handler ring-req))
 
 (defn get-pipeline-handler
-  "Get a specific pipeline by ID"
+  "Get a specific child materialization pipeline under a dataset."
   [ring-req]
-  (try
-    (let [pipeline-id (get-in ring-req [:path-params :id])
-          parsed (pipeline/parse-pipeline-id pipeline-id)
-          conn (db/get-conn)
-          db @conn
-          master-key (cfg/get :services :config :master-key)
-          p (pipeline/get-pipeline db
-                                   (:tenant parsed)
-                                   (:environment parsed)
-                                   (:pipeline-name parsed)
-                                   master-key)]
-
-      (if p
-        (-> (res/response (json/generate-string {:pipeline p}))
-            (res/status 200)
-            (res/content-type "application/json"))
-        (-> (res/response (json/generate-string {:error "Pipeline not found"}))
-            (res/status 404)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Failed to get pipeline")
-      (-> (res/response (json/generate-string {:error "Failed to get pipeline"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (datasets/get-pipeline-handler ring-req))
 
 (defn create-pipeline-handler
-  "Create a new pipeline"
+  "Create a child materialization pipeline under an existing parent dataset."
   [ring-req]
-  (try
-    (let [user-email (get-in ring-req [:headers "x-user-email"])
-          _ (when-not user-email
-              (throw (ex-info "Missing X-User-Email header" {:status 400})))
-
-          body (slurp (:body ring-req))
-          params (json/parse-string body true)
-
-          tenant (:tenant params)
-          environment (:environment params)
-          pipeline-name (:pipelineName params)
-          properties (into {} (map (fn [[k v]] [(keyword k) v]) (:properties params)))
-
-          conn (db/get-conn)
-          master-key (cfg/get :services :config :master-key)
-
-          pipeline-id (pipeline/create-pipeline! conn
-                                                {:tenant tenant
-                                                 :environment environment
-                                                 :pipeline-name pipeline-name
-                                                 :properties properties
-                                                 :master-key master-key})]
-
-      (log/info "Created pipeline" {:pipeline-id pipeline-id :user user-email})
-
-      (-> (res/response (json/generate-string {:pipelineId pipeline-id}))
-          (res/status 201)
-          (res/content-type "application/json")))
-
-    (catch clojure.lang.ExceptionInfo e
-      (let [data (ex-data e)
-            status (or (:status data) 500)]
-        (log/error e "Failed to create pipeline")
-        (-> (res/response (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Unexpected error creating pipeline")
-      (-> (res/response (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (datasets/create-pipeline-handler ring-req))
 
 (defn update-pipeline-handler
-  "Update an existing pipeline"
+  "Update an existing child materialization pipeline."
   [ring-req]
-  (try
-    (let [user-email (get-in ring-req [:headers "x-user-email"])
-          _ (when-not user-email
-              (throw (ex-info "Missing X-User-Email header" {:status 400})))
-
-          pipeline-id (get-in ring-req [:path-params :id])
-          parsed (pipeline/parse-pipeline-id pipeline-id)
-
-          body (slurp (:body ring-req))
-          params (json/parse-string body true)
-          properties (into {} (map (fn [[k v]] [(keyword k) v]) (:properties params)))
-
-          conn (db/get-conn)
-          master-key (cfg/get :services :config :master-key)
-
-          _ (pipeline/update-pipeline! conn
-                                      {:tenant (:tenant parsed)
-                                       :environment (:environment parsed)
-                                       :pipeline-name (:pipeline-name parsed)
-                                       :properties properties
-                                       :master-key master-key})]
-
-      (log/info "Updated pipeline" {:pipeline-id pipeline-id :user user-email})
-
-      (-> (res/response (json/generate-string {:success true}))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch clojure.lang.ExceptionInfo e
-      (let [data (ex-data e)
-            status (or (:status data) 500)]
-        (log/error e "Failed to update pipeline")
-        (-> (res/response (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Unexpected error updating pipeline")
-      (-> (res/response (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (datasets/update-pipeline-handler ring-req))
 
 (defn delete-pipeline-handler
-  "Delete a pipeline"
+  "Delete a child materialization pipeline."
   [ring-req]
-  (try
-    (let [user-email (get-in ring-req [:headers "x-user-email"])
-          _ (when-not user-email
-              (throw (ex-info "Missing X-User-Email header" {:status 400})))
-
-          pipeline-id (get-in ring-req [:path-params :id])
-          parsed (pipeline/parse-pipeline-id pipeline-id)
-
-          conn (db/get-conn)
-          _ (pipeline/soft-delete-pipeline! conn
-                                           (:tenant parsed)
-                                           (:environment parsed)
-                                           (:pipeline-name parsed))]
-
-      (log/info "Deleted pipeline" {:pipeline-id pipeline-id :user user-email})
-
-      (-> (res/response (json/generate-string {:success true}))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch Exception e
-      (log/error e "Failed to delete pipeline")
-      (-> (res/response (json/generate-string {:error "Failed to delete pipeline"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (datasets/delete-pipeline-handler ring-req))
 
 (defn execute-pipeline-handler
-  "Execute a pipeline asynchronously"
+  "Execute a child materialization pipeline asynchronously."
   [ring-req]
-  (try
-    (let [user-email (get-in ring-req [:headers "x-user-email"])
-          _ (when-not user-email
-              (throw (ex-info "Missing X-User-Email header" {:status 400})))
-
-          pipeline-id (get-in ring-req [:path-params :id])
-          parsed (pipeline/parse-pipeline-id pipeline-id)
-
-          conn (db/get-conn)
-          master-key (cfg/get :services :config :master-key)
-
-          ;; Import executor namespace
-          _ (require 'digdir.pipeline.executor)
-          execute-fn (resolve 'digdir.pipeline.executor/execute-pipeline-async!)
-
-          execution-id (execute-fn conn
-                                   (:tenant parsed)
-                                   (:environment parsed)
-                                   (:pipeline-name parsed)
-                                   master-key
-                                   user-email)]
-
-      (log/info "Started pipeline execution" {:pipeline-id pipeline-id :execution-id execution-id :user user-email})
-
-      (-> (res/response (json/generate-string {:executionId execution-id}))
-          (res/status 202)
-          (res/content-type "application/json")))
-
-    (catch clojure.lang.ExceptionInfo e
-      (let [data (ex-data e)
-            status (or (:status data) 500)]
-        (log/error e "Failed to execute pipeline")
-        (-> (res/response (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Unexpected error executing pipeline")
-      (-> (res/response (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+  (datasets/execute-pipeline-handler ring-req))
 
 (defn list-executions-handler
-  "List executions for a pipeline"
+  "List executions for a child materialization pipeline."
   [ring-req]
-  (try
-    (let [pipeline-id (get-in ring-req [:path-params :id])
-          conn (db/get-conn)
-          db @conn
+  (datasets/list-executions-handler ring-req))
 
-          ;; Import executor namespace
-          _ (require 'digdir.pipeline.executor)
-          list-fn (resolve 'digdir.pipeline.executor/list-executions)
+;; ===== Debug Handlers =====
 
-          executions (list-fn db pipeline-id)
+(defn edn-response
+  "Helper to build an EDN Ring response."
+  [data status]
+  (debug-handlers/edn-response data status))
 
-          response-data (mapv (fn [e]
-                               {:id (:pipeline-execution/id e)
-                                :pipelineId (:pipeline-execution/pipeline-id e)
-                                :status (name (:pipeline-execution/status e))
-                                :startedAt (str (:pipeline-execution/started-at e))
-                                :completedAt (when-let [t (:pipeline-execution/completed-at e)] (str t))
-                                :documentsProcessed (:pipeline-execution/documents-processed e)
-                                :documentsFailed (:pipeline-execution/documents-failed e)
-                                :errorMessage (:pipeline-execution/error-message e)
-                                :startedBy (:pipeline-execution/started-by e)})
-                             executions)]
+(defn blank->nil
+  "Convert blank strings to nil."
+  [x]
+  (debug-handlers/blank->nil x))
 
-      (-> (res/response (json/generate-string {:executions response-data}))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch Exception e
-      (log/error e "Failed to list executions")
-      (-> (res/response (json/generate-string {:error "Failed to list executions"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
-
-;; ===== Skills API Handlers =====
-
-(defn list-skills-handler
-  "List all available skills with their metadata"
-  [_ring-req]
-  (try
-    (let [skills (skills-api/list-skills)
-          response-data {:skills (mapv (fn [skill]
-                                         {:id (name (:skill-id skill))
-                                          :name (:name skill)
-                                          :description (:description skill)
-                                          :category (name (:category skill))
-                                          :inputs (mapv name (:inputs skill))
-                                          :outputs (mapv name (:outputs skill))})
-                                       skills)}]
-      (-> (res/response (json/generate-string response-data))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch Exception e
-      (log/error e "Failed to list skills")
-      (-> (res/response (json/generate-string {:error "Failed to list skills"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
-
-(defn get-skill-handler
-  "Get information about a specific skill"
+(defn read-json-body
+  "Parse JSON request body into a map with keyword keys."
   [ring-req]
-  (try
-    (let [skill-id-str (get-in ring-req [:path-params :id])
-          skill-id (keyword "builtin" skill-id-str)
-          skill-info (skills-api/get-skill-info skill-id)]
+  (debug-handlers/read-json-body ring-req))
 
-      (if skill-info
-        (-> (res/response
-              (json/generate-string
-                {:skill {:id (name (:skill-id skill-info))
-                         :name (:name skill-info)
-                         :description (:description skill-info)
-                         :category (name (:category skill-info))
-                         :inputs (mapv name (:inputs skill-info))
-                         :outputs (mapv name (:outputs skill-info))
-                         :parameters (:parameters skill-info)}}))
-            (res/status 200)
-            (res/content-type "application/json"))
-        (-> (res/response (json/generate-string {:error "Skill not found"}))
-            (res/status 404)
-            (res/content-type "application/json"))))
+(defn param-presence
+  "Read param from either keyword or string key and report if it was provided."
+  [params k]
+  (debug-handlers/param-presence params k))
 
-    (catch Exception e
-      (log/error e "Failed to get skill")
-      (-> (res/response (json/generate-string {:error "Failed to get skill"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
+(defn explicit-param-or-default
+  "Use explicitly provided param value (including explicit nil via blank), else default."
+  [params k default]
+  (debug-handlers/explicit-param-or-default params k default))
+
+(defn debug-dataset-config-handler
+  "Debug endpoint equivalent to bb dataset-config."
+  [ring-req]
+  (debug-handlers/debug-dataset-config-handler ring-req))
+
+(defn debug-chunk-handler
+  "Debug endpoint equivalent to bb chunk."
+  [ring-req]
+  (debug-handlers/debug-chunk-handler ring-req))
+
+(defn debug-typesense-search-handler
+  "Debug endpoint equivalent to bb ts-search."
+  [ring-req]
+  (debug-handlers/debug-typesense-search-handler ring-req))
+
+(defn debug-typesense-get-handler
+  "Debug endpoint equivalent to bb ts-get."
+  [ring-req]
+  (debug-handlers/debug-typesense-get-handler ring-req))
+
+(defn debug-typesense-retrieve-handler
+  "Debug endpoint equivalent to bb ts-retrieve. Disabled unless
+   RAG_TS_RETRIEVE_ENABLED env var is truthy."
+  [ring-req]
+  (debug-handlers/debug-typesense-retrieve-handler ring-req))
+
+;; ===== Skill Execution Handler =====
 
 (defn execute-skill-handler
-  "Execute a skill by ID.
-   Expects JSON body with 'inputs' and optional 'parameters' fields."
+  "Execute a skill by ID."
   [ring-req]
-  (try
-    (let [pipeline-id (or (get ring-req :api-key/pipeline-id)
-                          (get ring-req :api-key/entity-id))
-          skill-id-str (get-in ring-req [:path-params :id])
-          skill-id (keyword "builtin" skill-id-str)
+  (endpoints/execute-skill-handler ring-req))
 
-          _ (when-not pipeline-id
-              (throw (ex-info "API key missing pipeline or entity ID" {:status 401})))
+;; execute-skill-graph-handler and execute-graph-handler removed in Phase 0
+;; alongside their /api/skill-graphs/:id/execute and /api/skill-graphs/execute
+;; routes. The MCP server (Phase 3) replaces them.
+;;
+;; The listing shims - list-skills-handler, get-skill-handler,
+;; get-skill-tools-handler, list-skill-graphs-handler, get-skill-graph-handler -
+;; went with their routes in #350. Execute is the only /api/skills verb left.
 
-          body (slurp (:body ring-req))
-          params (json/parse-string body true)
-
-          inputs (:inputs params)
-          _ (when-not inputs
-              (throw (ex-info "Missing required field: inputs" {:status 400})))
-
-          ;; Get pipeline configuration for context
-          config (get-pipeline-config pipeline-id)
-          _ (when-not config
-              (throw (ex-info (str "Pipeline or entity not found: " pipeline-id) {:status 404})))
-
-          ;; Build execution options
-          opts {:tenant (:tenant config)
-                :environment (:environment config)
-                :pipeline-config config
-                :parameters (:parameters params)}
-
-          ;; Execute the skill
-          result (skills-api/execute skill-id inputs opts)]
-
-      (log/info "Skill executed" {:skill-id skill-id :pipeline-id pipeline-id})
-
-      (if (:error result)
-        (-> (res/response (json/generate-string {:error (:error result)}))
-            (res/status 400)
-            (res/content-type "application/json"))
-        (-> (res/response (json/generate-string {:result result}))
-            (res/status 200)
-            (res/content-type "application/json"))))
-
-    (catch clojure.lang.ExceptionInfo e
-      (let [data (ex-data e)
-            status (or (:status data) 500)]
-        (log/error e "Skill execution failed")
-        (-> (res/response (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Unexpected error executing skill")
-      (-> (res/response (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
-
-(defn get-skill-tools-handler
-  "Get tool definitions for all skills (for agent invocation).
-   Returns OpenAI function calling compatible tool definitions."
-  [_ring-req]
-  (try
-    (let [tools (skills-api/get-all-tool-definitions)
-          response-data {:tools tools}]
-      (-> (res/response (json/generate-string response-data))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch Exception e
-      (log/error e "Failed to get skill tools")
-      (-> (res/response (json/generate-string {:error "Failed to get skill tools"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
-
-(defn list-templates-handler
-  "List all available templates"
-  [_ring-req]
-  (try
-    (let [templates (skills-api/list-templates)
-          response-data {:templates (mapv (fn [t]
-                                            {:id (name (:template-id t))
-                                             :name (:name t)
-                                             :description (:description t)})
-                                          templates)}]
-      (-> (res/response (json/generate-string response-data))
-          (res/status 200)
-          (res/content-type "application/json")))
-
-    (catch Exception e
-      (log/error e "Failed to list templates")
-      (-> (res/response (json/generate-string {:error "Failed to list templates"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
-
-(defn get-template-handler
-  "Get information about a specific template"
-  [ring-req]
-  (try
-    (let [template-id-str (get-in ring-req [:path-params :id])
-          template-id (keyword "builtin" template-id-str)
-          template-info (skills-api/get-template-info template-id)]
-
-      (if template-info
-        (-> (res/response (json/generate-string {:template template-info}))
-            (res/status 200)
-            (res/content-type "application/json"))
-        (-> (res/response (json/generate-string {:error "Template not found"}))
-            (res/status 404)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Failed to get template")
-      (-> (res/response (json/generate-string {:error "Failed to get template"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
-
-(defn execute-template-handler
-  "Execute a template by ID.
-   Expects JSON body with 'inputs' and optional 'overrides' fields."
-  [ring-req]
-  (try
-    (let [pipeline-id (or (get ring-req :api-key/pipeline-id)
-                          (get ring-req :api-key/entity-id))
-          template-id-str (get-in ring-req [:path-params :id])
-          template-id (keyword "builtin" template-id-str)
-
-          _ (when-not pipeline-id
-              (throw (ex-info "API key missing pipeline or entity ID" {:status 401})))
-
-          body (slurp (:body ring-req))
-          params (json/parse-string body true)
-
-          inputs (:inputs params)
-          _ (when-not inputs
-              (throw (ex-info "Missing required field: inputs" {:status 400})))
-
-          ;; Get pipeline configuration for context
-          config (get-pipeline-config pipeline-id)
-          _ (when-not config
-              (throw (ex-info (str "Pipeline or entity not found: " pipeline-id) {:status 404})))
-
-          ;; Build execution options
-          opts {:tenant (:tenant config)
-                :environment (:environment config)
-                :overrides (:overrides params)}
-
-          ;; Execute the template
-          result (skills-api/run-template template-id inputs opts)]
-
-      (log/info "Template executed" {:template-id template-id :pipeline-id pipeline-id})
-
-      (if (:error result)
-        (-> (res/response (json/generate-string {:error (:error result)}))
-            (res/status 400)
-            (res/content-type "application/json"))
-        (-> (res/response (json/generate-string {:result result}))
-            (res/status 200)
-            (res/content-type "application/json"))))
-
-    (catch clojure.lang.ExceptionInfo e
-      (let [data (ex-data e)
-            status (or (:status data) 500)]
-        (log/error e "Template execution failed")
-        (-> (res/response (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Unexpected error executing template")
-      (-> (res/response (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
-
-(defn execute-graph-handler
-  "Execute a custom skill graph.
-   Expects JSON body with 'graph' and 'inputs' fields."
-  [ring-req]
-  (try
-    (let [pipeline-id (or (get ring-req :api-key/pipeline-id)
-                          (get ring-req :api-key/entity-id))
-
-          _ (when-not pipeline-id
-              (throw (ex-info "API key missing pipeline or entity ID" {:status 401})))
-
-          body (slurp (:body ring-req))
-          params (json/parse-string body true)
-
-          graph (:graph params)
-          inputs (:inputs params)
-
-          _ (when-not graph
-              (throw (ex-info "Missing required field: graph" {:status 400})))
-          _ (when-not inputs
-              (throw (ex-info "Missing required field: inputs" {:status 400})))
-
-          ;; Get pipeline configuration for context
-          config (get-pipeline-config pipeline-id)
-          _ (when-not config
-              (throw (ex-info (str "Pipeline or entity not found: " pipeline-id) {:status 404})))
-
-          ;; Build execution options
-          opts {:tenant (:tenant config)
-                :environment (:environment config)
-                :pipeline-config config}
-
-          ;; Execute the graph
-          result (skills-api/run-graph graph inputs opts)]
-
-      (log/info "Graph executed" {:pipeline-id pipeline-id})
-
-      (if (:error result)
-        (-> (res/response (json/generate-string {:error (:error result)}))
-            (res/status 400)
-            (res/content-type "application/json"))
-        (-> (res/response (json/generate-string {:result result}))
-            (res/status 200)
-            (res/content-type "application/json"))))
-
-    (catch clojure.lang.ExceptionInfo e
-      (let [data (ex-data e)
-            status (or (:status data) 500)]
-        (log/error e "Graph execution failed")
-        (-> (res/response (json/generate-string {:error (.getMessage e)}))
-            (res/status status)
-            (res/content-type "application/json"))))
-
-    (catch Exception e
-      (log/error e "Unexpected error executing graph")
-      (-> (res/response (json/generate-string {:error "Internal server error"}))
-          (res/status 500)
-          (res/content-type "application/json")))))
-
-;; ===== Middleware =====
+;; ===== Auth Middleware =====
 
 (defn wrap-api-key-auth
   "Middleware to validate API key from X-API-Key header"
   [handler]
-  (fn [request]
-    (let [api-key (get-in request [:headers "x-api-key"])
-          conn (db/get-conn)]
-      (if-let [key-info (and api-key (api-keys/validate-api-key conn api-key))]
-        ;; Include both entity-id (backwards compat) and pipeline-id (new)
-        (handler (assoc request
-                       :api-key/entity-id (:entity-id key-info)
-                       :api-key/pipeline-id (:pipeline-id key-info)))
-        (-> (res/response (json/generate-string {:error "Invalid or missing API key"}))
-            (res/status 401)
-            (res/content-type "application/json"))))))
+  (endpoints/wrap-api-key-auth handler))
 
-;; ===== Router =====
+(defn debug-api-key-secret
+  "Get the secret for debug API key authentication."
+  []
+  (endpoints/debug-api-key-secret))
+
+(defn wrap-debug-api-key-auth
+  "Middleware to validate debug API key from X-Debug-Api-Key header."
+  [handler]
+  (endpoints/wrap-debug-api-key-auth handler))
+
+;; ===== Routes & Routers =====
 
 (def api-routes
-  "API route definitions for API-key authenticated endpoints"
-  [["/api"
-    ["/rag" {:post {:handler api-rag-handler}}]
-    ["/retrieve" {:post {:handler api-retrieve-handler}}]
-    ["/conversations" {:get {:handler list-conversations-handler}
-                       :post {:handler create-conversation-handler}}]
-    ["/conversations/:id" {:get {:handler get-conversation-handler}
-                           :put {:handler update-conversation-handler}
-                           :delete {:handler delete-conversation-handler}}]
-    ;; Skills API
-    ["/skills" {:get {:handler list-skills-handler}}
-     ["/tools" {:get {:handler get-skill-tools-handler}}]
-     ["/:id" {:get {:handler get-skill-handler}}
-      ["/execute" {:post {:handler execute-skill-handler}}]]]
-    ;; Templates API
-    ["/templates" {:get {:handler list-templates-handler}}
-     ["/:id" {:get {:handler get-template-handler}}
-      ["/execute" {:post {:handler execute-template-handler}}]]]
-    ;; Graph API
-    ["/graphs"
-     ["/execute" {:post {:handler execute-graph-handler}}]]]])
+  "Routing table for the headless RAG API."
+  endpoints/api-routes)
 
-(def api-key-routes
-  "API route definitions for JWT-authenticated API key management"
-  [["/config/api-keys" {:get {:handler list-api-keys-handler}
-                        :post {:handler create-api-key-handler}}]
-   ["/config/api-keys/:key-id/revoke" {:post {:handler revoke-api-key-handler}}]])
+(def debug-routes
+  "Routing table for debug endpoints."
+  endpoints/debug-routes)
 
-(def admin-routes
-  "API route definitions for JWT-authenticated admin operations (user management, permissions, pipelines)"
-  [["/api/users" {:get {:handler list-users-handler}
-                  :post {:handler create-user-handler}}]
-   ["/api/users/:id" {:get {:handler get-user-handler}
-                      :delete {:handler delete-user-handler}}]
-   ["/api/users/:id/permissions" {:put {:handler update-user-permissions-handler}}]
-   ["/api/permissions" {:get {:handler list-permissions-handler}}]
-   ["/api/pipelines" {:get {:handler list-pipelines-handler}
-                      :post {:handler create-pipeline-handler}}]
-   ["/api/pipelines/:id" {:get {:handler get-pipeline-handler}
-                          :put {:handler update-pipeline-handler}
-                          :delete {:handler delete-pipeline-handler}}]
-   ["/api/pipelines/:id/execute" {:post {:handler execute-pipeline-handler}}]
-   ["/api/pipelines/:id/executions" {:get {:handler list-executions-handler}}]])
-
-(defn- json-not-found [_]
-  (-> (res/not-found (json/generate-string {:error "API endpoint not found"}))
-      (res/content-type "application/json")))
+(def console-api-routes
+  "Routing table for the operator console API."
+  endpoints/console-api-routes)
 
 (def api-router
-  "Ring handler for /api/* endpoints that use API key authentication"
-  (ring/ring-handler
-   (ring/router api-routes)
-   json-not-found))
+  "Router for the headless RAG API."
+  endpoints/api-router)
 
-(def api-keys-router
-  "Ring handler for /api/keys/* endpoints that use JWT authentication"
-  (ring/ring-handler
-   (ring/router api-key-routes)
-   json-not-found))
+(def debug-router
+  "Router for debug endpoints."
+  endpoints/debug-router)
 
-(def admin-router
-  "Ring handler for admin endpoints that use JWT authentication (user management, etc.)"
-  (ring/ring-handler
-   (ring/router admin-routes)
-   json-not-found))
+(def console-api-router
+  "Router for the operator console API."
+  endpoints/console-api-router)

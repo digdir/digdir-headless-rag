@@ -1,0 +1,33 @@
+;; VALIDATION SWEEP for the frontier-generated website goldens (Plan 2 / D4).
+;; Runs all 118 new goldens (questions-website-goldens.edn) through the FULL agent
+;; loop, two arms:
+;;   "deployed"            = the production base config (bare; resolve-effective-configs
+;;                            inherits the deployed agent skill-params, i.e. snippet-AB +
+;;                            no-tool-call guard + rerank windowing — confirmed by the
+;;                            2026-06-12 audit). Enrichment OFF (production default).
+;;   "deployed+enrichment" = same base + the enrichment-HQ retrieval delta (the one proven
+;;                            lever NOT yet deployed). Measures its marginal value ON TOP of
+;;                            snippet-AB, on the new goldens -> informs the deploy decision.
+;; Purpose: (a) validate the goldens behave (golden-in-pool, judge sanity, no broken Qs),
+;; (b) measure enrichment transfer at corpus scale. N=1 across 118 Q = a strong directional
+;; read; judge? false (gpt-5.5 via bb sweep-judge after). conc-3, 1200s.
+{:configs
+ [{:id "deployed"
+   :skill-graph-id :builtin/agent-rag-graph-bundled}
+  {:id "deployed+enrichment"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}}}]
+ :repeats 1
+ :judge? false
+ :order :interleaved
+ :concurrency 3
+ :max-clarification-rounds 1
+ :run-timeout-ms 1200000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :questions-path "test/fixtures/sweep/questions-website-goldens.edn"
+ :question-filter {:dataset :public-docs}}

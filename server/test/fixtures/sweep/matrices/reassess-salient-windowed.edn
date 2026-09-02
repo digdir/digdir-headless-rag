@@ -1,0 +1,18 @@
+;; Reassessment #1: does salient-noun-coverage (CLOSED NEGATIVE) revive once the
+;; rerank-truncation cap is fixed? Both arms hold windowing@2000 ON; the only delta
+;; is salient-noun. Long-golden subset (21 >2000-char questions), N=5, recall signal
+;; (judge off). Treatment-baseline isolates salient's TRUE marginal effect with the
+;; reranker un-truncated. 2 x 21 x 5 = 210 runs, interleaved.
+{:configs
+ [{:id "window" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:rerank-windowing true :rerank-max-chunk-length 2000}}}
+  {:id "window+salient" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:rerank-windowing true :rerank-max-chunk-length 2000}
+                  :builtin/query-planner {:salient-noun-coverage true}}}]
+ :repeats 5
+ :judge? false
+ :order :interleaved
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-authz-01-delegere-tilgangspakke-api" "ue-authz-03-validere-samtykketoken" "ue-authz-05-xacml-policy-regelstruktur" "ue-authz-07-bruker-typer-authorization" "ue-broker-01-filoverforing-tilstander" "ue-broker-02-slette-tid-tilgjengelig" "ue-broker-05-filstorrelse-grenser-multi" "ue-corr-01-events-webhook-subscription" "ue-corr-02-transmission-group-dialog" "ue-corr-03-system-til-system-nedlasting" "ue-corr-04-notification-order-sms-window" "ue-dialog-01-aktivitetslogg" "ue-dialog-06-skrivehandlinger" "ue-events-01-abonnement-filtre" "ue-studio-01-skjul-felt-uttrykk" "ue-studio-02-pdf-service-task" "ue-studio-04-non-repeating-group" "ue-studio-05-tekstressurser-sprak" "ue-studio-06-options-kilder-kodeliste" "ue-studio-07-validering-uttrykk-fil" "ue-sys-02-systembrukertoken-pdp-autorisasjon"}}}

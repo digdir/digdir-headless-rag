@@ -1,0 +1,36 @@
+;; THE CANONICAL CONFIG STRUCTURE — the roots the config tree is built from.
+;;
+;; ⚠️ THIS IS THE STRUCTURE DEFINITION, NOT A SEED. It declares WHAT KINDS of
+;; config node may exist. It carries no config VALUES, no tenant, and no corpus.
+;; A separate importable seed — actual values, a demo tenant, a corpus — is a
+;; different and much larger artefact. If you are looking for something to
+;; populate a fresh database with, this is not it, and conflating the two is how
+;; a third copy of the roots arrives.
+;;
+;; WHY THIS FILE EXISTS. `digdir.config.db/config-roots` and
+;; `digdir.config.api-keys/valid-config-roots` were two private, independent,
+;; hand-written definitions of this set. They were identical, and they agreed by
+;; coincidence — nothing made them agree. Both now derive from here through
+;; `digdir.config.structure`, so agreement is structural rather than asserted.
+;;
+;; PROVENANCE — this was measured, not authored:
+;;   extracted 2026-09-01 from a COPY of the live store at
+;;   release-verify/server/local-db/dh_release_verify_v1 (inode 320431123),
+;;   copied rather than opened because opening a datahike store can write lock
+;;   and index files.
+;;
+;;   :config.node/root    :dataset 9   :platform 4   :runtime 5     = 18 of 18 nodes
+;;   :config-def/root     :dataset 32  :platform 41  :runtime 48    = 121 of 121 definitions
+;;
+;;   THE SUMS ARE THE EVIDENCE, not the distinct values. A distinct query
+;;   returning three is equally consistent with three roots existing, a fourth
+;;   living on rows the query did not reach, and rows carrying no root at all.
+;;   9+4+5=18 and 32+41+48=121 exclude all three at once — every node and every
+;;   definition carries one of these, and nothing carries anything else.
+;;
+;;   WHAT THAT DOES NOT ESTABLISH: this is one database from one worktree. It
+;;   shows the code and that tree agree. It does not show a fourth root can never
+;;   appear — and #436, where a fresh database cannot serve a login because no
+;;   setup path creates `__global__/:platform`, is evidence that the interesting
+;;   failures are about what is ABSENT rather than what is extra.
+{:roots [:platform :runtime :dataset]}

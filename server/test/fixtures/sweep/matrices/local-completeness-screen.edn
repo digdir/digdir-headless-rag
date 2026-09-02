@@ -1,0 +1,53 @@
+;; (a) ANSWER-COMPLETENESS SCREEN — does a synthesis completeness directive convert
+;; golden-read PARTIALS → correct, without inflating hallucination?
+;;
+;; Diagnosis: of golden-READ runs 58% partial / 39% correct; 85% of partials OMIT
+;; required detail (under-enumeration), NOT token truncation (length-finish?=0).
+;; control = deployed snippet-AB (:qwen-adapted-snippet); complete =
+;; :qwen-adapted-snippet-complete (= snippet prompt + GENERATE-step "enumerate ALL
+;; relevant items the read chunks contain; only what they support"). Both carry
+;; search-snippets + the (now-fixed) no-tool-call guard + enriched-HQ, set EXPLICITLY.
+;;
+;; 8-Q Sweep-1 subset × N=3 × 2 = 48 runs, conc 1, judge? false (gpt-5.5 via
+;; bb sweep-judge after; restore config). Run with the agent-run OPENAI_* env;
+;; caffeinate -dis -w <jvm>. PRIMARY: partial→correct conversion + effQ. GUARDRAIL:
+;; hallucinated/unsupported verdicts must NOT rise. CONFIRM any win at full-42
+;; (read-hi & matchq both flipped/were weak at 8-Q).
+{:configs
+ [{:id "snippet-AB"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true
+                     :no-tool-call-retry true}}}
+  {:id "snippet-AB+complete"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet-complete
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true
+                     :no-tool-call-retry true}}}]
+ :repeats 3
+ :judge? false
+ :order :interleaved
+ :concurrency 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-03-store-filer-virusskann"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-dialog-01-aktivitetslogg"
+                          "ue-events-01-abonnement-filtre"
+                          "ue-corr-02-transmission-group-dialog"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-sys-03-brukerstyrt-vs-leverandorstyrt"}}}

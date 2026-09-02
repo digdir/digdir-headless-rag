@@ -1,0 +1,83 @@
+;; Round 7 — F4 fix: auto-read top-K by merged rank
+;;
+;; The Arc A diagnostic identified F4: the agent's read-selection logic
+;; sometimes skips the merged-rank chunk that holds the golden, even when
+;; it's at rank 4. The intervention (implemented in agent/tools.clj this
+;; session): after each search, automatically read the top-K chunks by
+;; merged rank into workspace, regardless of what the LLM picks. Opt-in
+;; via `{:builtin/agent {:auto-read-top-k N}}` skill-params; default 0
+;; (off, current behaviour).
+;;
+;; A 1-repeat smoke showed K=3 misses the diagnostic's clean case
+;; (studio-create-user, golden at merged rank 4) and *hurt* it (auto-
+;; read of ranks 1-3 fed the agent enough context to stop exploring,
+;; so it never reached rank 4). K must be at least 5 to include the
+;; rank-4 case.
+;;
+;; Cells (4):
+;;   r7-k0  — :auto-read-top-k 0 (control; reproduces r5-faithful)
+;;   r7-k5  — :auto-read-top-k 5 (covers rank-4 + a bit of slack)
+;;   r7-k10 — :auto-read-top-k 10 (covers studio-datamodeling, broker-rest
+;;            cases at ranks 12-15 still excluded, but pushes deeper)
+;;   r7-k20 — :auto-read-top-k 20 (matches the rerank input cap; should
+;;            cover most cases the merge function returns at any depth)
+;;
+;; Base config = Round-5 winner: faithful + phrase-only weights + caps +
+;; retrieve-top-k=100 + rerank top-k=20. Holding all that constant so the
+;; only variable is K.
+;;
+;; 4 cells × 18 × 3 = 216 runs. Per-run cost should rise slightly with K
+;; (extra read calls), but the LLM-call count drops (agent converges
+;; faster with pre-read context), so net latency may be similar.
+;; Estimate ~2.5h wall-clock.
+;;
+;; Drive from REPL:
+;;   (digdir.sweep.runner/run-from-files
+;;     {:matrix-path "test/fixtures/sweep/matrices/round-7-f4-auto-read.edn"})
+
+{:configs
+ [{:id "r7-k0"
+   :skill-graph-id :builtin/agent-rag-graph-faithful
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 0.0 :phrase 1.0 :metadata 0.0}
+                        :strategy-contribution-caps {:phrase 5 :content 0 :metadata 0}
+                        :retrieve-top-k 100}
+    :builtin/rerank    {:top-k 20}
+    :builtin/agent     {:auto-read-top-k 0}}}
+
+  {:id "r7-k5"
+   :skill-graph-id :builtin/agent-rag-graph-faithful
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 0.0 :phrase 1.0 :metadata 0.0}
+                        :strategy-contribution-caps {:phrase 5 :content 0 :metadata 0}
+                        :retrieve-top-k 100}
+    :builtin/rerank    {:top-k 20}
+    :builtin/agent     {:auto-read-top-k 5}}}
+
+  {:id "r7-k10"
+   :skill-graph-id :builtin/agent-rag-graph-faithful
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 0.0 :phrase 1.0 :metadata 0.0}
+                        :strategy-contribution-caps {:phrase 5 :content 0 :metadata 0}
+                        :retrieve-top-k 100}
+    :builtin/rerank    {:top-k 20}
+    :builtin/agent     {:auto-read-top-k 10}}}
+
+  {:id "r7-k20"
+   :skill-graph-id :builtin/agent-rag-graph-faithful
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 0.0 :phrase 1.0 :metadata 0.0}
+                        :strategy-contribution-caps {:phrase 5 :content 0 :metadata 0}
+                        :retrieve-top-k 100}
+    :builtin/rerank    {:top-k 20}
+    :builtin/agent     {:auto-read-top-k 20}}}]
+
+ :repeats 3
+ :max-clarification-rounds 2
+
+ :execution-scope
+ {:tenant "digdir"
+  :dataset-config-key "default"
+  :agent-id "builtin/agent-rag-agent"}
+
+ :question-filter {:grounding-modes #{:chunks+answer}}}

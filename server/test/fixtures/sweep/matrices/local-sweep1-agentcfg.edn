@@ -1,0 +1,51 @@
+;; LOCAL Sweep-1 — confirm the agent config before the full-42 A/B.
+;;
+;; Plan: plans/in-progress/local-model-metadata-and-config-sweep.md (Test phase 3).
+;; 2×2 factorial: {prompt: default vs qwen-adapted} × {context-budget: default vs reduced},
+;; everything else FIXED. 8 diverse questions (broker/studio/authz/dialog/events/
+;; corr/api/sys), N=1.
+;;
+;; Agent  = LOCAL Qwen3.6 MTP (thinking + preserve_thinking), azure-off. Load the
+;;          remote model and export the agent-run OPENAI_* env (see plan runbook)
+;;          before running.
+;; Judge  = SEPARATE cloud pass. This matrix sets :judge? false; after the sweep,
+;;          flip the config azure-on and run `bb sweep-judge <sweep-dir>` (gpt-5.5).
+;; Budget = "default" leaves rerank context at production; "reduced" cuts the number
+;;          and total length of chunks fed to the agent (prefill = the dominant local
+;;          cost) WITHOUT shrinking per-chunk length (that would re-introduce the
+;;          rerank-truncation bottleneck — see memory project_rerank_truncation_bottleneck).
+;;
+;; concurrency 2 matches the model load (`--parallel 2`); GGUF batches ~2× for big
+;; prefills (Findings Q1b). 32 runs total.
+{:configs
+ [{:id "default-prompt+default-budget"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :default
+   :skill-params {}}
+  {:id "adapted-prompt+default-budget"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted
+   :skill-params {}}
+  {:id "default-prompt+reduced-budget"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :default
+   :skill-params #:builtin{:rerank {:context-top-k 6 :max-context-length 5000}}}
+  {:id "adapted-prompt+reduced-budget"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted
+   :skill-params #:builtin{:rerank {:context-top-k 6 :max-context-length 5000}}}]
+ :repeats 1
+ :judge? false
+ :order :interleaved
+ :concurrency 2
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-03-store-filer-virusskann"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-dialog-01-aktivitetslogg"
+                          "ue-events-01-abonnement-filtre"
+                          "ue-corr-02-transmission-group-dialog"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-sys-03-brukerstyrt-vs-leverandorstyrt"}}}

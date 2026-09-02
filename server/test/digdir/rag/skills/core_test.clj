@@ -1,6 +1,8 @@
 (ns digdir.rag.skills.core-test
   "Tests for skill core protocol and abstractions"
-  (:require [clojure.test :refer [deftest testing is]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest testing is]]
+            [malli.core :as m]
             [digdir.rag.skills.core :as skill-core]))
 
 (deftest test-skill-metadata-validation
@@ -86,11 +88,33 @@
 
   (testing "Missing required input returns error"
     (let [metadata {:inputs [:user-query :conversation-history]}
-          input-data {:user-query "test"}]
-      (let [error (skill-core/check-required-inputs metadata input-data)]
-        (is (some? error))
-        (is (= :missing-inputs (:error-type error)))
-        (is (= [:conversation-history] (:missing (:error-data error))))))))
+          input-data {:user-query "test"}
+          error (skill-core/check-required-inputs metadata input-data)]
+      (is (some? error))
+      (is (= :missing-inputs (:error-type error)))
+      (is (= [:conversation-history] (:missing (:error-data error))))))
+
+  (testing "Input listed in :optional-inputs is not required when absent"
+    (let [metadata {:inputs [:query :user-intent]
+                    :optional-inputs [:user-intent]}
+          input-data {:query "test"}]
+      (is (nil? (skill-core/check-required-inputs metadata input-data))
+          "absent optional input must not error")))
+
+  (testing "Optional input is still validated as present when supplied (no false missing)"
+    (let [metadata {:inputs [:query :user-intent]
+                    :optional-inputs [:user-intent]}
+          input-data {:query "test" :user-intent "find roles"}]
+      (is (nil? (skill-core/check-required-inputs metadata input-data)))))
+
+  (testing "A non-optional missing input still errors even when an optional one is also absent"
+    (let [metadata {:inputs [:query :conversation-history :user-intent]
+                    :optional-inputs [:user-intent]}
+          input-data {:query "test"}
+          error (skill-core/check-required-inputs metadata input-data)]
+      (is (some? error))
+      (is (= [:conversation-history] (:missing (:error-data error)))
+          ":user-intent must be excluded from :missing"))))
 
 (deftest test-check-required-services
   (testing "All required services present returns nil"
@@ -102,11 +126,11 @@
 
   (testing "Missing required service returns error"
     (let [metadata {:required-services #{:azure-openai :typesense}}
-          services {:azure-openai {:client "..."}}]
-      (let [error (skill-core/check-required-services metadata services)]
-        (is (some? error))
-        (is (= :missing-services (:error-type error)))
-        (is (= [:typesense] (:missing (:error-data error))))))))
+          services {:azure-openai {:client "..."}}
+          error (skill-core/check-required-services metadata services)]
+      (is (some? error))
+      (is (= :missing-services (:error-type error)))
+      (is (= [:typesense] (:missing (:error-data error)))))))
 
 (deftest test-skill-metadata-helpers
   (let [metadata {:skill-id :query-expansion/llm-v1
@@ -192,3 +216,28 @@
     (is (contains? skill-core/parameter-types :string))
     (is (contains? skill-core/parameter-types :number))
     (is (contains? skill-core/parameter-types :edn))))
+
+(deftest test-canonical-io-registry
+  (testing "Registry contains all standard I/O concepts"
+    (is (map? skill-core/canonical-io-registry))
+    (is (every? #(contains? skill-core/canonical-io-registry %)
+                [:query :queries :search-phrases :chunks :reranked-chunks
+                 :context-docs :response :search-attribution :citations
+                 :conversation-history])))
+
+  (testing "Schemas validate correct data"
+    (is (m/validate skill-core/Query "hello"))
+    (is (m/validate skill-core/Queries ["hello" "world"]))
+    (is (m/validate skill-core/Chunks [{:chunk_id "c1"}]))
+    (is (m/validate skill-core/Response "An answer."))
+    (is (m/validate skill-core/Citations [{:chunk_id "c1" :text "ref"}]))
+    (is (m/validate skill-core/ConversationHistory
+                    [{:role "user" :content "hi"}
+                     {:role "assistant" :content "hello"}])))
+
+  (testing "Schemas reject invalid data"
+    (is (not (m/validate skill-core/Query "")))
+    (is (not (m/validate skill-core/Queries [])))
+    (is (not (m/validate skill-core/Chunks [{:no-chunk-id true}])))
+    (is (not (m/validate skill-core/ConversationHistory
+                         [{:role "invalid" :content "hi"}])))))

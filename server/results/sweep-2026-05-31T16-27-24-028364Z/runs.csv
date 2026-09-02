@@ -1,0 +1,1590 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,recall-at-5,recall-at-10,recall-at-20,citation-recall,golden-in-search-pool?,golden-in-display?,golden-read?,search-passes,insufficiency-fired?,refinement-corpus-grounded?,enrichment-hits,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,cached-tokens,llm-calls,steps-executed,response,error
+e9436792-b6a3-4438-89b0-82f146ddaa02,2026-05-31T16:27:42.328063Z,enrichment-off,gc-01-conditional-field-visibility,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,2,false,true,0,4,4,2,121c6cd3f2b4;56c322502a25;dbed56c98d89;6221dfa7179c,121c6cd3f2b4;56c322502a25;dbed56c98d89;6221dfa7179c,46573caa8ca8;55885dbe10b6,18165,6117,362,6479,0,3,3,"Use a **dynamic expression** / **logic rule** to control the field’s **show/hide** behavior in Altinn App. These expressions can define whether a form field should be shown or hidden, and they are available in Altinn 3 apps with frontend version **3.54.0 or later**. [1]
+
+In Altinn Studio, this is called **logic** and you add it as a **Regler for vis/skjul felt** rule. You configure:
+
+1. the **input** field(s) from the data model,  
+2. the **component(s)** that should be affected, and  
+3. the rule/function so the target field is shown only when the other field has the value you want. [2][4]
+
+You can do this either:
+- directly in **Altinn Studio** under `App/ui/form/RuleHandler.js`, or
+- locally in the same `RuleHandler.js` file. [3]
+
+If you are using the newer expression-based approach, th…",
+2d0ea75d-42d6-4977-bba4-3820ef89dbc1,2026-05-31T16:27:56.333658Z,enrichment-off,gc-01-conditional-field-visibility,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,0,5,3,2,121c6cd3f2b4;dbed56c98d89;c5bd9cda2f82;bcf5f1f5310f;27233a56ca70,121c6cd3f2b4;dbed56c98d89;c5bd9cda2f82,46573caa8ca8;55885dbe10b6,14003,4535,372,4907,0,3,3,"Use **dynamic expressions** or the older **RuleHandler.js**-based dynamics to control whether a field is shown or hidden in an Altinn 3 app [1][2].
+
+The recommended approach is to use **dynamic expressions**, which can define whether a form field should be **shown or hidden** based on form values [1]. These expressions are supported in apps using frontend version **3.54.0 or later** [1].
+
+If you are using the older JavaScript-based dynamics, you can add a function in `App/ui/form/RuleHandler.js` that checks the other field’s value, and then configure the rule in Altinn Studio [2][3]. The source example shows a radio button with `""Yes""` / `""No""` where one function returns `true` when the value is `""Yes""` and another returns `true` when it is not `""Yes""` [3].
+
+In short:  
+- **Dynamic express…",
+4b61bd80-cd1a-4de0-95a4-8ecd9cda948f,2026-05-31T16:28:12.443128Z,enrichment-off,gc-01-conditional-field-visibility,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,false,false,2,false,true,0,5,5,2,121c6cd3f2b4;56c322502a25;3a829e0e9b1c;bcf5f1f5310f;dbed56c98d89,121c6cd3f2b4;56c322502a25;3a829e0e9b1c;bcf5f1f5310f;dbed56c98d89,46573caa8ca8;55885dbe10b6,16108,6287,377,6664,0,3,3,"Use a **dynamic expression** / **logic rule** to control the field’s visibility. In Altinn, these expressions can define whether a form field should be **shown or hidden** based on another field’s value [1][2].
+
+If you want the field to appear only when another field has a certain value, you typically set the target field’s **show/hide** property to an expression that checks the other field [1][2]. In Altinn Studio, this is called **logic** and the expression is attached to the relevant component field [2].
+
+You can do this in two main ways:
+
+- **In Altinn Studio** by adding a logic rule / expression in the app repository [3][5].
+- **In `RuleHandler.js`** if you are using javascript-based dynamics, where show/hide rules are defined as JavaScript functions [5].
+
+If you are using the newer e…",
+2ab90ba5-daac-4979-a462-1052209262ae,2026-05-31T16:28:27.716797Z,enrichment-off,gc-02-dialogporten-what-is,0,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,0,7,5,3,66335015006e;ea7de904e1aa;f3899e00b3c2;8276b4fa40a8;6d7dbdb4fddc;0f76a4965326;4a9ad6cd2bd1,66335015006e;ea7de904e1aa;f3899e00b3c2;6d7dbdb4fddc;0f76a4965326,d4528782a4c8;d1b16e295b68;f3899e00b3c2,15273,4260,384,4644,0,3,3,"Dialogporten is a **common API and metadata state store for digital dialogs** [2]. In practice, it is meant to make **secure and efficient communication** between public service platforms like **Altinn** and users easier by providing a **standardized way to handle digital dialogs and messages** [2].
+
+What it does, more concretely:
+- It makes messages and dialogs from **Altinn 3 and other digital service platforms** available to end-user systems in a **common format** [1].
+- It manages the **metadata** associated with those dialogs so different systems can work together more easily [2].
+- It supports both **end-user API** and **service-owner API** use cases, including **REST** and **GraphQL** for the end-user API, and **REST search** for the service-owner API [4][5].
+- For Altinn Apps, it c…",
+10690176-34fd-4321-a5ee-1047a68fc787,2026-05-31T16:28:41.948363Z,enrichment-off,gc-02-dialogporten-what-is,1,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,0,7,6,3,66335015006e;ea7de904e1aa;d4528782a4c8;20391f3e6ac4;1a65d1130939;d67af305d6ff;0f76a4965326,66335015006e;ea7de904e1aa;d4528782a4c8;20391f3e6ac4;1a65d1130939;d67af305d6ff,d4528782a4c8;d1b16e295b68;f3899e00b3c2,14224,4262,373,4635,0,3,3,"Dialogporten is a **common API and metadata state store for digital dialogs** [2]. In practical terms, it provides a **standardized way to handle digital dialogs and messages** between public service platforms like Altinn and users, with a focus on **secure and efficient communication** [2].
+
+What it does, based on the sources:
+- It makes messages and dialogs from **Altinn 3 and other digital service platforms** accessible to end-user systems in a **common format** [1].
+- It provides a common **“dialog” meta-representation** of interactive digital dialog services, regardless of platform [3].
+- It is integrated with **Altinn Authorization, Maskinporten, and ID-porten** for trust and security [3].
+- It includes **“Arbeidsflate”**, a web-based GUI frontend that replaces **“Altinn innboks”** […",
+a600db4e-eda2-4ad3-9315-cb3a71136e7f,2026-05-31T16:28:56.289245Z,enrichment-off,gc-02-dialogporten-what-is,2,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,false,false,2,false,true,0,6,4,3,66335015006e;ea7de904e1aa;a233d1c22ebe;c8a40bf7035a;0f76a4965326;4a9ad6cd2bd1,66335015006e;ea7de904e1aa;a233d1c22ebe;c8a40bf7035a,d4528782a4c8;d1b16e295b68;f3899e00b3c2,14339,6134,402,6536,0,3,3,"Dialogporten is a **common API and metadata state store for digital dialogs** [2]. In practical terms, it is a solution that makes messages and dialogs from **Altinn 3 and other digital service platforms** accessible to end-user systems in a **common format** [1].
+
+What it actually does is:
+- **Represents a digital service instance as a “dialog”** [3].
+- Stores key metadata about that dialog, such as the **sender**, **recipient**, and a reference to the relevant **service definition in Altinn Resource Registry** [3].
+- Includes user-facing content like a **title**, **short summary text**, and **activity history** showing actions and state changes over time [3].
+- **Publishes events** when dialogs change, including creation, updates, transmissions, and activities, so other systems can react…",
+5af98a3c-cd44-4195-818e-3e28de304b40,2026-05-31T16:29:11.673190Z,enrichment-off,gc-03-system-acts-for-company,0,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,2,false,true,0,6,3,3,7dddbc3051e8;ac59b367d616;fd72a28afd94;26eabb350bcb;8ab383fc52aa;e91ae6feb41d,7dddbc3051e8;ac59b367d616;e91ae6feb41d,050fbe324462;6f4a1ef342c8;e6f7545a1adc,15382,6389,415,6804,0,3,3,"An accounting program can submit data to Altinn by using a **System User** setup in **Altinn Authorization** with **Maskinporten** authentication, so the program can act on behalf of the company without a person logging in each time. [1][2][3]
+
+In practice, the vendor registers the accounting program as a **System** in the **System Registry**, including the rights it needs and the **Maskinporten client ID** it will use. [1][3] Then a **System User** is created for the company, and the required rights are delegated to that System User. [1][3] After that, the program can use the System User token to call Altinn APIs and submit data on behalf of the organization. [2][3]
+
+So the closest source term to your question is: **System User + Maskinporten + System Registry**. [1][2][3]
+
+",
+598e3d9e-c85b-4213-80dd-3cc05bc488ad,2026-05-31T16:29:26.569464Z,enrichment-off,gc-03-system-acts-for-company,1,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,2,false,true,0,8,4,3,050fbe324462;1fa6dcfbd7fb;a9606ba0b9c9;6be6764fadc0;65ff54a13f8d;e60cd5119f0d;e86a94847ee8;33c85fc05357,050fbe324462;1fa6dcfbd7fb;a9606ba0b9c9;65ff54a13f8d,050fbe324462;6f4a1ef342c8;e6f7545a1adc,14896,6275,417,6692,0,3,3,"An accounting program can submit data without a person logging in each time by using a **system user** in Altinn. A system user is a virtual user that lets systems and software, such as an accounting program, retrieve and submit data on behalf of the organization, and actions are registered as done by the system user rather than a specific person. [1]
+
+In the accounting scenario, the accountant/client first delegates the necessary rights in Altinn, the client administrator links the client to the system user, the system user retrieves a token from **Maskinporten**, and then the end-user system submits the report via API. [2][3]
+
+One important limitation is that Altinn does **not** control which employees inside the accounting program may use the system user; that access control must be han…",
+d9ae8f16-9c36-4169-9943-113204f8471b,2026-05-31T16:29:40.205873Z,enrichment-off,gc-03-system-acts-for-company,2,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.6666666666666666,true,true,true,1,false,,0,6,3,3,e6f7545a1adc;050fbe324462;fffd1547fdeb;b829d1995ab7;1cac2d1c116d;386a7efbc9c7,e6f7545a1adc;050fbe324462;fffd1547fdeb,050fbe324462;6f4a1ef342c8;e6f7545a1adc,13634,4363,439,4802,0,3,3,"An accounting program can submit data to Altinn by using a **system user** created for the organization, which gives the system access to retrieve and submit data on behalf of the company without linking actions to a specific person. [2]
+
+There are two relevant ways to create that system user:
+
+- **User-controlled creation**: the end-user logs into Altinn, selects the system, and approves the predefined permissions directly. [1]
+- **Vendor-controlled creation**: the system vendor sends a request to Altinn, and the end-user approves the request in Altinn before the system user is created. [3]
+
+So, for an accounting program to submit data without a person logging in each time, it uses a **system user** with the necessary permissions approved once in Altinn. [2][1][3]",
+d69f3c65-28bc-42d2-a724-84c0c9ead44e,2026-05-31T16:29:54.233368Z,enrichment-off,gc-04-notify-instead-of-polling,0,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,1,false,,0,7,4,2,c4464cc8c17e;fb897d22bdf4;4aa2b0740446;fd2b51bae6e8;5fdc153cdf30;a61921e48409;0982030b4be9,c4464cc8c17e;fb897d22bdf4;5fdc153cdf30;0982030b4be9,fb897d22bdf4;f183fac18900,14019,4084,345,4429,0,3,3,"The recommended way is to **subscribe to events via a webhook** so your system gets notified **asynchronously** when something happens, instead of continuously checking/polling for changes. Altinn Events lets you register a custom webhook endpoint and receive events there, and this is described as the recommended approach for receiving events from Altinn Events. [1][2]
+
+For Altinn forms/apps, you would typically subscribe to the relevant **app events** such as `app.instance.created`, `app.instance.process.movedTo.{Task ID}`, `app.instance.process.completed`, and `app.instance.substatus.changed`. [3]
+
+If you can’t use webhooks yet, the Events API also supports **querying events** as a fallback for scheduled requests, but the documentation explicitly says the event-driven webhook approach is…",
+261e3095-784d-4fea-8d11-89fa299ac97a,2026-05-31T16:30:07.964924Z,enrichment-off,gc-04-notify-instead-of-polling,1,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,1,false,,0,5,4,2,c1ef5ee35ec8;c4464cc8c17e;fb897d22bdf4;4aa2b0740446;beb2963e72a3,c1ef5ee35ec8;c4464cc8c17e;fb897d22bdf4;4aa2b0740446,fb897d22bdf4;f183fac18900,13730,4236,388,4624,0,3,3,"Use **subscriptions to events** with a **webhook**. Altinn Events lets your system register an endpoint in your own API, and Altinn will send event notifications to that endpoint asynchronously when something happens, so you do not need to keep checking all the time. This is the recommended approach for receiving events from Altinn Events. [3]
+
+Your webhook must be **HTTPS** and use a publicly trusted TLS certificate; self-signed certificates are not supported. Altinn also sends a **validation event** first to verify that the webhook exists and accepts requests. [2][4]
+
+If you want to filter what you receive, you can use filters such as **source**, **type**, **resource**, and **subject**. [2][4]
+
+If you mean **Altinn forms/app events specifically**, the closest match in the documentation i…",
+efc3c817-7476-4ac6-b522-12729abd2fd7,2026-05-31T16:30:22.690657Z,enrichment-off,gc-04-notify-instead-of-polling,2,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,0,6,4,2,2db072be14eb;fb897d22bdf4;d0c2c9a9b70e;4aa2b0740446;88aba1ea5b4d;0982030b4be9,2db072be14eb;fb897d22bdf4;d0c2c9a9b70e;4aa2b0740446,fb897d22bdf4;f183fac18900,14725,5720,365,6085,0,3,3,"Use **Altinn Events subscriptions/webhooks** so your system gets notified asynchronously when something happens, instead of continuously polling for updates. This is the recommended approach for receiving events from Altinn Events. [2][1]
+
+For Altinn forms, you would typically subscribe to the relevant app events and register your own **endpoint/webhook**; Altinn Events will then send HTTP POST requests to it when events occur. [2][3][4]
+
+A few important details:
+- Your webhook must accept the **validation event** as well as normal events. [4]
+- If your webhook is temporarily unavailable, Altinn Events has **automatic retry** with up to **12 retries**. [2]
+- Altinn Events is **Pub/Sub**, so you should process events **idempotently** and be prepared for **out-of-order delivery**; it does **…",
+6ca6c933-af7d-4260-91db-5d520322fa3a,2026-05-31T16:30:38.566723Z,enrichment-off,gc-05-dropdown-options-code-list,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.0,true,true,true,2,false,true,0,9,3,3,efd4aa59ddd8;725316b0e0d6;3d189734f3ac;97784a73f06b;952f65bb32f0;b8eeee3ae7b0;88c70d34ff4e;5ad3c40039a5;5a14ffe27f94,efd4aa59ddd8;3d189734f3ac;97784a73f06b,725316b0e0d6;5b1e816100fb;efd790a816ae,15875,6194,360,6554,0,3,3,"To set up options for a **Dropdown** component from a code list in Altinn Studio, you connect the component to an **options source** using the `optionsId` property, or `source` if the options come from the data model. For a code list stored as a JSON file, the usual setup is `optionsId`. [2][3]
+
+### If the code list is in a JSON file
+1. Put the file in `App/options/`.  
+2. Name it `{optionId}.json`, for example `countries.json`.  
+3. Use that name as the component’s `optionsId`. [2][3]
+
+Example component configuration: [3]
+
+```json
+{
+  ""id"": ""some-dropdown-component"",
+  ""type"": ""Dropdown"",
+  ""textResourceBindings"": {},
+  ""dataModelBindings"": {
+    ""simpleBinding"": ""soknad.opphavsland""
+  },
+  ""optionsId"": ""countries""
+}
+```
+
+Example code list file: [3]
+
+```json
+[
+  {
+    ""value"": ""norway"",
+ …",
+e5358ca3-be0d-46b6-add7-058e263394c3,2026-05-31T16:30:53.042376Z,enrichment-off,gc-05-dropdown-options-code-list,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,true,1,false,,0,4,4,3,952f65bb32f0;efd4aa59ddd8;2b5b88335ce7;97784a73f06b,952f65bb32f0;efd4aa59ddd8;2b5b88335ce7;97784a73f06b,725316b0e0d6;5b1e816100fb;efd790a816ae,14475,4451,351,4802,0,3,3,"To set up options for a `Dropdown` from a code list in Altinn Studio, you typically use the component’s `optionsId` property to point to the code list identifier. [1][3][4]
+
+There are a few ways to provide that code list, depending on what you mean by “code list”:
+
+- **Altinn 2 code list**: register it in `Program.cs` with `services.AddAltinn2CodeList(...)`, then reference it in the component with `optionsId`. [1]
+- **Public dynamic code list**: implement `IAppOptionsProvider`, register it in `Program.cs`, and use its `Id` as `optionsId`. [3]
+- **Secured dynamic code list**: implement `IInstanceAppOptionsProvider`, register it in `Program.cs`, and set `secure: true` in the component. [3]
+- **Static JSON code list**: place a JSON file in `App/options/{optionId}.json`, and use that `optionId…",
+02000722-cdd7-467d-945a-c051965c90ea,2026-05-31T16:31:07.878028Z,enrichment-off,gc-05-dropdown-options-code-list,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,0,7,3,3,952f65bb32f0;2b5b88335ce7;d249d385d36b;97784a73f06b;588ee2291183;725316b0e0d6;efd4aa59ddd8,97784a73f06b;588ee2291183;725316b0e0d6,725316b0e0d6;5b1e816100fb;efd790a816ae,14834,4368,362,4730,0,3,3,"In Altinn Studio, you set up a dropdown to use a code list by entering a **code list ID** in the component’s **`optionsId`** field. In the UI, this is done by selecting **“Kodeliste”** and entering the code list ID; if you want a custom dynamic list, you can switch to **“egendefinert kodeliste”** instead. [2][3]
+
+In the layout JSON, it looks like this: [2]
+
+```json
+{
+  ""id"": ""komponent-id"",
+  ""type"": ""Dropdown"",
+  ...
+  ""optionsId"": ""land"",
+  ""secure"": true
+}
+```
+
+If the code list is a **secured dynamic code list**, you should also set `secure` to `true`. [2]
+
+If you are using a code list from a JSON file in the app, place the file in `App/options/` and name it `{optionId}.json`, then reference that same ID in `optionsId`. [1]
+
+If you want, I can also show the exact steps for:
+- a **static…",
+45983177-aa93-4aff-8620-7aa58c617fe0,2026-05-31T16:31:23.165464Z,enrichment-off,gc-06-send-official-letter-to-company,0,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,2,false,true,0,7,3,3,82ad7fb84323;99849fcf3f03;e00057498d4d;f39a9292b7a7;69715a54f84d;3b1b9280646c;dfc51e088a7a,82ad7fb84323;99849fcf3f03;e00057498d4d,ebd89d3a9496;e00057498d4d;1543a3f4e321,15287,6282,382,6664,0,3,3,"Yes. Altinn Correspondence is a secure messaging service for sending correspondence such as official letters, notifications, and other documents between public agencies and individuals or businesses [1]. It is described as a service that enables public sector organizations to send messages to citizens, businesses, and other public entities [3].
+
+The company gets notified through the `Notification` feature when the message contains confidential content, so the organization is made aware that a confidential message has arrived in its inbox [2]. The notification should explain that the message is confidential and include guidance on what the company must do to give the right person access, such as what the message is about, who should receive it, and which service must be delegated [2].
+
+One …",
+2b5985cb-4a31-4e25-bfab-7a821077c685,2026-05-31T16:31:36.752833Z,enrichment-off,gc-06-send-official-letter-to-company,1,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,0,8,5,3,2a3b59c1f76c;e5b8450a7556;8caf649e56bb;82ad7fb84323;99849fcf3f03;1094929e2a23;206485ad6329;f73f296c04a0,e5b8450a7556;8caf649e56bb;82ad7fb84323;99849fcf3f03;1094929e2a23,ebd89d3a9496;e00057498d4d;1543a3f4e321,13585,4402,389,4791,0,3,3,"Yes. Altinn Correspondence is a messaging service for secure exchange of correspondence, including official letters, notifications, and other documents, between public agencies and individuals or businesses [3].
+
+For a company, the notification depends on the type of correspondence and whether it is tied to a resource:
+
+- For a standalone notification to an organization number, Altinn uses the **Notification Addresses for Businesses** registry to find the company’s contact details, such as email addresses and/or mobile numbers [5].
+- Organizations can also manage their official contact details in the Altinn portal, and multiple email addresses and mobile numbers can be registered [1].
+- If the correspondence is associated with a resource, Altinn uses both the **Notification Addresses for B…",
+1c7c6ced-48d6-451a-8e77-3f78cefdc3e7,2026-05-31T16:31:51.281771Z,enrichment-off,gc-06-send-official-letter-to-company,2,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,0,10,4,3,e5548301d6c4;110ddbcc135f;e00057498d4d;f0ccc345d13b;789dee63f7b4;d68ced7250d3;3c0e61970d38;f52631cc95ee;82ad7fb84323;e4d721b0f7cc,110ddbcc135f;e00057498d4d;d68ced7250d3;82ad7fb84323,ebd89d3a9496;e00057498d4d;1543a3f4e321,14528,4293,389,4682,0,3,3,"Yes — a public agency can send an official letter to a company through **Altinn Correspondence**, which is described as a secure digital service for sending messages and documents to citizens, businesses, and other public entities [2][4].
+
+For a company, the message is delivered to the company’s inbox in **Altinn Arbeidsflate**, and the correspondence automatically becomes a dialogue and is made available through **Dialogporten** in Altinn 3 Arbeidsflate [2]. The source also states that organization numbers have an inbox in Altinn Arbeidsflate, so the agency can reach the correct recipient that way [2].
+
+If you mean **Altinn Notifications** instead of **Correspondence**, that service is mainly for email/SMS notifications, not official letters or document delivery [1][3].",
+9f1531d8-cbfc-42f8-8b6d-1ad91c0740be,2026-05-31T16:32:05.350540Z,enrichment-off,gc-07-let-bought-software-act-for-my-company,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,0,5,4,2,f1453295b7f2;7f4b4d3d70f5;72db9b0d2e99;bbc0f4b641f0;46b6bd396689,f1453295b7f2;7f4b4d3d70f5;72db9b0d2e99;bbc0f4b641f0,1cac2d1c116d;386a7efbc9c7,14068,4552,444,4996,0,3,3,"Use a **System User** for the accounting program, not ID-porten, if the goal is that the **system behind it** can act on behalf of your company without you logging in every time. System User is meant for this kind of machine-to-system access and is built on Maskinporten with finer-grained access control [1].
+
+In practice, you would:
+
+1. **Set up a System User** for the accounting program on behalf of your organization [1].  
+2. **Grant it the needed access packages/authorizations** for the tax data or service it needs [1][2].  
+3. Let the accounting program use the **Maskinporten token as a Bearer token** when calling the API or Altinn Authorization [3].  
+4. The service owner then checks the token against **Altinn Authorization (PDP)** to see what the system is allowed to do [3].
+
+If you …",
+dee370ac-3494-4085-955b-9f44b1261e4a,2026-05-31T16:32:21.233994Z,enrichment-off,gc-07-let-bought-software-act-for-my-company,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,2,false,true,0,4,2,2,d612235c64ad;0de3969fb7c2;ad357cccd904;de91935dee1d,d612235c64ad;de91935dee1d,1cac2d1c116d;386a7efbc9c7,15882,6627,448,7075,0,3,3,"To let the accounting program pull your tax data without you logging in each time, you need to set up a **system user** and give it the right **access package** or delegation in Altinn/Access Management. An access package is a bundle of rights and permissions for what the system user can access. [1]
+
+If the program is for **your own company**, you can use a **standard system user** for your organization and its operational units, but that type **cannot** be used for delegated client relationships. [2] If the program also needs to access data **on behalf of other legal entities** that have delegated access packages, you need a **system user for client relationships** as well, and the two types must be combined. [2]
+
+For **tax data**, the relevant access package in the example is `urn:altinn…",
+0cda1875-9873-422f-840e-0b765c92e1eb,2026-05-31T16:32:37.086724Z,enrichment-off,gc-07-let-bought-software-act-for-my-company,2,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,2,false,true,0,9,4,2,207c7e566e5b;5a534c0996aa;4fa349427989;d612235c64ad;65ff54a13f8d;2e8f88ee749f;23ccca0602fc;abe5a116cbe5;4edb724802b0,5a534c0996aa;d612235c64ad;65ff54a13f8d;2e8f88ee749f,1cac2d1c116d;386a7efbc9c7,15852,6187,386,6573,0,3,3,"You likely need a **System User** setup, not a normal end-user login flow. The accounting program (the **end user system**) requests a **system access token** from **Maskinporten** for your company’s organization number, and then uses that token when calling the API; you do **not** have to log in every time yourself. [4]
+
+In practice, the vendor must:
+- authenticate the employee inside the accounting program,
+- decide which **system users** and **clients** that employee may use,
+- verify that on every call,
+- and keep a separate log of which employee triggered the action. Altinn does **not** control employee-level access for this; that must be handled in the accounting program itself. [3]
+
+For the company setup, the system user must have the right **access packages** and, if relevant, the …",
+b8b26070-0cda-4b65-9714-02a9c418d183,2026-05-31T16:32:52.250844Z,enrichment-off,gc-08-let-my-bank-fetch-my-income-data,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,0,6,5,3,362792b4400e;628290aa1d8d;63cd0d338039;89f08b423a6f;b5bafba34ce0;610d2392ed66,362792b4400e;63cd0d338039;89f08b423a6f;b5bafba34ce0;610d2392ed66,9e1666d9a336;e396875b9f1f;362792b4400e,15163,4567,366,4933,0,3,3,"When you allow your bank to fetch your income information on your behalf, it works as a **consent flow** in Altinn: the service owner/public agency defines what data can be shared and for how long the consent is valid, and you give explicit permission for that specific access. [2][3]
+
+In practice, the bank can act as a **data consumer**, and it may use a **supplier (third-party actor)** to create the consent request and retrieve the data on the bank’s behalf. In that case, the supplier must have the scope `altinn:consentrequests.write` delegated, and also the scope for the relevant API/resource, such as the income API. [1]
+
+The flow is roughly:  
+1. The bank or its supplier creates a consent request for the relevant resource(s). [1][4]  
+2. You, as the user, approve the consent. The consen…",
+407bf7dc-fd08-4d62-a953-a843cafcc166,2026-05-31T16:33:06.811029Z,enrichment-off,gc-08-let-my-bank-fetch-my-income-data,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,false,false,2,false,true,0,9,2,3,6c0738f8b252;96a83180e343;26eabb350bcb;4b909d757fe8;610d2392ed66;408996d6688d;fee9602a927c;6bdbb4a40f76;edc028e09e45,6c0738f8b252;610d2392ed66,9e1666d9a336;e396875b9f1f;362792b4400e,14558,6285,430,6715,0,3,3,"When you allow your bank to fetch your income information on your behalf, the bank is using **consent** to get temporary access to a specific set of information or services from the public agency. The consent gives the bank permission to retrieve/share data that the public has about you, on your behalf, for a limited time and for the specific rights that were approved. [2]
+
+In Altinn 3, this consent is represented in a **consent token** issued by **Maskinporten**. The service checks the token’s `authorization_details`, especially the `consentRights`, to verify that the rights in the consent token match the rights the service requires. [1]
+
+So in practice:
+- you grant consent for a specific purpose and resource,
+- the bank receives a token with those consent rights,
+- and the public agency/…",
+33caead8-35a5-4cff-8145-4501af2e4981,2026-05-31T16:33:21.724822Z,enrichment-off,gc-08-let-my-bank-fetch-my-income-data,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,2,false,true,0,8,5,3,63cd0d338039;e396875b9f1f;d45c9debe7da;69a4c6dae52d;0872329769ae;36cee5a43220;89f08b423a6f;840b4d29e379,63cd0d338039;e396875b9f1f;69a4c6dae52d;0872329769ae;36cee5a43220,9e1666d9a336;e396875b9f1f;362792b4400e,14913,6043,428,6471,0,3,3,"When you allow your bank to fetch your income information from a public agency, Altinn Consent works as a consent-based data-sharing flow: the public agency/service owner defines which data can be shared, for how long, and under which conditions, and your consent gives the legal basis for sharing that data. [1][2]
+
+In practice, the bank is the **data consumer**, and the public agency is the **service owner**. The bank must request consent through Altinn/Maskinporten, and the consent is then returned as part of a **Maskinporten token** that the bank can use to validate and log the delegation. [1][3][5]
+
+The flow is roughly:
+1. The service owner sets up a consent-enabled service and defines the scopes/resources for the income data. [4]
+2. You, as the end user, approve the consent. [2][4]
+3. …",
+81f39f0c-b890-476a-8855-97097d1f7348,2026-05-31T16:33:52.134525Z,enrichment-off,gc-09-api-to-link-customers-to-accountant-integration,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,4,false,true,0,8,2,3,a9606ba0b9c9;b63c4ea55766;dc7769ae75d2;699baa933cc6;4617df86f17a;7f4b4d3d70f5;bc1792daed8b;b85b21f0bf49,bc1792daed8b;b85b21f0bf49,32ee6aa61499;438d68cacb4b;1f6dc956fee4,30409,61054,1068,62122,45696,8,3,"To **attach** companies to an accountant integration’s system user, use the **Client Delegation** API for an agent system user [1]. The source says this API “provides methods to manage clients for an agent system user” and that it uses bearer authentication with an exchanged Altinn token [1].
+
+For the **detach** operation, the provided sources do **not** name a specific endpoint, so I can’t state the exact path with certainty from this context alone [1][2]. The closest source terminology is still **client delegation** / **set up client relationship** [1][2].
+
+So, based on the sources:
+- **Attach clients:** call the **Client Delegation** API [1].
+- **Detach clients:** not explicitly specified in the provided excerpts; likely the corresponding client-delegation removal endpoint, but the exac…",
+1103362f-3493-473c-8de7-1c247285ef22,2026-05-31T16:34:08.551105Z,enrichment-off,gc-09-api-to-link-customers-to-accountant-integration,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,1.0,1.0,1.0,true,true,true,2,false,false,0,8,3,3,a9606ba0b9c9;0f222b9c700d;bb6fda6fde37;050fbe324462;175c015b82fe;32ee6aa61499;438d68cacb4b;1f6dc956fee4,32ee6aa61499;438d68cacb4b;1f6dc956fee4,32ee6aa61499;438d68cacb4b;1f6dc956fee4,16416,10727,400,11127,2688,4,3,"To attach and detach the companies a **system user for client relationships** represents, use these endpoints:
+
+- **Attach a company (delegate a client):** `POST authentication/api/v1/enduser/systemuser/clients/` [2]  
+- **Detach a company (remove a client):** `DELETE authentication/api/v1/enduser/systemuser/clients/` [3]
+
+Both use the `agent` parameter for the system user and the `client` parameter for the company/client to add or remove. [2][3]
+
+If you also need to **list** which companies are already attached or available to attach, the related endpoints are:  
+- `GET authentication/api/v1/enduser/systemuser/clients/` for already delegated clients [2]  
+- `GET authentication/api/v1/enduser/systemuser/clients/available` for clients available to delegate [1]",
+d41f5152-7c4f-4908-9c58-36d05ca2891e,2026-05-31T16:34:39.218252Z,enrichment-off,gc-09-api-to-link-customers-to-accountant-integration,2,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,4,true,true,0,7,6,3,95dc231b9e29;0de3969fb7c2;e60cd5119f0d;7f4b4d3d70f5;4617df86f17a;65a478eb4aa0;cb3419e64405,95dc231b9e29;0de3969fb7c2;e60cd5119f0d;7f4b4d3d70f5;4617df86f17a;65a478eb4aa0,32ee6aa61499;438d68cacb4b;1f6dc956fee4,30667,77957,1223,79180,61184,9,3,"Use the **Client admin** API in Altinn Access Management:
+
+- **Attach companies / add client rights**: `POST https://platform.altinn.no/accessmanagement/api/v1/enduser/clientdelegations/agents/accesspackages`
+- **Detach companies / remove client rights**: `DELETE https://platform.altinn.no/accessmanagement/api/v1/enduser/clientdelegations/agents/accesspackages?party={party}&from={from}&to={to}`
+
+For test, replace `platform.altinn.no` with `platform.tt02.altinn.no`.
+
+The docs I found explicitly show the **DELETE** endpoint for removing access packages delegated to an agent for a client, and the matching **POST** endpoint is the corresponding add/attach operation in the same API family.",
+a74cd5f4-8270-4076-9d0e-a5ab499e64a3,2026-05-31T16:34:53.140587Z,enrichment-off,gc-10-stop-a-program-from-accessing-my-company,0,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,false,false,2,false,true,0,8,3,2,496f874d5124;65a478eb4aa0;d45c9debe7da;0872329769ae;ae465dd91a87;3f310ff04ba0;f03ec7160b50;e1f99bf5d320,496f874d5124;65a478eb4aa0;0872329769ae,9c69cb9df661;6ec10f61e0dd,13922,6491,425,6916,0,3,3,"If by “a program” you mean a **data consumer / service provider** that was given access through Altinn consent, you stop it by **revoking the delegation** in Access Management. The closest match in the sources is **“Remove service provider”**, which “removes the relationship to a service provider” and also removes all client delegations from that service provider [1].
+
+If the access was given as **delegated access packages to an agent**, you can remove those access packages with the **DELETE** endpoint for agent access packages; if the package is already deleted or does not exist, the response will show `changed: false` [2].
+
+If you mean access to data shared through the **consent service**, the service owner can also control access using **access lists**, and data consumers not on the acc…",
+c8da448b-cb5d-4ee3-a1c1-87e1c93ae69f,2026-05-31T16:35:06.289564Z,enrichment-off,gc-10-stop-a-program-from-accessing-my-company,1,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,false,false,1,false,,0,7,4,2,65a478eb4aa0;8e9adf466174;496f874d5124;1f6dc956fee4;cd664e59f1cb;20b1f847a2ec;3f310ff04ba0,65a478eb4aa0;8e9adf466174;496f874d5124;1f6dc956fee4,9c69cb9df661;6ec10f61e0dd,13148,4527,407,4934,0,3,3,"To stop a program you set up from having access to your company’s data, you should **remove the delegated client access / access packages** that were granted to it. The documentation says that delegated client access can be removed, and that if a supplier no longer needs API access, it is the service owner’s responsibility to remove it [2].
+
+If you mean a **specific access package** that was delegated to an agent for a client, use the **Remove access packages delegated to an agent for a client** endpoint: `DELETE /accessmanagement/api/v1/enduser/clientdelegations/agents/accesspackages` with the relevant `party`, `from`, and `to` parameters [1]. If the package is already deleted or does not exist, the response will show `changed: false` [1].
+
+If you mean removing the **entire relationship t…",
+f3880f5a-fef8-49d9-abcd-f73e04f9bb11,2026-05-31T16:35:21.129600Z,enrichment-off,gc-10-stop-a-program-from-accessing-my-company,2,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,false,false,2,false,true,0,6,4,2,65ff54a13f8d;0872329769ae;b829d1995ab7;7d84bab79e92;d82010b03a7f;ac59b367d616,65ff54a13f8d;0872329769ae;b829d1995ab7;d82010b03a7f,9c69cb9df661;6ec10f61e0dd,14840,6586,436,7022,0,3,3,"If you mean a **system user / program** that has been set up to access your company’s data, the way to stop it is to **remove or revoke the delegation/authorization** that gives that system user access. For client systems, if the customer relationship is removed or the organization delegation is revoked, the related client delegations are automatically removed as well. [3]
+
+If you mean a service that uses **consent**, you stop access by **revoking the consent** and/or removing the consumer’s access so they can no longer create consent requests. The service owner can also use **access lists** so that consumers not on the list cannot even start the consent flow. [2]
+
+If you mean access controlled through **Altinn Authorization / access packages / roles**, the relevant access must be removed …",
+03068c17-bdcf-4096-9987-c91268a6d3a4,2026-05-31T16:35:37.241190Z,enrichment-off,gc-11-create-a-consent-request-via-api,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,2,false,true,0,8,4,2,d2311541de1d;717afb9b2c90;628290aa1d8d;b5bafba34ce0;9e1666d9a336;362792b4400e;d45c9debe7da;e396875b9f1f,d2311541de1d;628290aa1d8d;b5bafba34ce0;362792b4400e,628290aa1d8d;b5bafba34ce0,16110,6167,368,6535,0,3,3,"To ask a user to approve data sharing in Altinn, you need the following in place:
+
+1. A registered Maskinporten client for the data consumer. [2]  
+2. Delegation of the consent scopes from Digdir: at minimum `altinn:consentrequests.write` and `altinn:consentrequests.read`. [1][2]  
+3. Those scopes added to the Maskinporten client. [2]  
+4. Access to request consent for the relevant resource(s). [2]  
+5. If a supplier/drift actor is doing this on behalf of the data consumer, the scopes must be delegated to that supplier, and the request must be made with `consumer_org` set to the data consumer’s organization number. [1][4]
+
+The payload you post is a `POST` to the consent request endpoint. The exact endpoint depends on environment: test is `https://platform.tt02.altinn.no/accessmanagement/ap…",
+6b3340a6-9bf7-4508-ba22-972277bf6d8c,2026-05-31T16:35:51.960250Z,enrichment-off,gc-11-create-a-consent-request-via-api,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,false,false,1,false,,0,8,5,2,9e1666d9a336;362792b4400e;440499ab7abd;c6cabaa59697;5ee35337052a;3d7560159a32;d2311541de1d;840b4d29e379,9e1666d9a336;362792b4400e;c6cabaa59697;5ee35337052a;d2311541de1d,628290aa1d8d;b5bafba34ce0,14717,4406,381,4787,0,3,3,"To ask a user to approve data sharing, you need an **Altinn consent flow** in place between:
+
+- the **end user** who grants consent,
+- the **data consumer** (the organisation requesting access),
+- the **service owner** / data source that owns the data. [1]
+
+What you need in place:
+- The data consumer must create a **consent request in Altinn** using enterprise authentication via **Maskinporten**. [1]
+- If you use a **supplier** (third party), then:
+  1. `altinn:consentrequests.write` must be delegated to the supplier,
+  2. the scope for the relevant API must also be delegated to the supplier,
+  3. the supplier creates the request on behalf of the data consumer. [2]
+- The consent must have a **defined duration** (`validTo`). [2]
+- The service owner can restrict which organisations may use t…",
+bf59f33a-87a1-40c1-9289-a07f74406722,2026-05-31T16:36:08.577635Z,enrichment-off,gc-11-create-a-consent-request-via-api,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,2,false,true,0,6,3,2,628290aa1d8d;b5bafba34ce0;d2311541de1d;717afb9b2c90;9e1666d9a336;e396875b9f1f,628290aa1d8d;b5bafba34ce0;d2311541de1d,628290aa1d8d;b5bafba34ce0,16616,6198,401,6599,0,3,3,"To ask a user to approve data sharing, you need the following in place:
+
+1. The data consumer must have a registered Maskinporten client. [1]  
+2. The data consumer must have been delegated the consent scope from Digdir: `altinn:consentrequests.write` and `altinn:consentrequests.read`. [1]  
+3. The necessary scopes must be added to the Maskinporten client. [1]  
+4. Access to request consent for the relevant resource(s) must be granted. [1]
+
+Then you post a consent request to the consent request endpoint:
+
+- Test: `POST https://platform.tt02.altinn.no/accessmanagement/api/v1/enterprise/consentrequests/` [2]  
+- Production: `POST https://platform.altinn.no/accessmanagement/api/v1/enterprise/consentrequests/` [2]
+
+Example payload: [2]
+
+```jsonc
+{
+  ""id"": ""77ed8698-e619-4066-9eb4-5c1eb3f165a1""…",
+1b814c12-c49e-46c3-9b32-119dc9f6b8fa,2026-05-31T16:36:20.647376Z,enrichment-off,gc-12-got-an-approval-request-but-cant-approve-it,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,0,6,3,2,c6cabaa59697;5ee35337052a;ffb35e69a2df;3d7560159a32;6be6764fadc0;628290aa1d8d,c6cabaa59697;5ee35337052a;ffb35e69a2df,ffb35e69a2df;c6cabaa59697,12069,4384,390,4774,0,3,3,"If you don’t have the necessary permissions to approve the request, you can **forward the request to a user who does have them** [3].
+
+- Click **Ja, send videre** to send it on to a user with the required permissions [3].
+- After forwarding, you can close the request and optionally notify the access manager that it has been forwarded [3].
+- The access manager can then find the escalated request under **Systemtilganger** in Altinn and approve it there [3].
+
+For approval of a system access request, the logged-in user must have the role **Tilgangsstyrer** in the selected organisation and also have the requested permissions [1][2].",
+8f976ec8-2134-47d6-a8cd-52a32920dc7f,2026-05-31T16:36:32.473772Z,enrichment-off,gc-12-got-an-approval-request-but-cant-approve-it,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,0.5,true,true,true,1,false,,0,3,1,2,c6cabaa59697;5ee35337052a;ffb35e69a2df,ffb35e69a2df,ffb35e69a2df;c6cabaa59697,11826,4367,314,4681,0,3,3,"If you don’t have the necessary permissions to approve the request, you can **forward it to a user with the necessary permissions** by clicking **Ja, send videre**. After forwarding, you can close the request and optionally notify the access manager that it has been forwarded. The access manager can then find the escalated request under **Systemtilganger** in the access management interface in Altinn and approve it there. [1]
+
+If you want, I can also explain which role is needed to approve it yourself.",
+90ee5ad4-94ce-49fa-86be-49526a0fa407,2026-05-31T16:36:45.249017Z,enrichment-off,gc-12-got-an-approval-request-but-cant-approve-it,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,0,6,2,2,c6cabaa59697;5ee35337052a;ffb35e69a2df;fffd1547fdeb;e6f7545a1adc;ac454b968f25,c6cabaa59697;ffb35e69a2df,ffb35e69a2df;c6cabaa59697,12695,4406,399,4805,0,3,3,"If you don’t have the necessary permissions to approve the request, you can **forward it to a user who does**. The source says to click **“Ja, send videre”** to send the request onward to a user with the required permissions, and then the access manager can find the escalated request under **Systemtilganger** in the Altinn access management interface [2].
+
+If you were trying to approve a request for **your own system**, note that the logged-in user must have the role **Tilgangsstyrer** in the selected organisation and also have the requested permissions [1]. If you lack those permissions, forwarding the request is the described option [2].",
+e5c2f212-1961-406b-bf54-c64191fc7388,2026-05-31T16:37:00.336740Z,enrichment-off,gc-13-validate-system-user-token-and-authorize-with-pdp,0,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,1,false,,0,6,5,2,72db9b0d2e99;6be6764fadc0;7a851f68a612;a245b733b3f3;7dddbc3051e8;a79a59ed2586,72db9b0d2e99;7a851f68a612;a245b733b3f3;7dddbc3051e8;a79a59ed2586,1071f704051a;fd72a28afd94,15087,4557,463,5020,0,3,3,"As an API provider, you read the system user token from **Maskinporten** and use it as a **Bearer token** in your API calls, including the call to **Altinn Authorization (PDP)**. The token is then used by the service owner to determine which operations the system is authorized to perform. [1][5]
+
+In practice, the flow is:
+
+1. **Receive the Maskinporten token** for the authenticated system user. The token contains the system user information, including `authorization_details`, `client_id`, and related claims. [1]  
+2. **Use the token as `Authorization: Bearer <token>`** when calling your API and when calling Altinn Authorization. [1]  
+3. **Call Altinn PDP** to check whether the system user is authorized for the requested resource/action. Altinn Authorization is the service that tells who c…",
+f5987bf7-3adc-46fa-b6d0-3449a3b67337,2026-05-31T16:37:15.646902Z,enrichment-off,gc-13-validate-system-user-token-and-authorize-with-pdp,1,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,0,5,1,2,72db9b0d2e99;7dddbc3051e8;a245b733b3f3;1071f704051a;7a851f68a612,1071f704051a,1071f704051a;fd72a28afd94,15309,6482,412,6894,0,3,3,"As an API provider, you should:
+
+1. **Validate the incoming token as a standard Maskinporten token**. The system user token is still a Maskinporten token, but it contains extra system-user information in `authorization_details`.[1]
+
+2. **Read the important system-user values from the token**, especially:
+   - `authorization_details:systemuser_id` — the unique ID for the system user; this is the value Altinn needs for authorization.[1]
+   - `authorization_details:systemuser_org:id` — the organization that created the system user.[1]
+   - `authorization_details:system_id` — reference to the system the system user points to.[1]
+   - `consumer:id` — the organization number of the system provider authenticated against Maskinporten.[1]
+
+3. **Use `authorization_details:systemuser_id` when calling…",
+b9ce5488-4316-4efb-ad21-19d4ed6fda72,2026-05-31T16:37:31.039863Z,enrichment-off,gc-13-validate-system-user-token-and-authorize-with-pdp,2,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,0,5,1,2,7a851f68a612;58f33d771b59;72db9b0d2e99;1071f704051a;438d68cacb4b,1071f704051a,1071f704051a;fd72a28afd94,15392,6448,418,6866,0,3,3,"As an API provider, you should treat the incoming system user token as a **standardized Maskinporten token** and read the important values from its `authorization_details` and `consumer` fields. The source says the key values are `authorization_details:systemuser_id`, `authorization_details:systemuser_org:id`, `authorization_details:system_id`, and `consumer:id` (organization number of the system provider). [1]
+
+To authorize the request against Altinn PDP, you then build an authorization request using:
+
+- `AccessSubject` with `urn:altinn:systemuser:uuid` set to the `systemuser_id` from the token, [1]
+- `Action` with the operation you want to allow, for example `read`, [1]
+- `Resource` with the relevant Altinn resource attributes, such as `urn:altinn:resource` and `urn:altinn:organization:i…",
+c0a31b21-55c4-46c4-8fce-f57dfab25a46,2026-05-31T16:37:46.277054Z,enrichment-off,gc-14-steps-to-start-sharing-data-with-consent,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,2,false,true,0,7,2,2,36cee5a43220;0872329769ae;63cd0d338039;f1453295b7f2;cc345617e185;65ff54a13f8d;e396875b9f1f,36cee5a43220;0872329769ae,0872329769ae;36cee5a43220,15236,6227,365,6592,0,3,3,"To start sharing data based on a user’s permission, **both sides need different setup**:
+
+### Data consumer side
+The data consumer must:
+1. **Register a Maskinporten client** and connect to Maskinporten, since the consent solution builds on Maskinporten and uses its token to carry consent information [1].
+2. **Receive the consent scopes and API key from Digdir** by signing the Altinn end-user system vendor terms and completing the registration form for the required scopes `altinn:consentrequests.read` and `altinn:consentrequests.write` [1].
+3. **Request access to the service owner’s APIs**, including any scopes the service owner requires, and be added to any access list if the service owner uses one [1].
+4. **Integrate with the consent APIs** [1].
+
+### Service owner side
+The service owner …",
+f61f56d1-d789-43c3-b6f1-8338b266cafa,2026-05-31T16:38:01.014634Z,enrichment-off,gc-14-steps-to-start-sharing-data-with-consent,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,2,false,true,0,8,2,2,0872329769ae;36cee5a43220;89f08b423a6f;63cd0d338039;d45c9debe7da;cc345617e185;6e2e18e535e0;101266d6ef7d,0872329769ae;36cee5a43220,0872329769ae;36cee5a43220,14737,6171,399,6570,0,3,3,"Before data can be shared based on a user’s permission, **both sides need specific setup**.
+
+### Service owner side
+The service owner must:
+- create or adapt an API that accepts a valid **consent token (JWT)** from the data consumer [1]
+- register the relevant **OAuth2 scopes** in **Maskinporten** [1]
+- create a **consent resource** in the **Resource Registry** [1]
+- optionally manage **access lists** to control which data consumers can use the service [1]
+- document the required steps, access packages/scopes, and contact point [1]
+- validate the consent token when it is received [1]
+
+### Data consumer side
+The data consumer must:
+- register a **Maskinporten client** [2]
+- obtain the required **consent scopes** and API key from Digdir, specifically **altinn:consentrequests.read** and **alt…",
+e7c8fae3-b0e2-4ae8-854f-ce20f4355a74,2026-05-31T16:38:16.239226Z,enrichment-off,gc-14-steps-to-start-sharing-data-with-consent,2,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,0,7,4,2,8d68c8f11c63;7f4b4d3d70f5;89f08b423a6f;d45c9debe7da;9e1666d9a336;63cd0d338039;011af16b88bb,8d68c8f11c63;7f4b4d3d70f5;89f08b423a6f;9e1666d9a336,0872329769ae;36cee5a43220,15223,4437,382,4819,0,3,3,"Before you can share data based on a user’s permission, **both sides need to be set up for the consent flow**:
+
+- **The service owner / data source** must set up the **consent resource in Altinn** and be able to **read and verify the consent token issued via Maskinporten**. [3]
+- **The data consumer** must be able to **create a consent request in Altinn**, send the end user to the **redirect_url** for approval, and then **retrieve the consent token** after consent is granted. [4]
+
+In short, the setup is:
+
+1. **Service owner:** configure consent support and token validation. [3][4]  
+2. **Data consumer:** implement the consent request/redirect/token retrieval flow. [4]
+
+If you meant the setup for **system users** rather than consent, that is a different topic: the sources say you need the c…",
+9f3ba24b-f68d-49ee-8392-4cf2dd36686b,2026-05-31T16:38:32.608364Z,enrichment-off,gc-15-what-files-make-up-a-data-model,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.3333333333333333,true,true,true,1,false,,0,6,2,3,ad84e478aa32;6f85679f5fbd;1c5fa1dec610;a849ef06c242;91c581a42208;1b01e940366f,ad84e478aa32;a849ef06c242,ad84e478aa32;0c64b409aeeb;91c581a42208,16369,4669,400,5069,0,3,3,"When you build a data model in Altinn Studio, the source describes **4 model files** for an application, but it also says that **currently only XSD data models are supported for upload**, and that uploading an XSD generates the other files. So the exact set depends a bit on whether you mean the full application model set or what the tool generates from an XSD. [1][2]
+
+### The files and what they are for
+- **`<model>.cs`** — the **C# data model** used by the application’s backend/APIs to process and validate data. [1]
+- **`<model>.schema.json`** — the **JSON Schema** used on the client side (frontend) to validate data in real time; this is also the file edited in the data modeling tool. [1]
+- **`<model>.XSD`** — the **XSD data model** in XML format that defines the elements in a document; i…",
+511e5ac9-f0b4-40b4-ac5f-c77c10f94ea3,2026-05-31T16:38:48.061623Z,enrichment-off,gc-15-what-files-make-up-a-data-model,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,0,6,1,3,ad84e478aa32;1c5fa1dec610;6f85679f5fbd;071cbb5c2747;c1d87e2b05fc;507447d81612,ad84e478aa32,ad84e478aa32;0c64b409aeeb;91c581a42208,15452,4493,304,4797,0,3,3,"In Altinn Studio, a data model is described as having **4 model files** in the application’s `App/models` folder, but there is one small ambiguity in your question: the source distinguishes between **application data models** and **organization data models**. For an **application**, the files are these [1]:
+
+- **C# data model** (`<model>.cs`) — used by the application’s backend/APIs to process and validate data. [1]
+- **JSON Schema** (`<model>.schema.json`) — used on the client side (frontend) to validate data in real time, and this is the file you work on in the data modeling tool. [1]
+- **XSD data model** (`<model>.XSD`) — an XML-format model that defines the elements allowed in a document; it is not directly used by the application, but can be uploaded to generate the other model files …",
+11870741-aadc-4ce3-b017-590ef4565d24,2026-05-31T16:39:03.093345Z,enrichment-off,gc-15-what-files-make-up-a-data-model,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,0.6666666666666666,true,true,true,2,false,false,0,6,4,3,ce498b7d6169;0c64b409aeeb;ad84e478aa32;91c581a42208;ae4d16c0c7ed;64cc1aee310d,0c64b409aeeb;ad84e478aa32;ae4d16c0c7ed;64cc1aee310d,ad84e478aa32;0c64b409aeeb;91c581a42208,15031,6275,408,6683,0,3,3,"When you build a data model in Altinn Studio, the source says an application has **4 model files** in `App/models/` [2]:
+
+- **C# data model** (`<model>.cs`): used by the application's backend/APIs to process and validate data [2].
+- **JSON Schema** (`<model>.schema.json`): used on the client side (frontend) to validate data in real time, and this is the file you work on in the data modeling tool [2].
+- **XSD data model** (`<model>.XSD`): an XML-format model that defines the elements that can be used in a document; it is not directly used by the application, but can be uploaded to generate the other model files or downloaded as needed [2].
+- **JSON metadata** (`<model>.metadata.json`): used by Altinn Studio to generate the `<model>.cs` file, and it will not be stored in the application; it …",
+856ed642-f52a-4494-9c81-9e6f98f3f729,2026-05-31T16:39:16.031433Z,enrichment-off,gc-16-change-the-error-text-shown-to-users,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,1,false,,0,2,1,2,9db4a2d762fa;44a7aaf5851d,9db4a2d762fa,9d8f106ba368;9db4a2d762fa,12938,4475,343,4818,0,3,3,"To change the wording of the validation error message, add a custom `errorMessage` in the JSON schema for the field in `App/models/*.schema.json` [1]. For example, for a field that is too long, you can set:
+
+```json
+""someField"": {
+  ""type"": ""string"",
+  ""maxLength"": ""4"",
+  ""errorMessage"": ""myCustomError""
+}
+```
+
+The same approach is used for validation errors such as a required field being left blank, by adding `errorMessage` on the relevant field definition in the schema [1]. If the field uses a `$ref` to a definition, the `errorMessage` must be added on the property that contains the reference, not inside the referenced definition [1].
+
+If you want the message to be translatable, use a text key that points to a text in the resource files instead of writing the text directly [1].",
+c37adeae-8cd2-4786-aabf-f3a1be106676,2026-05-31T16:39:30.294830Z,enrichment-off,gc-16-change-the-error-text-shown-to-users,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,0,3,3,2,9db4a2d762fa;9d8f106ba368;44a7aaf5851d,9db4a2d762fa;9d8f106ba368;44a7aaf5851d,9d8f106ba368;9db4a2d762fa,14262,4398,319,4717,0,3,3,"To change the wording of those validation messages, you have two different options depending on **which error** you mean:
+
+- For a field that is **too long** (or otherwise fails client-side validation), you can set a custom `errorMessage` directly in the field’s JSON schema in `App/models/*.schema.json`. For example:  
+  ```json
+  ""someField"": {
+    ""type"": ""string"",
+    ""maxLength"": ""4"",
+    ""errorMessage"": ""myCustomError""
+  }
+  ```  
+  The error text can be written directly, or you can use a text key from the resource files for language support. [1][2]
+
+- For a field that is **required** and left blank, the default message is **“You have to fill out ”** / **“Du må fylle ut ”** / **“You have to fill out ”**, and the field name is inserted automatically. The source says this default requir…",
+876c44e7-7c4c-48cf-8097-76932c266fb0,2026-05-31T16:39:44.025308Z,enrichment-off,gc-16-change-the-error-text-shown-to-users,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,1,false,,0,3,2,2,9db4a2d762fa;60d6f1d10d2b;44a7aaf5851d,9db4a2d762fa;44a7aaf5851d,9d8f106ba368;9db4a2d762fa,13730,4456,327,4783,0,3,3,"You can change the wording in two different ways, depending on **which error message** you mean:
+
+1. **For a specific field validation message** like “too long” or other schema-based validation errors, add an `errorMessage` to the field in the JSON schema (`*.schema.json` in `App/models`). The error text can be written directly, or you can use a text key from the resource files for language support. If the field uses a `$ref`, the `errorMessage` must be added on the property that contains the reference, not inside the definition itself. [1]
+
+2. **For the default “required field” / built-in validation texts**, you change the app’s default texts in `App/config/texts` (or `App/configuration/texts/resource` for the default error-message keys mentioned in the source). The source says these defa…",
+e3570c69-bc56-44d8-a08b-e39b007d00b9,2026-05-31T16:39:58.381975Z,enrichment-off,gc-17-auto-fill-name-and-address-from-registers,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.6666666666666666,true,true,true,2,false,true,0,8,5,3,0eb04db689d9;88d42770643c;a590caa6182f;0359f331aded;7f3e12483d0f;3b265e4c766e;8b873a66731b;34e021ea361b,0eb04db689d9;88d42770643c;a590caa6182f;0359f331aded;34e021ea361b,ac3a1bc9aec5;0eb04db689d9;a590caa6182f,14355,6287,373,6660,0,3,3,"Yes — Altinn supports **prefilling** a form so the user does not have to type in data manually [4][5].
+
+For a person, the **DSF** prefill source can pull in personal data attached to the person the form is instantiated on behalf of [1]. The available values include:
+
+- `SSN`
+- `Name`
+- `FirstName`
+- `MiddleName`
+- `LastName`
+- `TelephoneNumber`
+- `MobileNumber`
+- `MailingAddress`
+- `MailingPostalCode`
+- `MailingPostalCity`
+- `AddressMunicipalNumber`
+- `AddressMunicipalName`
+- `AddressStreetName`
+- `AddressHouseNumber`
+- `AddressHouseLetter`
+- `AddressPostalCode`
+- `AddressCity` [1]
+
+So if your goal is to auto-fill the person’s **name and address**, the closest matching fields are `Name` for the name, and `MailingAddress`, `MailingPostalCode`, and `MailingPostalCity` for the mailing address…",
+ff7aea6c-5e4c-43ac-999b-36cebcdbfa73,2026-05-31T16:40:13.368008Z,enrichment-off,gc-17-auto-fill-name-and-address-from-registers,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,2,false,true,0,8,5,3,34e021ea361b;3b265e4c766e;88d42770643c;a590caa6182f;8b01380f1f28;7f3e12483d0f;48029a428368;0359f331aded,34e021ea361b;88d42770643c;a590caa6182f;48029a428368;0359f331aded,ac3a1bc9aec5;0eb04db689d9;a590caa6182f,14985,6383,383,6766,0,3,3,"Yes — the form can be set up to prefill data automatically, so the person does not have to type everything themselves [1][5].
+
+For a person, the relevant automatic sources are:
+- **DSF** = the Population Register [1][5]
+- **UserProfile** = the user’s Altinn profile [1][2]
+
+From **DSF**, the documented available prefill fields are only:
+- `SSN` → for example mapped to `Person.PersonNr` [4]
+
+From **UserProfile**, the available values include:
+- `UserId`
+- `UserName`
+- `PhoneNumber`
+- `Email`
+- `PartyId`
+- `Party.PartyId`
+- `Party.PartyTypeName`
+- `Party.OrgNumber`
+- `Party.SSN`
+- `Party.UnitType`
+- `Party.Name`
+- `Party.isDeleted`
+- `Party.OnlyHierarchyElementWithNoAccess`
+- `Party.Person`
+- `Party.Organization`
+- `Party.ChildParties`
+- `UserType`
+- `ProfileSettingPreference.Language`
+- `Pro…",
+40fb35b1-3934-4ba1-9e11-c97b361b23ad,2026-05-31T16:40:28.008286Z,enrichment-off,gc-17-auto-fill-name-and-address-from-registers,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,0,8,6,3,0359f331aded;88d42770643c;a590caa6182f;8b873a66731b;3b265e4c766e;7f3e12483d0f;bfe49011a0cb;34e021ea361b,0359f331aded;88d42770643c;a590caa6182f;8b873a66731b;3b265e4c766e;34e021ea361b,ac3a1bc9aec5;0eb04db689d9;a590caa6182f,14639,4510,368,4878,0,3,3,"Yes — the form can be automatically prefilled so the user does not have to type everything themselves [1][4][5][6].
+
+For a person, the standard prefill sources include **DSF** (the Population Register) and **UserProfile** (the user’s Altinn profile), and you can also prefill from **ER** for organization-related data [1][5][6]. The source explicitly says that for **Party.Person** and **Party.Organization** you get the same fields as in ER and DSF prefill, but it also notes that **Party.Organization** will be null if the user is logged in as an individual [2].
+
+For **address-related details**, the available fields depend on the source and are not all the same [3][5]. The context lists these address fields for **ER** / organization unit data: **MailingAddress**, **MailingPostalCode**, **Maili…",
+000d75a6-b41b-4b4f-a343-64e3fe95b221,2026-05-31T16:40:46.134101Z,enrichment-off,gc-18-add-a-payment-step-to-the-process,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,2,false,false,0,5,3,2,1959e6ab6e4f;c0db84ac5786;d738ada53303;a836e80d4ceb;951a3c2cf913,1959e6ab6e4f;c0db84ac5786;d738ada53303,1959e6ab6e4f;c0db84ac5786,18124,6365,424,6789,0,3,3,"To wire up a payment step by hand, you need to configure **three things**: the **BPMN process flow**, the **payment data types**, and the **payment layout set**. [1][2][3]
+
+### 1) Add a payment task in `App/config/process/process.bpmn`
+Create a BPMN task with `altinn:taskType` set to `payment`, and include the three payment actions: `confirm`, `pay`, and `reject`. [1]
+
+A typical payment task looks like this: [1]
+
+```xml
+<bpmn:task id=""Task_2"" name=""Betaling"">
+  <bpmn:incoming>Flow_t1_t2</bpmn:incoming>
+  <bpmn:outgoing>Flow_t2_g1</bpmn:outgoing>
+  <bpmn:extensionElements>
+    <altinn:taskExtension>
+      <altinn:taskType>payment</altinn:taskType>
+      <altinn:actions>
+        <altinn:action>confirm</altinn:action>
+        <altinn:action>pay</altinn:action>
+        <altinn:action>reject</a…",
+5691ec7b-7d07-4983-9ce2-ba19ea73207d,2026-05-31T16:41:02.854604Z,enrichment-off,gc-18-add-a-payment-step-to-the-process,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,1,false,,0,8,5,2,d738ada53303;1959e6ab6e4f;78752be7dc13;a836e80d4ceb;951a3c2cf913;1adc4d0e5473;eb12b36103de;c6cbe3acd13d,1959e6ab6e4f;78752be7dc13;1adc4d0e5473;eb12b36103de;c6cbe3acd13d,1959e6ab6e4f;c0db84ac5786,16720,4481,394,4875,0,3,3,"To wire up a payment step by hand, you need to configure both the BPMN process flow and the payment-related data types it uses. [1][4]
+
+### 1) Add the payment task and gateway in `App/config/process/process.bpmn`
+You must add a process step with `taskType` set to `payment`, and then add an exclusive gateway after it. [1][5]
+
+A payment task in BPMN should look like this: [1]
+
+```xml
+<bpmn:task id=""Task_2"" name=""Betaling"">
+  <bpmn:incoming>Flow_t1_t2</bpmn:incoming>
+  <bpmn:outgoing>Flow_t2_g1</bpmn:outgoing>
+  <bpmn:extensionElements>
+    <altinn:taskExtension>
+      <altinn:taskType>payment</altinn:taskType>
+      <altinn:actions>
+        <altinn:action>confirm</altinn:action>
+        <altinn:action>pay</altinn:action>
+        <altinn:action>reject</altinn:action>
+      </altinn:actions>
+ …",
+08f90579-490b-48f4-8f6c-78be6bd1c506,2026-05-31T16:41:21.379731Z,enrichment-off,gc-18-add-a-payment-step-to-the-process,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,2,false,true,0,4,4,2,d738ada53303;c0db84ac5786;1959e6ab6e4f;1adc4d0e5473,d738ada53303;c0db84ac5786;1959e6ab6e4f;1adc4d0e5473,1959e6ab6e4f;c0db84ac5786,18524,6389,424,6813,0,3,3,"To wire up a payment step by hand, you need to configure it in three places: the process BPMN, the app’s data types, and the payment layout set. If you use Altinn Studio Designer instead, these manual steps are set up automatically. [1]
+
+### 1) Add the required data types
+Add two data types in `App/config/applicationmetadata.json` under `dataTypes`: one for payment state and one for the PDF receipt. [2]
+
+Use data types like these: [2]
+
+```json
+{
+  ""id"": ""paymentInformation"",
+  ""allowedContentTypes"": [
+    ""application/json""
+  ],
+  ""allowedContributors"": [
+    ""app:owned""
+  ],
+  ""maxCount"": 1,
+  ""minCount"": 0
+}
+```
+
+```json
+{
+  ""id"": ""paymentReceiptPdf"",
+  ""allowedContentTypes"": [
+    ""application/pdf""
+  ],
+  ""allowedContributors"": [
+    ""app:owned""
+  ],
+  ""maxCount"": 1,
+  ""minCount"": 0
+}
+`…",
+fa9fc17f-8f02-479d-9a1a-e0a0bcd04897,2026-05-31T16:41:44.490551Z,enrichment-off,gc-19-let-users-attach-documents,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,3,false,true,0,6,3,2,39c780dca91d;a3a55131b768;954c1431a728;7def5fc412ac;d9b164a1c4f3;544479108303,39c780dca91d;7def5fc412ac;544479108303,a458dd169020;8c7a8757bae6,23110,8712,488,9200,0,3,3,"Use the **File upload** building block / **FileUpload** component in Altinn Studio to let people attach documents to your form [1][3].
+
+To limit uploads:
+- **File types:** set **allowedContentTypes** / custom file types in the component configuration so only approved file types can be uploaded [1].
+- **Number of files:** set **minCount** and **maxCount** in `applicationMetadata.json` under `dataTypes` to control the minimum and maximum number of attachments [1].
+  - If you set **minCount** to `0`, uploading a file is not required [1].
+- You can also set **maxSize** to limit file size in MB [1].
+
+If you mean attachments uploaded only through API, that is a separate setup using a `datatype` object in `applicationMetadata.json` [1][2].",
+a8b9f666-c9c8-4478-8f08-b60daccfad1d,2026-05-31T16:41:56.763970Z,enrichment-off,gc-19-let-users-attach-documents,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,1,false,,0,7,5,2,39c780dca91d;a3a55131b768;954c1431a728;7def5fc412ac;d9b164a1c4f3;544479108303;9cde6495c0ea,39c780dca91d;a3a55131b768;7def5fc412ac;544479108303;9cde6495c0ea,a458dd169020;8c7a8757bae6,12272,4506,334,4840,0,3,3,"Use the **File upload** building block / **FileUpload** component in Altinn Studio to let people attach documents to your form [1][3][4].
+
+To limit uploads, configure these fields on the component and/or in `applicationMetadata.json`:
+
+- **File types**: set **allowedContentTypes** / custom file types to restrict which MIME types can be uploaded; files not on the approved list will be blocked [1][2].
+- **Number of files**: set **minCount** and **maxCount** (or in the component, **minNumberOfAttachments** and **maxNumberOfAttachments**) to control how many attachments can be uploaded [1][2][5].
+- **File size**: set **maxSize** / **maxFileSizeInMB** to limit the size in MB [1][2][5].
+
+If you want, I can also show a small example configuration for `FormLayout.json` and `applicationMetadata.jso…",
+ecb7745e-5c31-48ec-9468-766b46b2661e,2026-05-31T16:42:09.785384Z,enrichment-off,gc-19-let-users-attach-documents,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,0,6,5,2,39c780dca91d;a3a55131b768;954c1431a728;7def5fc412ac;d9b164a1c4f3;9cde6495c0ea,39c780dca91d;a3a55131b768;7def5fc412ac;d9b164a1c4f3;9cde6495c0ea,a458dd169020;8c7a8757bae6,13020,4597,335,4932,0,3,3,"Use the **FileUpload** component in Altinn Studio to let people attach documents to your form [1][3].
+
+To limit uploads, you can configure:
+- **Custom file types** / **allowedContentTypes** to restrict which file types are accepted [1].
+- **minNumberOfAttachments** and **maxNumberOfAttachments** to control how many files can be uploaded on that component [1][5].
+- **maxFileSizeInMB** to limit file size [1][5].
+
+If you want the upload to be optional, set the minimum number of attachments to **0** [1]. If you need different kinds of documents, the sources recommend using **multiple file upload components** so each page or step clearly says what should be uploaded [3][4].
+
+One small ambiguity: the docs use both **min/max amount of file attachments** in the Studio UI and **minCount/maxCount** …",
+002efac2-66ba-443d-990b-3aafd3ff8d3e,2026-05-31T16:42:22.854187Z,enrichment-off,gc-20-configure-layout-sets-and-page-order,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,1,false,,0,2,1,2,7df452fd81ec;49c2faf02b9c,7df452fd81ec,7df452fd81ec;736efe1d44d4,13067,4465,321,4786,0,3,3,"To configure an app with multiple pages, you define **layout sets** in `ui/layout-sets.json` and place the pages for each set in that set’s own `layouts` folder. Each process task can have its own layout set, and the `layout-sets.json` file maps each set `id` to the relevant `tasks` and `dataType`. The `id` is case sensitive and should match the folder name exactly. [1]
+
+Example structure: [1]
+
+```text
+App/
+  ui/
+    layout-sets.json
+    form-a/
+      Settings.json
+      layouts/
+        page1.json
+        page2.json
+        page3.json
+    form-b/
+      Settings.json
+      layouts/
+        page1.json
+        page2.json
+        page3.json
+```
+
+To control the **page order**, use the `pages.order` setting in each set’s `Settings.json`. The order is an array of page names, for example: [1]
+
+``…",
+79448734-bd82-4def-a69d-da57569c91e0,2026-05-31T16:42:36.424596Z,enrichment-off,gc-20-configure-layout-sets-and-page-order,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,1,false,,0,3,1,2,7df452fd81ec;49c2faf02b9c;924c0f81fd68,7df452fd81ec,7df452fd81ec;736efe1d44d4,13570,4309,260,4569,0,3,3,"For an app with multiple pages, you configure **layout sets** in `ui/layout-sets.json` and the **page order** in each layout set’s `Settings.json` file. [1]
+
+### 1) Define one layout set per task in `layout-sets.json`
+Each layout set gets an `id`, a `dataType`, and the process `tasks` where it should be used. The `id` is case sensitive and should match the folder name under `ui/`. [1]
+
+Example: [1]
+```json
+{
+  ""$schema"": ""https://altinncdn.no/toolkits/altinn-app-frontend/4/schemas/json/layout/layout-sets.schema.v1.json"",
+  ""sets"": [
+    {
+      ""id"": ""form-a"",
+      ""dataType"": ""schema_4222_160523_forms_212_20160523"",
+      ""tasks"": [""Task_1""]
+    },
+    {
+      ""id"": ""form-b"",
+      ""dataType"": ""schema_3161_140411_forms_1549_11554"",
+      ""tasks"": [""Task_2""]
+    }
+  ]
+}
+```
+
+### 2) Set th…",
+aff61ee5-e630-4de7-9b4c-fc0734686fb6,2026-05-31T16:42:51.323008Z,enrichment-off,gc-20-configure-layout-sets-and-page-order,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,0,3,3,2,7df452fd81ec;49c2faf02b9c;ad737a3c1f9a,7df452fd81ec;49c2faf02b9c;ad737a3c1f9a,7df452fd81ec;736efe1d44d4,14897,6311,309,6620,0,3,3,"To configure **layout sets** and **page order** for an app with multiple pages, you define a separate layout set for each process task in `layout-sets.json`, and then define the page order in the corresponding `Settings.json` file for that layout set. [1]
+
+### 1) Define layout sets in `layout-sets.json`
+Each layout set gets an `id`, a `dataType`, and the process `tasks` where it should be used. The `id` is case sensitive and should match the folder name. [1]
+
+Example: [1]
+```json
+{
+  ""$schema"": ""https://altinncdn.no/toolkits/altinn-app-frontend/4/schemas/json/layout/layout-sets.schema.v1.json"",
+  ""sets"": [
+    {
+      ""id"": ""form-a"",
+      ""dataType"": ""schema_4222_160523_forms_212_20160523"",
+      ""tasks"": [""Task_1""]
+    },
+    {
+      ""id"": ""form-b"",
+      ""dataType"": ""schema_3161_140411_…",
+0ba6e734-b1ef-4c46-ad2c-33b5f075e66a,2026-05-31T16:43:06.149601Z,enrichment-off,gc-21-start-a-new-instance-via-api-with-prefill,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,1,false,,0,6,3,2,6bbfb3935810;44cfbde67552;bfe49011a0cb;0359f331aded;8ab383fc52aa;2cf2db708add,6bbfb3935810;bfe49011a0cb;0359f331aded,6bbfb3935810;c1564b5e700e,14826,4500,372,4872,0,3,3,"Use the **simplified instantiation** endpoint `POST {basePath}/create` if you want to start a new instance from an external system and include initial field values in the request. This API supports **key-value prefilling** and can also copy data from an archived instance. [1]
+
+For a given person, you identify the instance owner in the request body using the person’s official identity number, typically `personNumber`, and Altinn will resolve it to `instanceOwner.partyId`. [1] The request body can include the initial values as multipart form data, with the first part named `instance` containing the JSON template for the instance, and subsequent parts containing the data elements whose names must match the data types defined in the application metadata. [1]
+
+Example of the multipart request s…",
+daebc72d-a31e-4c4b-9696-0854764ff162,2026-05-31T16:43:21.921960Z,enrichment-off,gc-21-start-a-new-instance-via-api-with-prefill,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,0,5,3,2,6bbfb3935810;bfe49011a0cb;34e021ea361b;6657c548caf3;8ab383fc52aa,6bbfb3935810;bfe49011a0cb;8ab383fc52aa,6bbfb3935810;c1564b5e700e,15771,6397,406,6803,0,3,3,"To start a new instance for a given person and pass in initial field values, use the app’s **instantiation request** with a **multipart/form-data** body. The first part must be named **`instance`** and contain the JSON with the **instance owner** and any metadata you want to set, and the following parts can contain the initial data elements / field values. [1][2]
+
+Example: set the person by **`personNumber`** (Altinn will resolve this to `instanceOwner.partyId`) and include a data element with prefilled values in the same request. [1][3]
+
+```http
+POST {basePath}
+Content-Type: multipart/form-data; boundary=""abcdefg""
+
+--abcdefg
+Content-Type: application/json; charset=utf-8
+Content-Disposition: form-data; name=""instance""
+
+{
+  ""appId"": ""org/app"",
+  ""instanceOwner"": {
+    ""personNumber"": ""12247…",
+6db34e62-f28b-4ecc-a4cb-eb475fe955c7,2026-05-31T16:43:38.128386Z,enrichment-off,gc-21-start-a-new-instance-via-api-with-prefill,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,0,4,2,2,6bbfb3935810;bfe49011a0cb;34e021ea361b;44cfbde67552,6bbfb3935810;bfe49011a0cb,6bbfb3935810;c1564b5e700e,16202,6372,380,6752,0,3,3,"From an external system, you start a new instance by sending a `POST` request to the app’s instantiation endpoint, and you include an `instance` JSON part in a `multipart/form-data` body with the person’s identifier and any initial field values you want to prefill. [1][2]
+
+For a given person, the instance owner is set in the `instanceOwner` object. Altinn can use the official identity number, such as `personNumber` for a person, and then look up the internal `instanceOwner.partyId`. [1] The example shows this in the `instance` part: [2]
+
+```http
+POST {basePath}
+Content-Type: multipart/form-data; boundary=""abcdefg""
+
+--abcdefg
+Content-Type: application/json; charset=utf-8
+Content-Disposition: form-data; name=""instance""
+
+{
+    ""instanceOwner"": {
+        ""PartyId"" : ""12345""
+    }
+}
+```
+
+If you…",
+e9cd16ab-0e78-4462-a1c8-801f332c1983,2026-05-31T16:43:52.078729Z,enrichment-off,gc-22-which-test-logins-when-running-locally,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.25,0.25,0.25,0.25,true,true,true,2,false,true,0,3,1,4,a79b2583b9f2;4dc8ea54ce89;8d82f06ea710,a79b2583b9f2,9a53ae7fdb0b;2f38ea1a18f7;a79b2583b9f2;a6d6148b4fd3,13948,6350,394,6744,0,3,3,"When testing locally, you can log in as the built-in **system user** associated with **950474084 Oslos Vakreste Borettslag** using the token from `/Home/GetTestSystemUserToken` or `/Home/Tokens` [1].
+
+If the default test users don’t fit your needs, you **can add your own custom test data** by serving a JSON document at `/[org]/[appId]/testData.json` (the simplest place is `App/wwwroot/testData.json`) [1]. That lets you customize things like **alternative organization numbers** or **personal identification numbers** [1].
+
+So, in short: there is a provided fake/system user for **950474084 Oslos Vakreste Borettslag**, and yes, you can add your own with a different ID number via `testData.json` [1].",
+20f96b26-84d8-4ae2-b5d4-9d5715a10024,2026-05-31T16:44:06.848296Z,enrichment-off,gc-22-which-test-logins-when-running-locally,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.25,0.25,0.25,0.25,true,true,true,2,false,true,0,4,1,4,a79b2583b9f2;377150c306bf;8d82f06ea710;4dc8ea54ce89,a79b2583b9f2,9a53ae7fdb0b;2f38ea1a18f7;a79b2583b9f2;a6d6148b4fd3,14768,6356,420,6776,0,3,3,"When testing locally in **localtest**, you can use the **built-in system and system user associated with `950474084 Oslos Vakreste Borettslag`** [1]. You can get the token via **`/Home/GetTestSystemUserToken`** or by visiting **`/Home/Tokens`** [1].
+
+If the default users don’t fit your needs, you **can add your own custom test data** by configuring your app to respond with a JSON document at **`/[org]/[appId]/testData.json`**; the simplest way is to place it at **`App/wwwroot/testData.json`** [1]. The context also says you may want to use **alternative organization numbers or personal identification numbers** for testing [1].
+
+So, in short: **yes, you can log in as the provided fake system user, and yes, you can add your own with a different ID number** [1].",
+5642dd03-41f6-47b0-8ab2-30531e4fd548,2026-05-31T16:44:19.994157Z,enrichment-off,gc-22-which-test-logins-when-running-locally,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,1,false,,0,6,3,4,9a53ae7fdb0b;a79b2583b9f2;8f1e9ac136ea;800f5b714dec;08576d8f877c;2e08a7e4f677,9a53ae7fdb0b;a79b2583b9f2;08576d8f877c,9a53ae7fdb0b;2f38ea1a18f7;a79b2583b9f2;a6d6148b4fd3,13145,4513,352,4865,0,3,3,"When you test locally, the built-in fake users in the standard user selection are Sophie, who represents **DDG Fitness AS** and its subsidiaries as **DAGL**, **EAS Health Consulting** as **LEDE**, and **Oslos Vakreste Borettslag** as **MEDL** [1]. The newer localtest version also supports a built-in **system user** associated with **950474084 Oslos Vakreste Borettslag** [2][3].
+
+Yes, you can add your own custom test data if the default users do not fit your needs: you can make your app respond with a JSON document at `/[org]/[appId]/testData.json`, and the simplest way is to place it at `App/wwwroot/testData.json` [2][3]. That is the documented way to use alternative IDs, such as different organization numbers or personal identification numbers, for local testing [2][3].
+
+If you want, I ca…",
+708bc29b-7ae6-4bfa-9237-adb8930636a9,2026-05-31T16:44:35.162614Z,enrichment-off,gc-23-what-info-government-stores-about-messages,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,2,false,true,0,8,6,3,831b2a861032;ebd89d3a9496;a372f63ff815;a76502198671;73e075cf955b;d4c8f0e1816c;f73f296c04a0;045ad33a09d5,831b2a861032;ebd89d3a9496;a76502198671;d4c8f0e1816c;f73f296c04a0;045ad33a09d5,a233d1c22ebe;b8ddca7bace0;ea7de904e1aa,15167,6054,433,6487,0,3,3,"Based on the context, the government keeps your digital messages in **your inbox in Altinn** [1]. The sources also say there are **retention policies** so correspondences are kept **as long as necessary according to legislation and guidelines** [1].
+
+If your question is about **what kind of information is stored**, the context does **not** give a full data inventory. It does say that messages can be part of a **dialogue in Dialogporten**, and that related messages may be shown as a **transmission** when they share an external reference [1][2]. It also says confidential messages are only visible to people with the right access, and that notifications/reminders may be sent by **SMS and/or email** [2][4][5][6].
+
+So, the safest answer is: **Altinn stores the correspondence itself in your inbox…",
+6f5ccb8a-e891-49dd-b490-bcb023bb7fa9,2026-05-31T16:44:49.741503Z,enrichment-off,gc-23-what-info-government-stores-about-messages,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,0,8,6,3,831b2a861032;ebd89d3a9496;e00057498d4d;d4c8f0e1816c;045ad33a09d5;914991e4b3c5;06689dd1ff78;26eabb350bcb,831b2a861032;ebd89d3a9496;e00057498d4d;d4c8f0e1816c;045ad33a09d5;914991e4b3c5,a233d1c22ebe;b8ddca7bace0;ea7de904e1aa,14578,4400,428,4828,0,3,3,"Based on the sources, the government keeps your digital messages in your **Altinn inbox**; the sources say that **all correspondences are stored in the user's inbox in Altinn** and that Altinn has an inbox for private individuals and businesses [1][6].  
+
+What is kept is not described as a full “government copy” of everything in a separate archive, but rather the correspondence itself in Altinn, with **retention policies** so it remains available as long as required by legislation and guidelines [1].  
+
+For **Altinn 3 Correspondence**, the message also **automatically becomes a dialogue** in **Dialogporten**, and if there is an existing dialogue as an external reference, it creates a **transmission** that groups related messages logically [1][2][3].  
+
+If the correspondence is **confidenti…",
+5e05fcdc-afc3-43a8-a38c-eeedf42cc9bb,2026-05-31T16:45:08.359015Z,enrichment-off,gc-23-what-info-government-stores-about-messages,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,3,false,true,0,6,4,3,06689dd1ff78;d1b16e295b68;831b2a861032;e00057498d4d;914991e4b3c5;09975c5fe943,06689dd1ff78;831b2a861032;e00057498d4d;09975c5fe943,a233d1c22ebe;b8ddca7bace0;ea7de904e1aa,18617,7839,535,8374,0,3,3,"Based on the sources, the government/Altinn keeps your digital messages in **your inbox in Altinn**; for Altinn Correspondence, “all correspondences are stored in the user's inbox in Altinn” [2]. The material also says that an Altinn 3 Correspondence “automatically becomes a dialogue” and is made available through **Dialogporten** in **Altinn 3 Arbeidsflate** [3], [2].
+
+What is kept is therefore not described as a separate “government copy” of everything, but as correspondence stored in Altinn’s inbox and made available through the related Altinn/Dialogporten interfaces [2], [3]. The sources also say retention policies ensure correspondences are available as long as necessary according to legislation and guidelines [2].
+
+There is one important limitation: Digdir, as manager of Altinn, **do…",
+ac7af219-8f18-42e2-86bd-5564f7306cbb,2026-05-31T16:45:21.973907Z,enrichment-off,gc-24-group-related-letters-under-one-inbox-item,0,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,0,7,1,1,93576af31a2a;20391f3e6ac4;9084294cfb55;c62a37ff5dad;6f00003435ce;e00057498d4d;831b2a861032,831b2a861032,9fc8a7bd7ec2,13614,4508,397,4905,0,3,3,"If you want several related letters to appear grouped under one item, the closest match in the sources is to use an **existing dialog as an external reference** so that new messages create a **transmission** instead of separate entries. The source says that messages with an existing dialogue as an external reference “will create a transmission which provides a logical display of related messages” [1].
+
+So, in practice, you should:
+- create or reuse one **dialog** as the common parent item, and
+- send the related letters/messages with that dialog as the **external reference** [1].
+
+This is the mechanism described for grouping related correspondence in Dialogporten/Altinn Arbeidsflate, but the sources do not give a more detailed step-by-step setup for the inbox UI itself [1].",
+97b90e2b-4c2a-4ca6-b38d-5b8a392e493f,2026-05-31T16:45:33.756672Z,enrichment-off,gc-24-group-related-letters-under-one-inbox-item,1,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,1,false,,0,3,1,1,831b2a861032;a372f63ff815;c15fd0c441ce,831b2a861032,9fc8a7bd7ec2,11782,3328,245,3573,0,2,3,"If you want several related letters to appear grouped under one item in the inbox, the closest match in the source is to use an **existing dialogue as an external reference**. In that case, an Altinn 3 Message will create a **transmission** that gives a logical display of related messages instead of separate entries. [1]
+
+So, the practical answer is: **link the messages to the same existing dialogue/external reference** so they are shown as one related thread/transmission in **Dialogporten** and the unified interface across **Arbeidsflate** and **Dialogporten**. [1]
+
+If you meant a different inbox grouping feature, the context does not mention any other way to manually bundle letters into one inbox item. [1]",
+6443ffad-cff0-4d56-b6f6-b2573c814415,2026-05-31T16:45:47.458793Z,enrichment-off,gc-24-group-related-letters-under-one-inbox-item,2,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,0,5,1,1,9fc8a7bd7ec2;f363a6c2c64f;f73f296c04a0;8eb05cf419be;611bf4648c1a,9fc8a7bd7ec2,9fc8a7bd7ec2,13701,4671,359,5030,0,3,3,"To have several related letters show up grouped under one item in the inbox, create them as part of the same **dialog** by using the **Altinn 3 Correspondence API** and setting the new correspondence’s `externalReferences` to point to the existing `dialogId`. The `referenceType` must be `DialogportenDialogId`, and the `referenceValue` must be the `dialogId` of the dialog you want to group them under. [1]
+
+If you also want to control how the grouped item is labeled, you can set the transmission type with a `DialogportenTransmissionType` external reference when creating the correspondence. If you do not set it, the default transmission type is **Information (1)**. [1]
+
+So, in short: use the existing `dialogId` in `externalReferences` with `referenceType: ""DialogportenDialogId""` to group rela…",
+7b1d580d-6a59-4504-8d7f-8ec726551204,2026-05-31T16:46:02.699304Z,enrichment-off,gc-25-message-blocks-me-from-opening-attachment-or-button,0,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,2,false,true,0,8,4,3,c15fd0c441ce;33dcab0f31d0;7acc0fae76e9;d4c8f0e1816c;a3a55131b768;7def5fc412ac;39c780dca91d;e8581528604f,33dcab0f31d0;7acc0fae76e9;d4c8f0e1816c;e8581528604f,7862f7d4c489;506bcbea034e;2fa2b30bb3b8,15239,6337,360,6697,0,3,3,"The most likely reason is that the message or its attachments have **different access management** than the message itself, and you do **not** have permission for the attachment resource. Altinn can let someone read the **Correspondence** while still blocking access to the **attachment** if the attachment was initialized with a separate resource and stricter access rules [1], [4].
+
+This is especially common for **confidential information**: key roles are **not automatically granted read access** to confidential messages, and the **Main Administrator** must explicitly delegate access to the person who should distribute or process them [2], [3]. If that access has not been granted, parts of the UI may appear greyed out, and trying to open the attachment can give a **forbidden** error [2], [3…",
+2a8f7dff-5005-492c-a134-9a76d00ff4b7,2026-05-31T16:46:15.819115Z,enrichment-off,gc-25-message-blocks-me-from-opening-attachment-or-button,1,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,1,false,,0,5,5,3,c15fd0c441ce;d4c8f0e1816c;99849fcf3f03;612603413ec9;7acc0fae76e9,c15fd0c441ce;d4c8f0e1816c;99849fcf3f03;612603413ec9;7acc0fae76e9,7862f7d4c489;506bcbea034e;2fa2b30bb3b8,13118,4556,394,4950,0,3,3,"This is most likely because the message is **confidential information** and you do **not** have the required access rights to read it. For confidential messages, **no one is automatically granted access**, not even key roles like the **Main Administrator** or general manager; access must be explicitly delegated in Altinn. [2][5]
+
+That also explains why some **attachments** and **buttons** are greyed out: Altinn supports **access management for attachments**, so an organization can let someone distribute the correspondence without letting them open the attachment itself. [1]
+
+The **“forbidden”** error matches the standard **403 Forbidden** status, which means the authenticated user/organization does not have permission to access the resource. [4]
+
+In short: you can see the message, but not …",
+529f96aa-6b85-4aaa-8145-96b43c0c424a,2026-05-31T16:46:29.911107Z,enrichment-off,gc-25-message-blocks-me-from-opening-attachment-or-button,2,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,1,false,,0,4,3,3,c15fd0c441ce;e8581528604f;33dcab0f31d0;99849fcf3f03,e8581528604f;33dcab0f31d0;99849fcf3f03,7862f7d4c489;506bcbea034e;2fa2b30bb3b8,14091,4536,349,4885,0,3,3,"The most likely reason is **access management on the attachment**: attachments can have **different access management than the message itself**, so you may be allowed to open the correspondence but **not** the specific attachment or action tied to it [1][2].
+
+In particular, the system supports **setting access management on an attachment that differs from the access management of the message** [1]. The attachment’s access is controlled by the **resource used when initializing the attachment** [2]. If the attachment was initialized with a resource you don’t have rights to, it can appear greyed out or return a **forbidden** error when you try to open it [2].
+
+There is also a related case for **confidential messages**: the receiving organization may need someone to be granted access before th…",
+cf3a9a82-91d2-4a76-99bc-e48749c02da1,2026-05-31T16:46:45.525409Z,enrichment-on,gc-01-conditional-field-visibility,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,25,4,4,2,121c6cd3f2b4;dbed56c98d89;6221dfa7179c;c5bd9cda2f82,121c6cd3f2b4;dbed56c98d89;6221dfa7179c;c5bd9cda2f82,46573caa8ca8;55885dbe10b6,15612,4426,433,4859,0,3,3,"Use a **dynamic expression / conditional rule** to **show/hide the field** based on the other field’s value [1][2].
+
+In practice, you can:
+
+1. Add both UI components to the layout [3].
+2. In Altinn Studio, go to **Regler for vis/skjul felt** and select or create a rule [3].
+3. Configure the **input field** as the source value and the **other form field** as the field to be shown/hidden [3].
+4. Define the logic in `App/ui/form/RuleHandler.js` so it checks whether the value matches the one you want [2][4].
+
+For example, the context shows a rule that returns `true` when `obj.value === ""Yes""` and another rule for the opposite case [4]. That means you can make one field appear only when the other field has a certain value by using a condition like that [4].
+
+If you want, I can also show you a c…",
+654f3c3f-7bbb-414c-b473-da33a74ee2c3,2026-05-31T16:46:59.754726Z,enrichment-on,gc-01-conditional-field-visibility,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,25,4,4,2,121c6cd3f2b4;d3fd4c10d5c7;50945c100532;3a829e0e9b1c,121c6cd3f2b4;d3fd4c10d5c7;50945c100532;3a829e0e9b1c,46573caa8ca8;55885dbe10b6,14228,4538,380,4918,0,3,3,"You can do this with a **dynamic expression** in Altinn, where the second field is shown only when the first field has the value you want. Dynamic expressions are used to define behavior like **show/hide**, **required**, and **read-only** in Altinn 3 apps [1].
+
+In practice, you configure a condition for the field you want to control, for example by using a rule like **Hide** or **Show** based on the value of another field [2]. The Studio documentation also says that expressions can be built in Altinn Studio, including more complex ones if needed [3][4].
+
+If you want, I can show you a concrete JSON example for:
+- a **simple show/hide expression**, or
+- an example for a **repeating group**.",
+928d4315-18b2-45c4-9cdb-e317528a2ede,2026-05-31T16:47:13.815238Z,enrichment-on,gc-01-conditional-field-visibility,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,1,false,,24,3,3,2,121c6cd3f2b4;55885dbe10b6;56c322502a25,121c6cd3f2b4;55885dbe10b6;56c322502a25,46573caa8ca8;55885dbe10b6,14059,4526,373,4899,0,3,3,"Use a **dynamic expression** on the form field’s boolean property, typically the **`hidden`** property, so the field is shown only when another field has the value you want. In Altinn Studio, this is called a **logic rule** / **expression** [3].
+
+The expression should compare the other field’s value from the **Data Model** against the value you want, using a function in a **Sub Expression** [2][3]. If the comparison is true, the target field can be shown; if it is false, the field can be hidden [1].
+
+In practice, you would:
+
+1. Choose the component field you want to control [2].  
+2. Add an expression to its **`hidden`** property [2][3].  
+3. Use the **Data Model** as the data source for the other field [2].  
+4. Set the comparison value to the specific value that should make the field app…",
+56d0ef6b-7d94-4d14-a057-ddd5bbab3048,2026-05-31T16:47:28.444198Z,enrichment-on,gc-02-dialogporten-what-is,0,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,1,false,,22,10,7,3,8276b4fa40a8;ea7de904e1aa;1a65d1130939;94bc081d38eb;0f76a4965326;66335015006e;7c4d6867a379;6d7dbdb4fddc;a233d1c22ebe;c62a37ff5dad,8276b4fa40a8;ea7de904e1aa;1a65d1130939;94bc081d38eb;7c4d6867a379;a233d1c22ebe;c62a37ff5dad,d4528782a4c8;d1b16e295b68;f3899e00b3c2,14622,4269,387,4656,0,3,3,"Dialogporten is a common API and metadata state store for digital dialogs, meant to help public service platforms and users communicate in a standardized way. It manages dialog metadata and interoperability across systems, rather than being the place where the actual service data is processed. [2]
+
+In practical terms, it represents ongoing or completed communications as “dialogs” with metadata like sender, recipient, addresses/URLs, title, summary, status, activity history, and available actions. The service provider can update this metadata over time, and changes generate events. [6][7]
+
+What it actually does depends on the type of action:
+
+- **GUI actions** are for browser-based end-user systems and usually just navigate the user to the service owner’s UI, often with a simple GET request…",
+2379b9df-0396-44f3-bace-ce89c2709bc1,2026-05-31T16:47:44.798743Z,enrichment-on,gc-02-dialogporten-what-is,1,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.3333333333333333,true,true,true,2,false,true,40,9,6,3,8276b4fa40a8;ea7de904e1aa;1a65d1130939;d4528782a4c8;f3899e00b3c2;0f76a4965326;66335015006e;4a9ad6cd2bd1;20391f3e6ac4,8276b4fa40a8;ea7de904e1aa;1a65d1130939;d4528782a4c8;66335015006e;20391f3e6ac4,d4528782a4c8;d1b16e295b68;f3899e00b3c2,16354,6032,422,6454,0,3,3,"Dialogporten is a common API and metadata state store for digital dialogs [2]. In practical terms, it provides a standardized way for public service platforms like Altinn to communicate securely and efficiently with users by managing dialog and message metadata across systems [2].
+
+What it does, in source terms:
+- It serves as a common meta-representation of interactive digital dialog services, regardless of platform [5].
+- It integrates with Altinn Authorization, Maskinporten, and ID-porten for trust and security [4].
+- It provides an “Arbeidsflate” web-based GUI frontend, replacing “Altinn innboks” [4].
+- It is integrated with Altinn Events, which helps connect services [4].
+- It automatically makes app instances and correspondence available in Dialogporten and updates their representati…",
+b9bd8ac4-e277-4766-ab8b-9058e8a79947,2026-05-31T16:48:02.701372Z,enrichment-on,gc-02-dialogporten-what-is,2,public-docs,new,"altinn-dialogporten,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,21,5,5,3,66335015006e;d4528782a4c8;c62a37ff5dad;ea7de904e1aa;a233d1c22ebe,66335015006e;d4528782a4c8;c62a37ff5dad;ea7de904e1aa;a233d1c22ebe,d4528782a4c8;d1b16e295b68;f3899e00b3c2,17902,4254,345,4599,0,3,3,"Dialogporten is a common API and metadata state store for digital dialogs [4]. In practice, it provides a standardized way to handle messages and dialogs across Altinn 3 and other digital service platforms so they can be made accessible to end-user systems in a common format [1][4].
+
+What it actually does is manage the dialog metadata and state: who the sender and recipient are, what the dialog is about, its status, relevant actions the user can take, and related transmissions [3][5]. It also integrates with Altinn Authorization, Maskinporten, ID-porten, and Altinn Events to support trust, security, and event-driven interaction [2].
+
+A few key points:
+- It treats a “dialog” as a common model for ongoing or completed communication with a service owner [3].
+- The dialog is mutable, meaning t…",
+1d2480c9-6912-4311-964d-a2dabaf680a5,2026-05-31T16:48:18.091625Z,enrichment-on,gc-03-system-acts-for-company,0,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,24,7,2,3,a9606ba0b9c9;26eabb350bcb;050fbe324462;e214d302147a;495e055e149b;ac59b367d616;137951ad1a40,a9606ba0b9c9;050fbe324462,050fbe324462;6f4a1ef342c8;e6f7545a1adc,15389,4509,378,4887,0,3,3,"An accounting program can submit data by using a **system user** in Altinn, which is a virtual user that gives the software access to retrieve and submit data on behalf of the organization, without linking the actions to a specific person. [2]
+
+In practice, the flow is: the client administrator links the accounting client to the system user, the end-user system retrieves a **system user token** via Maskinporten, and then the system sends the report via the API with that valid token. The API then checks access and returns confirmation. [1]
+
+So the closest source term is **system user**. If personal responsibility is required, the source says a standard Altinn login must be used instead. [2]",
+e16b9806-7d72-494d-abf5-40cf712b33a9,2026-05-31T16:48:32.193572Z,enrichment-on,gc-03-system-acts-for-company,1,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,24,6,4,3,26eabb350bcb;050fbe324462;a9606ba0b9c9;6be6764fadc0;87123c544501;e214d302147a,26eabb350bcb;050fbe324462;a9606ba0b9c9;6be6764fadc0,050fbe324462;6f4a1ef342c8;e6f7545a1adc,14101,4545,362,4907,0,3,3,"An accounting program can submit data to Altinn by using a **system user** for the organization, so the software can retrieve and send data on behalf of the company without a person logging in each time. Actions done through a system user are registered as done by the system user, not by a specific person. [2]
+
+In practice, the program would typically:
+1. create or request a system user for the company, [4]
+2. retrieve a **system user token** via **Maskinporten**, [3]
+3. send the report through the API with that valid token, [3]
+4. let Altinn validate access and confirm the submission. [3]
+
+This fits the described use case of machine-to-machine submission from an end user system. [1]",
+7e35f5d5-69a4-41bc-842d-db80b86783fc,2026-05-31T16:48:46.711067Z,enrichment-on,gc-03-system-acts-for-company,2,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,22,9,2,3,a9606ba0b9c9;12bbe5cf4a58;6be6764fadc0;050fbe324462;175c015b82fe;61b3757a8553;33c1717043cb;f6a34be9fbeb;63837c882754,a9606ba0b9c9;050fbe324462,050fbe324462;6f4a1ef342c8;e6f7545a1adc,14516,4656,401,5057,0,3,3,"An accounting program can use a **system user** so the organization can submit and retrieve data through Altinn without a person logging in each time. A system user is described as a virtual user that lets systems like an accounting program access and submit data on behalf of the organization, and actions are registered as done by the system user rather than a specific person [2].
+
+For a company/client setup, the flow is:  
+1. the client is linked to the system user,  
+2. the end-user system retrieves a **system user token** via Maskinporten,  
+3. the system sends the report via the API with a valid token, and  
+4. the API checks access and returns confirmation [1].
+
+So the short answer is: **use a system user and submit via the Altinn API with a valid system user token** [1][2].",
+6c4182f5-99f1-4220-b4fe-d5f102b14dc6,2026-05-31T16:48:59.542655Z,enrichment-on,gc-04-notify-instead-of-polling,0,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,1,false,,19,8,4,2,c1ef5ee35ec8;c4464cc8c17e;4aa2b0740446;fb897d22bdf4;fd2b51bae6e8;5fdc153cdf30;03f0f1c41d4c;0a559cd885b9,c4464cc8c17e;4aa2b0740446;fb897d22bdf4;5fdc153cdf30,fb897d22bdf4;f183fac18900,12831,4112,362,4474,0,3,3,"Use **event subscriptions with a webhook** so Altinn can **push events to your system automatically** instead of you polling all the time. Altinn Events lets you register a custom webhook endpoint and receive events asynchronously, and this is the recommended approach for receiving events. [1][3]
+
+For Altinn forms/apps, you would typically subscribe to the app event types you care about, such as **`app.instance.created`**, **`app.instance.process.movedTo.{Task ID}`**, **`app.instance.process.completed`**, and **`app.instance.substatus.changed`**. [4]
+
+A few important details:
+- Your webhook must support **HTTPS** and use a **publicly trusted TLS certificate**; self-signed certificates are not supported. [1][2]
+- Altinn will send a **validation event** to your webhook before enabling forwar…",
+5e2a03fd-c3cf-4be7-ad11-74d62f811e79,2026-05-31T16:49:14.036047Z,enrichment-on,gc-04-notify-instead-of-polling,1,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,33,6,4,2,c4464cc8c17e;fb897d22bdf4;4aa2b0740446;03f0f1c41d4c;fd8381537a60;6d0bbbb819b7,c4464cc8c17e;fb897d22bdf4;4aa2b0740446;6d0bbbb819b7,fb897d22bdf4;f183fac18900,14492,5924,363,6287,0,3,3,"Use **Altinn Events subscriptions** with a **webhook/push-based** endpoint, instead of polling all the time. Altinn Events will notify your system asynchronously when something changes, so you can react as soon as an event occurs [2][4].
+
+For your Altinn forms, this means your system should register a **HTTPS webhook endpoint** and subscribe to the relevant events. Altinn Events supports filters such as **source**, **type**, and **resource** so you can limit which form-related events you receive [1][3].
+
+A few important details:
+- The webhook endpoint must use **HTTPS** [1][3].
+- The endpoint must accept both the **validation event** and normal events [3].
+- If the webhook is temporarily unresponsive, Altinn Events can retry delivery up to **12 times** [2].
+
+If you want, I can also help yo…",
+aedccdcd-5a74-435f-96fb-3f0c8f7ee473,2026-05-31T16:49:28.744973Z,enrichment-on,gc-04-notify-instead-of-polling,2,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,28,5,5,2,c4464cc8c17e;fb897d22bdf4;4aa2b0740446;5fdc153cdf30;03f0f1c41d4c,c4464cc8c17e;fb897d22bdf4;4aa2b0740446;5fdc153cdf30;03f0f1c41d4c,fb897d22bdf4;f183fac18900,14707,5823,340,6163,0,3,3,"Use **event subscription / webhook forwarding** in Altinn Events, rather than polling all the time. Altinn Events lets you register a custom **webhook endpoint** so your system receives events **asynchronously** when something happens [1][2].
+
+In practice, your system should:
+- expose an **HTTPS** webhook endpoint, because Altinn requires HTTPS and publicly trusted TLS certificates [1][3]
+- register that endpoint as a subscription in Altinn Events [1][2]
+- optionally add filters such as **sourceFilter**, **resourceFilter**, **subjectFilter**, and **typeFilter** so you only receive the events relevant to your forms [1][3]
+- handle the incoming POST requests and return a **2xx** response when processed successfully [3]
+
+Altinn Events also sends a **validation event** to the webhook URL befor…",
+1997051f-33a6-4c98-938c-ded43a02c4f2,2026-05-31T16:49:42.844113Z,enrichment-on,gc-05-dropdown-options-code-list,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.3333333333333333,true,true,true,1,false,,23,6,4,3,5b1e816100fb;2b5b88335ce7;725316b0e0d6;5ad3c40039a5;d249d385d36b;af9d921ce4bd,2b5b88335ce7;725316b0e0d6;d249d385d36b;af9d921ce4bd,725316b0e0d6;5b1e816100fb;efd790a816ae,14098,4338,352,4690,0,3,3,"To set up options for a **Dropdown** component from a code list in Altinn Studio, you set the component’s **`optionsId`** to the code list ID, either in Altinn Studio or directly in the layout file. [2][3]
+
+For example, if the code list ID is `countries`, the component can be configured like this: [1]
+
+```json
+{
+  ""id"": ""dropdown-component"",
+  ""type"": ""Dropdown"",
+  ""textResourceBindings"": {
+    ""title"": ""Some title""
+  },
+  ""dataModelBindings"": {
+    ""simpleBinding"": ""some.field""
+  },
+  ""optionsId"": ""countries""
+}
+```
+
+If the code list is a **secured code list**, you should also set `""secure"": true`, and the provider must implement `IInstanceAppOptionsProvider`. [1]
+
+If the code list comes from the **organisation library**, the `optionsId` uses the format `lib**{org}**{id}**{version}`. For e…",
+6d3847d7-9603-4e83-91b4-64753be07cc2,2026-05-31T16:49:56.063519Z,enrichment-on,gc-05-dropdown-options-code-list,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.0,true,true,true,1,false,,21,5,4,3,952f65bb32f0;725316b0e0d6;2b5b88335ce7;588ee2291183;3d189734f3ac,952f65bb32f0;2b5b88335ce7;588ee2291183;3d189734f3ac,725316b0e0d6;5b1e816100fb;efd790a816ae,13219,4368,340,4708,0,3,3,"To set up options for a **Dropdown** component from a code list in Altinn Studio, use the component’s **`optionsId`** property and point it to the code list ID. A component must have at least one options source, and `optionsId` is the property used for code lists. [4]
+
+Example: [3]
+
+```json
+{
+  ""id"": ""komponent-id"",
+  ""type"": ""Dropdown"",
+  ...
+  ""optionsId"": ""land""
+}
+```
+
+If the code list is a **secured dynamic code list**, also set **`secure`: `true`**. [2][3]
+
+```json
+{
+  ""id"": ""komponent-id"",
+  ""type"": ""Dropdown"",
+  ...
+  ""optionsId"": ""children"",
+  ""secure"": true
+}
+```
+
+If you are reusing an **Altinn 2 code list**, register it in `Program.cs` with `services.AddAltinn2CodeList(...)`, then use that list’s `id` in `optionsId`. [1][4]
+
+If you want, I can also show the setup for:
+- **static …",
+25464795-e628-4cfe-8018-859e5d5bd17f,2026-05-31T16:50:11.603095Z,enrichment-on,gc-05-dropdown-options-code-list,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,2,false,true,37,5,4,3,5b1e816100fb;2b5b88335ce7;97784a73f06b;3d189734f3ac;d249d385d36b,5b1e816100fb;2b5b88335ce7;97784a73f06b;3d189734f3ac,725316b0e0d6;5b1e816100fb;efd790a816ae,15538,6100,341,6441,0,3,3,"To set up options for a **Dropdown** from a code list in Altinn Studio, you connect the component to an **options source** using the `optionsId` property. A Dropdown supports options, and `optionsId` can point to a code list from JSON files, a dynamic code list, or a shared code list. [1][4]
+
+### Typical setup
+1. Create or choose a code list with an ID, for example `countries`. [2][3]
+2. Reference that ID in the Dropdown component using `optionsId`. [2][3]
+3. If you use a JSON file, place it in `App/options/` and name it `{optionId}.json`, for example `countries.json`. [3]
+
+### Example Dropdown configuration
+```json
+{
+  ""id"": ""some-dropdown-component"",
+  ""type"": ""Dropdown"",
+  ""textResourceBindings"": {},
+  ""dataModelBindings"": {
+    ""simpleBinding"": ""soknad.opphavsland""
+  },
+  ""optionsId"": …",
+2e0d0da2-195a-40ad-8b20-aa2c1ea61833,2026-05-31T16:50:26.752951Z,enrichment-on,gc-06-send-official-letter-to-company,0,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,2,false,true,44,5,4,3,82ad7fb84323;e00057498d4d;f0ccc345d13b;99849fcf3f03;e41bf2eab823,82ad7fb84323;e00057498d4d;99849fcf3f03;e41bf2eab823,ebd89d3a9496;e00057498d4d;1543a3f4e321,15149,6175,415,6590,0,3,3,"Yes. Altinn 3 Correspondence is a secure messaging service for sending official letters, notifications, and other documents between public agencies and individuals or businesses [1]. It is designed so that public sector organizations can send messages to citizens, businesses, and other public entities [2].
+
+For a company, the correspondence is delivered to the company’s inbox in Altinn, and an Altinn 3 Correspondence automatically becomes a dialogue and is made available through Dialogporten in Altinn 3 Arbeidsflate [2]. Since organization numbers have an inbox in Altinn Arbeidsflate, the sender can reach the correct recipient [2].
+
+How the company gets notified depends on the message type. If the correspondence contains confidential content, the receiving organization MUST be notified usi…",
+5c505d56-b806-48ea-b30a-b844203e3311,2026-05-31T16:50:53.936865Z,enrichment-on,gc-06-send-official-letter-to-company,1,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,3,true,true,68,3,2,3,82ad7fb84323;0af9eaceae9e;5c6e473db66d,82ad7fb84323;0af9eaceae9e,ebd89d3a9496;e00057498d4d;1543a3f4e321,27183,47237,1071,48308,35456,8,3,"Yes. Altinn Correspondence is explicitly described as a secure messaging service for exchanging “official letters, notifications, and other documents” between public agencies and individuals or businesses.
+
+How the company gets notified:
+- When a message is created, a notification order is placed.
+- The notification is sent 5 minutes after the message’s publication time.
+- If the publication time is already in the past, it is sent 5 minutes after the current time.
+- Notifications can go by email or SMS.
+- If a reminder is enabled, it is sent later if the message has not been read.
+
+Also, the recipient still gets the message in their Altinn inbox. In the evidence I found, even when SMS notifications are unavailable in test environments, the user “will still receive a message in their altinn…",
+36319a45-3d7d-41c0-b29c-ea172aaabfc5,2026-05-31T16:51:08.258261Z,enrichment-on,gc-06-send-official-letter-to-company,2,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.6666666666666666,true,true,true,2,false,true,46,7,4,3,82ad7fb84323;ebd89d3a9496;1543a3f4e321;f0ccc345d13b;e5b8450a7556;e41bf2eab823;99849fcf3f03,82ad7fb84323;ebd89d3a9496;1543a3f4e321;99849fcf3f03,ebd89d3a9496;e00057498d4d;1543a3f4e321,14320,6219,395,6614,0,3,3,"Yes. Altinn 3 Correspondence is a messaging service for secure exchange of correspondence such as official letters and notifications between public agencies and individuals or businesses [1]. A public agency can use Altinn as a service owner to send messages [3].
+
+The company is notified through the notification service: recipients can get SMS and email notifications and follow-up reminders when a new message is waiting [2]. If the correspondence contains confidential content, the receiving organization must be notified using the `Notification` feature, and the notification should explain that the message is confidential and what the organization must do to give the right person access [4].",
+ed89410a-fd71-448a-8f82-ee484c6c2e5b,2026-05-31T16:51:24.730843Z,enrichment-on,gc-07-let-bought-software-act-for-my-company,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,2,false,true,41,10,3,2,63cd0d338039;27f9f39f1494;b095c25ab578;101266d6ef7d;362792b4400e;f4c93bbb9873;f6a34be9fbeb;6f4a1ef342c8;d45c9debe7da;011e2cc45a3d,362792b4400e;f4c93bbb9873;6f4a1ef342c8,1cac2d1c116d;386a7efbc9c7,16472,6359,453,6812,0,3,3,"You can let the accounting program do this by using a **system user** for your own organization, so the software can report on behalf of the company without you logging in each time [2][3].
+
+For an internal company system, the typical setup is:
+- **1 system user** linked to the end-user system [2].
+- The system user is given the **access packages** the organisation needs for reporting, and the organisation approves the request [2].
+- This is suitable when the system is used only for your own organisation number, with no other organisations involved [3].
+
+If the program needs to fetch **tax data**, the relevant access must be delegated to the system user, and the system vendor is responsible for registering the correct access packages in the system register [2]. The exact access package dep…",
+7424c81c-e650-46c7-aa28-6729892b5554,2026-05-31T16:51:40.888381Z,enrichment-on,gc-07-let-bought-software-act-for-my-company,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,2,false,true,43,6,4,2,a9606ba0b9c9;b63c4ea55766;cf17b073d2a6;d612235c64ad;2e8f88ee749f;7a851f68a612,a9606ba0b9c9;cf17b073d2a6;d612235c64ad;2e8f88ee749f,1cac2d1c116d;386a7efbc9c7,16157,6250,446,6696,0,3,3,"You can let the accounting program pull your tax data by setting up a **System User** for your company and delegating the relevant access to it, so the program can use a token instead of you logging in each time. [1][4]
+
+In practice, the flow is:  
+1. **Add client**: the accounting firm/system administrator links your company as a client to the system user, and access is delegated to the system user automatically. [1]  
+2. **Retrieve token**: the end-user system requests a **system user token via Maskinporten**. [1][4]  
+3. **Send request**: the system uses that token to call the API and fetch/send the relevant report or data. [1][4]  
+4. **Authorization check**: the API checks access with Altinn Authorization before returning confirmation or data. [1][4]
+
+If you are buying an accounting p…",
+fb036049-be1b-405e-b793-fb56a1235bc0,2026-05-31T16:51:56.666958Z,enrichment-on,gc-07-let-bought-software-act-for-my-company,2,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,2,false,true,47,4,3,2,ad357cccd904;33c85fc05357;1f6dc956fee4;cfe75e58bba2,ad357cccd904;1f6dc956fee4;cfe75e58bba2,1cac2d1c116d;386a7efbc9c7,15765,6520,464,6984,0,3,3,"To let an accounting program pull your tax data without you logging in every time, you should use **system user for client relationships** and delegate the relevant client access to the software/provider. The end user system can then use a **system user token** to call **`GET accessmanagement/api/v1/enduser/authorizedparties`** to find the correct `partyUuid` for the client, and then use Altinn services on behalf of that client [2].
+
+In practice, the flow is:
+
+1. Set up a **system user for client relationships** for your company [2].  
+2. Delegate the needed client access to the accounting program/provider [2].  
+3. Use the **AuthorizedParties** endpoint to retrieve which parties the system user is authorised for [2].  
+4. Use that `partyUuid` in subsequent Altinn API calls so the program …",
+9a68262f-f482-44ac-96c2-c18261d76624,2026-05-31T16:52:12.733018Z,enrichment-on,gc-08-let-my-bank-fetch-my-income-data,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.6666666666666666,0.6666666666666666,0.6666666666666666,true,true,true,2,false,true,40,8,5,3,d45c9debe7da;362792b4400e;36cee5a43220;26eabb350bcb;89f08b423a6f;e396875b9f1f;6c0738f8b252;96a83180e343,d45c9debe7da;362792b4400e;36cee5a43220;e396875b9f1f;6c0738f8b252,9e1666d9a336;e396875b9f1f;362792b4400e,16064,6282,395,6677,0,3,3,"When you allow your bank to fetch your income information from a public agency, Altinn Consent is used as the technical process for sharing the data based on your consent [4]. The service owner and Altinn handle the dialogue and consent flow, and the consent is issued as a Maskinporten consent token that contains the information needed to validate and log the delegation [1].
+
+In practice, the bank or its system requests consent for the relevant service/API, and you approve it in the consent flow [1][3]. The service owner can restrict which organisations may use the service with access lists, and the consent must have a defined duration [2]. You can also withdraw the consent at any time in the Altinn portal [2].
+
+If the bank uses a third-party supplier, that supplier can create the consent …",
+674c911d-33ce-4fb7-ad92-9f24fd9bcf90,2026-05-31T16:52:27.116015Z,enrichment-on,gc-08-let-my-bank-fetch-my-income-data,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,2,false,true,39,7,4,3,9e1666d9a336;e396875b9f1f;362792b4400e;b6afb35fb8fa;0872329769ae;36cee5a43220;63cd0d338039,9e1666d9a336;e396875b9f1f;362792b4400e;0872329769ae,9e1666d9a336;e396875b9f1f;362792b4400e,14382,6216,363,6579,0,3,3,"When you allow your bank to fetch your income information from a public agency, the bank is the **data consumer** and the public agency is the **service owner / data source** [1]. The process works like this:
+
+1. You start the service at the bank and the bank initiates the **consent flow** [1].  
+2. The bank sends a **consent request** to Altinn [1].  
+3. Altinn returns a **redirect_url**, and you are sent there to approve the request [1].  
+4. You authenticate, usually with **ID-porten**, and grant consent (delegation) [1].  
+5. The bank retrieves the **consent token** (`consent_id`) after approval [1].  
+6. The bank uses that token to fetch the income data from the public agency, and the agency validates the token before returning the data [1][4].
+
+The consent is not open-ended: it has a…",
+d617749a-7fd8-4a6a-b5a9-d8be445f3d0f,2026-05-31T16:52:41.812468Z,enrichment-on,gc-08-let-my-bank-fetch-my-income-data,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,0.6666666666666666,true,true,true,2,false,true,38,7,5,3,9e1666d9a336;362792b4400e;e396875b9f1f;4c364b73e193;440499ab7abd;0872329769ae;63cd0d338039,9e1666d9a336;362792b4400e;4c364b73e193;440499ab7abd;0872329769ae,9e1666d9a336;e396875b9f1f;362792b4400e,14696,6215,412,6627,0,3,3,"When you allow your bank to fetch your income information from a public agency, the bank is the **data consumer**, the public agency is the **service owner** (data source), and you are the **end user** who grants consent [1].
+
+In practice, the flow works like this [1][4]:
+
+1. You start the service at the bank, and the bank initiates the consent flow [1].  
+2. The bank sends a consent request to Altinn using the required Maskinporten scopes [1][3].  
+3. Altinn returns a `redirect_url`, and you are sent there to review the request [1].  
+4. You authenticate, usually with ID-porten, and approve the consent [1].  
+5. Altinn registers the delegation and the bank retrieves the consent token (`consent_id`) [1].  
+6. The bank then uses that consent token to fetch the income data from the public ag…",
+fd0e8f14-aef1-4aee-8968-c27c254f3208,2026-05-31T16:53:05.795724Z,enrichment-on,gc-09-api-to-link-customers-to-accountant-integration,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.6666666666666666,true,true,true,3,false,false,61,5,2,3,a9606ba0b9c9;8d68c8f11c63;7f4b4d3d70f5;1f6dc956fee4;438d68cacb4b,1f6dc956fee4;438d68cacb4b,32ee6aa61499;438d68cacb4b;1f6dc956fee4,23982,22359,567,22926,9472,5,3,"To **attach** companies/clients to a **system user for client relationships**, call:
+
+- **POST** `authentication/api/v1/enduser/systemuser/clients/` to delegate a client to the system user [1].
+
+To **detach** them, call:
+
+- **DELETE** `authentication/api/v1/enduser/systemuser/clients/` to remove an existing client from the system user [1].
+
+Both endpoints use the same query parameters:
+
+- `agent` = the unique identifier of the system user for client relationships
+- `client` = the unique identifier of the client/company to add or remove [1].
+
+If you want to **list** which companies are already attached, use:
+
+- **GET** `authentication/api/v1/enduser/systemuser/clients/` [2].
+
+If you meant the **AuthorizedParties** lookup after delegation, that is a different endpoint:
+
+- **GET** `accessmana…",
+df9e28d1-bd26-4de5-8a5f-7d80ee080e27,2026-05-31T16:53:35.057592Z,enrichment-on,gc-09-api-to-link-customers-to-accountant-integration,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,4,true,true,82,10,4,3,0de3969fb7c2;7f4b4d3d70f5;a9606ba0b9c9;bc1792daed8b;0550b6c48ce6;e60cd5119f0d;1fa6dcfbd7fb;95dc231b9e29;699baa933cc6;8d68c8f11c63,a9606ba0b9c9;bc1792daed8b;0550b6c48ce6;1fa6dcfbd7fb,32ee6aa61499;438d68cacb4b;1f6dc956fee4,29261,79314,1208,80522,63232,9,3,"Use the **Client Delegation** API for this.
+
+From the docs I found, the relevant endpoint I could confirm is:
+
+- **List clients for a system user**  
+  `GET /authentication/api/v1/enduser/systemuser/clients/`  
+  with scope `altinn:clientdelegations.read`
+
+This API is described as the one that “provides methods to manage clients for an agent system user from a third party system.”
+
+I wasn’t able to retrieve the remaining reference chunks due to document read limits, so I can’t safely quote the exact attach/detach verbs from the same page. But the endpoint family you want is the **system user client delegation** API under:
+
+- `/authentication/api/v1/enduser/systemuser/clients/`
+
+If you want, I can keep digging and try to identify the exact **create/delete** endpoints for attaching and detac…",
+ab22cb2b-f6ae-4c45-a649-ce79499e265c,2026-05-31T16:53:50.484450Z,enrichment-on,gc-09-api-to-link-customers-to-accountant-integration,2,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,2,false,true,40,9,3,3,0de3969fb7c2;a9606ba0b9c9;0f222b9c700d;b63c4ea55766;ec64ef21256f;95dc231b9e29;699baa933cc6;887493c9defa;8d68c8f11c63,0de3969fb7c2;a9606ba0b9c9;8d68c8f11c63,32ee6aa61499;438d68cacb4b;1f6dc956fee4,15426,6586,380,6966,0,3,3,"The context does **not name the exact API endpoint paths** for attaching or detaching companies. It only describes the **client administrator** flow: the accounting firm’s client administrator **adds a client** by linking the accounting client to the system user, and access is then automatically delegated to that system user [2].
+
+So, based on the provided sources, the closest supported answer is:
+
+- **Attach company/client**: use the **“Add client”** functionality in the client administrator flow for a **system user for client relationships** [2], [3].
+- **Detach company/client**: the sources do **not** provide a corresponding endpoint or operation name for removal/detachment [1]-[3].
+
+If you meant the Altinn API endpoints specifically, that information is **not present in the context**, …",
+49963d10-c5a4-4fbb-afd6-171156e26d76,2026-05-31T16:54:05.190052Z,enrichment-on,gc-10-stop-a-program-from-accessing-my-company,0,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,40,9,4,2,33c85fc05357;e1f99bf5d320;9c69cb9df661;496f874d5124;1f6dc956fee4;65ff54a13f8d;1cac2d1c116d;65a478eb4aa0;f03ec7160b50,33c85fc05357;9c69cb9df661;496f874d5124;1f6dc956fee4,9c69cb9df661;6ec10f61e0dd,14704,6581,381,6962,0,3,3,"To stop a program you set up from having access to your company’s data, you should **revoke the system user / delegated access in Altinn**. The sources say that when a system user is deleted, **all associated delegations are automatically removed**, and that this can currently only be done via the **Altinn portal** by the end-user themselves with the role **Access Manager**. [2]
+
+If what you set up is a **client delegation**, you can remove it through the relevant Altinn access management APIs, such as deleting delegated client access or removing the relationship to a service provider. [3][4]
+
+If you mean access granted through **access packages or resources**, the relevant scopes and endpoints are under **Altinn access management** and include the ability to delete access received by you …",
+b2720fb8-38a5-4e21-81fc-602839f5cb6b,2026-05-31T16:54:19.938523Z,enrichment-on,gc-10-stop-a-program-from-accessing-my-company,1,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,false,false,2,false,true,36,7,3,2,3f310ff04ba0;65a478eb4aa0;496f874d5124;1f6dc956fee4;a1d2243863a3;65ff54a13f8d;cfe999ba3185,65a478eb4aa0;496f874d5124;65ff54a13f8d,9c69cb9df661;6ec10f61e0dd,14748,6583,357,6940,0,3,3,"If you mean a **system user / client delegation** in Altinn, you stop it by **removing the client delegation** or **removing the service provider relationship** in Access Management. Altinn says you can remove delegated client access for the logged-in user via `DELETE /accessmanagement/api/v1/enduser/clientdelegations/my/clients`, and you can also remove the service provider via `DELETE /accessmanagement/api/v1/enduser/clientdelegations/my/clientproviders`, which also removes all client delegations from that service provider. [2]
+
+If you mean access that was granted as **access packages**, Altinn also provides an endpoint to **remove one or more access packages** that were delegated to an agent for a client. [1]
+
+If you mean a **program using a system user**, the documentation is more limi…",
+31f55797-bcc8-45f7-a6fe-20f72f5d86da,2026-05-31T16:54:35.213868Z,enrichment-on,gc-10-stop-a-program-from-accessing-my-company,2,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,false,false,1,false,,24,7,3,2,1f6dc956fee4;8e9adf466174;65a478eb4aa0;496f874d5124;e86a94847ee8;33c85fc05357;ba7391a848dd,1f6dc956fee4;496f874d5124;33c85fc05357,9c69cb9df661;6ec10f61e0dd,15275,4535,428,4963,0,3,3,"To stop a program you set up from having access to your company’s data, you need to remove the delegated access/client relationship in Altinn. The closest match in the sources is the **client delegation** removal function, which “removes an existing client from the system user for client relationships” via the `DELETE authentication/api/v1/enduser/systemuser/clients/` endpoint. [1]
+
+If you mean access that was delegated to a logged-in user rather than a system user, Altinn also has a separate endpoint to “remove a delegated client access for the logged in user” at `DELETE /accessmanagement/api/v1/enduser/clientdelegations/my/clients`. [2]
+
+The required scope for removing client delegations is `altinn:clientdelegations/myclients.write` for the logged-in-user flow, and the system-user client…",
+d3cea284-db93-4399-8795-1760092b8d9a,2026-05-31T16:54:50.871305Z,enrichment-on,gc-11-create-a-consent-request-via-api,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,false,false,1,false,,25,3,3,2,6be6764fadc0;0285475c829f;440499ab7abd,6be6764fadc0;0285475c829f;440499ab7abd,628290aa1d8d;b5bafba34ce0,15657,4529,426,4955,0,3,3,"To ask a user to approve data sharing, you need to have the consent flow set up first, as described in the “Getting started with consent for data consumers” guide. [3]
+
+What you need in place:
+- A `consentrequest` setup in Altinn for the service you want the user to approve. [3]
+- A `redirectURL` where the user should be sent back after approving or rejecting the consent request. [3]
+- A way to handle the returned `consentId` and `Status` on your side. [3]
+- Optionally, you can later verify the consent status by calling `GET /consentrequest/consentRequestId`. [3]
+
+What you post:
+- You send a `POST /consentrequest` request with an `id` in the body. [3]
+- The source does not show the full JSON schema for that body, only that it contains `id`. [3]
+
+Example flow from the source:
+- `Databehandl…",
+e81444fb-16eb-47e0-912a-9a1939e82899,2026-05-31T16:55:09.121139Z,enrichment-on,gc-11-create-a-consent-request-via-api,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,2,false,true,37,5,3,2,6be6764fadc0;3d7560159a32;0285475c829f;c6cabaa59697;5ee35337052a,6be6764fadc0;3d7560159a32;0285475c829f,628290aa1d8d;b5bafba34ce0,18249,6211,346,6557,0,3,3,"To ask a user to approve data sharing, you need to set up a **system user request** and send it to Altinn for approval. The exact setup depends on whether this is for **your own system** or for **clients**, and your question is a bit underspecified, so I’ll cover the relevant case and note the difference. [1][3]
+
+## What you need in place
+For a request for **your own system** (vendor-controlled creation), you need: [1]
+
+- the end user organization number, `partyOrgNo` [1]
+- the access you want to request, either:
+  - `accessPackages`, or
+  - `rights` [1]
+- optionally, a pre-registered `redirectUrl` if you want the user sent back to your system after approval/rejection [1]
+- optionally, `integrationTitle` if you want a specific name for the system user; otherwise it uses the system name [1]…",
+341d3025-a55f-4730-a2a6-d1e6849114c1,2026-05-31T16:55:26.819047Z,enrichment-on,gc-11-create-a-consent-request-via-api,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,2,false,true,40,8,4,2,d2311541de1d;717afb9b2c90;628290aa1d8d;b5bafba34ce0;9e1666d9a336;e396875b9f1f;d45c9debe7da;362792b4400e,d2311541de1d;628290aa1d8d;b5bafba34ce0;362792b4400e,628290aa1d8d;b5bafba34ce0,17697,6202,433,6635,0,3,3,"To ask a user to approve data sharing in Altinn, you need these things in place:
+
+1. A registered Maskinporten client for the data consumer. [2]  
+2. Delegation of the consent scopes from Digdir to the data consumer or supplier: at minimum `altinn:consentrequests.write` and `altinn:consentrequests.read`. [1][2]  
+3. Those scopes must also be added to the Maskinporten client. [2]  
+4. Access to request consent for the relevant resource(s) must be granted. [2]  
+5. If a supplier/third party is creating the request on behalf of the data consumer, the scopes must be delegated to that supplier, and the supplier creates the request on behalf of the data consumer. [4]
+
+### What you post
+You `POST` to the consent request endpoint:  
+- Test: `POST https://platform.tt02.altinn.no/accessmanagement/ap…",
+8dade933-bb39-4707-82d9-b57fe1f0aab6,2026-05-31T16:55:40.170962Z,enrichment-on,gc-12-got-an-approval-request-but-cant-approve-it,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,18,5,3,2,ffb35e69a2df;5ee35337052a;c6cabaa59697;3d7560159a32;6be6764fadc0,ffb35e69a2df;5ee35337052a;c6cabaa59697,ffb35e69a2df;c6cabaa59697,13351,4376,353,4729,0,3,3,"If you don’t have the necessary permissions to approve the request, you can **forward it to a user who does have the required permissions** by clicking **Ja, send videre**. [1]
+
+After forwarding, you can close the request and optionally notify the access manager that it has been forwarded. The access manager will then find the escalated request under **Systemtilganger** in the access management interface in Altinn and approve it there. [1]
+
+One important detail: to approve a system access request, the logged-in user must have the role **Tilgangsstyrer** in the selected organisation, and for a request for **your own system** the user must also have the requested permissions. [2][3]",
+cfb8b36a-fe58-4ce4-b851-48462383f8e7,2026-05-31T16:55:52.921153Z,enrichment-on,gc-12-got-an-approval-request-but-cant-approve-it,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,21,6,2,2,c6cabaa59697;5ee35337052a;ffb35e69a2df;3e0c4585a0b2;fffd1547fdeb;e6f7545a1adc,c6cabaa59697;ffb35e69a2df,ffb35e69a2df;c6cabaa59697,12749,4391,399,4790,0,3,3,"If you don’t have the necessary permissions to approve the request, you can **forward it to a user who does have the required permissions** by clicking **Ja, send videre** [2]. After forwarding, you can close the request and optionally notify the **access manager** that it has been forwarded [2]. The access manager can then find the escalated request under **Systemtilganger** and approve it [2].
+
+If the request is for **your own system**, the logged-in user must have the role **Tilgangsstyrer** in the selected organisation and also have the requested permissions to approve it [1]. If you lack those permissions, forwarding is the documented option [2].",
+efede8f1-0aed-45f1-bd3e-3a5f9ca8144a,2026-05-31T16:56:07.171155Z,enrichment-on,gc-12-got-an-approval-request-but-cant-approve-it,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,42,5,1,2,ffb35e69a2df;5ee35337052a;3d7560159a32;6be6764fadc0;e4651745f839,ffb35e69a2df,ffb35e69a2df;c6cabaa59697,14249,6354,397,6751,0,3,3,"If you don’t have the necessary permissions to approve the request, you can **forward it to a user who does have the permissions** by clicking **Ja, send videre**. [1]
+
+After you forward it, you can close the request and optionally notify the access manager that it has been forwarded. The access manager will then find the escalated request under **Systemtilganger** in the access management interface in Altinn and approve it there. [1]
+
+If you want, I can also explain what happens to the request status after it is forwarded.",
+26a3b9e3-0713-4b2f-a8d8-f0a962349966,2026-05-31T16:56:21.189222Z,enrichment-on,gc-13-validate-system-user-token-and-authorize-with-pdp,0,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,1,false,,24,6,2,2,a245b733b3f3;72db9b0d2e99;7a851f68a612;6be6764fadc0;995b1e2438c0;7dddbc3051e8,a245b733b3f3;72db9b0d2e99,1071f704051a;fd72a28afd94,14017,4520,429,4949,0,3,3,"As an API provider, you should:
+
+1. **Read the system user token from the authenticated identity** and use the information in it to identify the system user. The SystemUser API reference says the service owner “retrieves information about the system user from the authenticated identity” and then uses that information to call Altinn Authorization [1].
+
+2. **Use the Maskinporten token as a Bearer token** when calling both your API and Altinn Authorization (PDP). The source explicitly says: “Use the Maskinporten token as a Bearer token in API calls to both the API provider and Altinn Authorization” [2].
+
+3. **Call Altinn PDP to authorize the requested operation** for the system user. The SystemUser API uses Altinn PDP to determine whether the system user is authorized to perform the operation…",
+ac3760fa-4d88-4eaf-bdbc-4875e4639c08,2026-05-31T16:56:35.933797Z,enrichment-on,gc-13-validate-system-user-token-and-authorize-with-pdp,1,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,1,false,,24,8,2,2,a245b733b3f3;7a851f68a612;7eff21983caf;63528e131071;995b1e2438c0;aa911cdd6785;a9606ba0b9c9;0687e63cec80,7a851f68a612;63528e131071,1071f704051a;fd72a28afd94,14744,4411,418,4829,0,3,3,"As an API provider, you should:
+
+1. **Validate the incoming token as a standard Maskinporten token** first. The source says the system user token is validated as a standard Maskinporten token, and that it contains extra details beyond a normal Maskinporten token. [2]
+
+2. **Read the important system user values from `authorization_details`**, especially:
+   - `authorization_details:systemuser_id` — the unique ID of the system user, which Altinn needs for authorization. [2]
+   - `authorization_details:systemuser_org:id` — the organization that created the system user. [2]
+   - `authorization_details:system_id` — the system the system user points to. [2]
+   - `consumer:ID` — the organization number of the system vendor authenticating to Maskinporten. [2]
+
+3. **Build an authorization request t…",
+93976504-0f09-45d0-8dd0-b787a2f6e37b,2026-05-31T16:56:50.453881Z,enrichment-on,gc-13-validate-system-user-token-and-authorize-with-pdp,2,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,false,45,5,1,2,1071f704051a;7a851f68a612;58f33d771b59;a245b733b3f3;1c57b13d4783,1071f704051a,1071f704051a;fd72a28afd94,14519,4473,334,4807,0,3,3,"As an API provider, you should:
+
+1. **Validate the incoming token as a standardized Maskinporten token** first. A system user token is still a Maskinporten token, but it contains extra claims such as `authorization_details`, `systemuser_id`, `systemuser_org`, `system_id`, and `consumer`.[1]
+
+2. **Read the important values from the token**:
+   - `authorization_details:systemuser_id` — the unique ID of the system user, which Altinn needs for authorization.[1]
+   - `authorization_details:systemuser_org:id` — the organization that created the system user.[1]
+   - `authorization_details:system_id` — the system the system user points to.[1]
+   - `consumer:id` — the organization number of the system provider that authenticated against Maskinporten.[1]
+
+3. **Construct a PDP request** using the sys…",
+91f47ef7-74a9-468e-9302-553301ced5cb,2026-05-31T16:57:05.494471Z,enrichment-on,gc-14-steps-to-start-sharing-data-with-consent,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,2,false,true,39,7,4,2,ad408ff1ae47;e6f7545a1adc;fffd1547fdeb;6be6764fadc0;cc345617e185;65ff54a13f8d;f1453295b7f2,ad408ff1ae47;e6f7545a1adc;fffd1547fdeb;6be6764fadc0,0872329769ae;36cee5a43220,15040,6451,408,6859,0,3,3,"Before you can start sharing data based on a user’s permission, **both sides need a setup for System User**: the **system vendor / end-user system** must create and configure the system user with the required permissions, and the **end user / organization** must approve that delegation in Altinn. The system user is created by the organization or service provider that wants to integrate with Altinn or other public services, and the permissions are then approved by the end user. [2][3]
+
+More specifically, the setup depends on what kind of reporting you mean:
+
+- **For reporting on behalf of your own organization**, you need a system user for your own system, with the relevant `accessPackages` or `rights`, and the end user must approve the request. [1][4]
+- **For reporting on behalf of clients…",
+7533239d-9895-474f-849c-3ac8d35f5bcc,2026-05-31T16:57:18.845040Z,enrichment-on,gc-14-steps-to-start-sharing-data-with-consent,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,18,5,2,2,89f08b423a6f;e396875b9f1f;0872329769ae;36cee5a43220;d45c9debe7da,0872329769ae;36cee5a43220,0872329769ae;36cee5a43220,13350,4514,352,4866,0,3,3,"Before you can start sharing data based on a user’s permission, **both sides need setup**:
+
+- **Service owner side:** create or adapt an API that accepts a valid **consent token (JWT)**, register the relevant **OAuth2 scopes** in **Maskinporten**, create a **consent resource** in the **Resource Registry**, and optionally manage **access lists** and documentation. The service owner must also be able to **validate the consent token**. [1]
+- **Data consumer / end-user system side:** register a **Maskinporten client**, obtain the required **consent scopes** and **API Key** from Digdir, request access to the service owner’s APIs, and integrate with the **consent APIs**. [2]
+
+So, in short: the service owner must prepare the consent-enabled service, and the data consumer must be set up in Maskinp…",
+0ae8ecf9-7614-4095-81b0-1c2a0e181a7e,2026-05-31T16:57:31.926017Z,enrichment-on,gc-14-steps-to-start-sharing-data-with-consent,2,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,23,6,3,2,77da899075a9;4617df86f17a;f4c93bbb9873;89f08b423a6f;e396875b9f1f;cc345617e185,77da899075a9;89f08b423a6f;cc345617e185,0872329769ae;36cee5a43220,13080,4676,412,5088,0,3,3,"Before you can start sharing data based on a user’s permission, **both sides need setup**:
+
+- **The service owner** must set up the **consent resource in Altinn** and ensure the service can **read and verify the consent issued via Maskinporten**. [2]
+- **The end-user system / system vendor** must ensure the system is correctly registered and that the right **access packages** and **system user setup** are in place, with proper **authentication, authorisation, and logging** inside the end-user system. [1][3]
+
+So, in short: **service owner sets up consent; the end-user system side sets up the system user, access packages, and internal access control**. [2][1][3]",
+a7993fa0-8b2d-4607-bf4a-465fb898c5b8,2026-05-31T16:57:45.184591Z,enrichment-on,gc-15-what-files-make-up-a-data-model,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,25,6,1,3,1b01e940366f;ad84e478aa32;6f85679f5fbd;1c5fa1dec610;c1d87e2b05fc;6fe25fb74adf,ad84e478aa32,ad84e478aa32;0c64b409aeeb;91c581a42208,13258,4565,347,4912,0,3,3,"When you build a data model in Altinn Studio, it creates or uses these model files for an application: [1]
+
+- **C# data model** (`<model>.cs`): used by the application's backend/APIs to process and validate data. [1]
+- **JSON Schema** (`<model>.schema.json`): used on the client side (frontend) to validate data in real time, and this is the file you work on in the data modeling tool. [1]
+- **XSD data model** (`<model>.XSD`): an XML-format model that defines the elements in a document; it is not directly used by the application, but can be uploaded to generate the other model files or downloaded as needed. [1]
+- **JSON metadata** (`<model>.metadata.json`): used by Altinn Studio to generate the `.cs` file; it is not stored in the application and is only generated if needed. [1]
+
+There is a sm…",
+8deedb57-f3af-4999-8d51-37d30f4f4c56,2026-05-31T16:57:58.850206Z,enrichment-on,gc-15-what-files-make-up-a-data-model,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,1,false,,25,4,2,3,a849ef06c242;071cbb5c2747;6f85679f5fbd;1c5fa1dec610,a849ef06c242;071cbb5c2747,ad84e478aa32;0c64b409aeeb;91c581a42208,13665,4423,289,4712,0,3,3,"Altinn Studio Data Modeling is a bit ambiguous here because the sources describe **two related but different workflows**:
+
+1. **Uploading an XSD data model into the tool**  
+   If you upload an XSD file named `<model>.xsd`, Altinn Studio will generate **`<model>.cs`** and **`<model>.schema.json`** from it. The source does not say these are “built” from scratch in the tool; it says they are **generated** when the XSD model is uploaded. [1]
+
+2. **Working in Altinn Studio Data Modeling itself**  
+   The tool is described as being based on a **JSON Schema** data model, and from that it can generate **XSD** and **C# models**. [2]
+
+So, if your question is “what files does it actually create and what is each one for?”, the closest source-based answer is:
+
+- **`<model>.schema.json`** — the **JSON …",
+b540eb5f-2de0-4c86-a2b8-5e4e1ec6ef0a,2026-05-31T16:58:12.747586Z,enrichment-on,gc-15-what-files-make-up-a-data-model,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,15,4,2,3,ad84e478aa32;071cbb5c2747;1c5fa1dec610;6f85679f5fbd,ad84e478aa32;071cbb5c2747,ad84e478aa32;0c64b409aeeb;91c581a42208,13897,4517,313,4830,0,3,3,"When you build a data model in Altinn Studio, the application uses a set of model files in `App/models`, and the source describes **4 model files** in total [1]:
+
+- **C# data model** (`<model>.cs`): used by the application’s backend/APIs to process and validate data [1].
+- **JSON Schema** (`<model>.schema.json`): used on the client side (frontend) to validate data in real time; this is also the file you work on in the data modeling tool [1][2].
+- **XSD data model** (`<model>.XSD`): an XML-format model that defines the elements that can be used in a document; it is not directly used by the application, but can be uploaded to generate the other model files or downloaded as needed [1].
+- **JSON metadata** (`<model>.metadata.json`): used by Altinn Studio to generate the `<model>.cs` file; this…",
+a6dd09c4-2bc9-4d1e-9cd3-1a598ba30554,2026-05-31T16:58:25.858976Z,enrichment-on,gc-16-change-the-error-text-shown-to-users,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,25,2,2,2,9db4a2d762fa;9d8f106ba368,9db4a2d762fa;9d8f106ba368,9d8f106ba368;9db4a2d762fa,13111,4350,287,4637,0,3,3,"You can change the wording in the **JSON schema** for the field by adding an `errorMessage` property to that field definition in `App/models/*.schema.json`.[1]
+
+- For a field that is **too long** (for example `maxLength`), set a custom `errorMessage` on that field.[1][2]
+- For a **required** field, the default message is **“You have to fill out ”** (or the Bokmål/Nynorsk equivalents), and the field name is filled in automatically from `shortName` if it exists, otherwise from `title`.[2]
+
+Example for a custom message on a field:
+
+```json
+""someField"": {
+  ""type"": ""string"",
+  ""maxLength"": ""4"",
+  ""errorMessage"": ""myCustomError""
+}
+```
+[1]
+
+If the field is a `$ref`, the `errorMessage` must be added on the **property that contains the reference**, not inside the referenced definition.[1]
+
+One imp…",
+0d8c0800-38a7-4955-9129-d9a128d07549,2026-05-31T16:58:42.008627Z,enrichment-on,gc-16-change-the-error-text-shown-to-users,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,2,false,false,42,3,2,2,9db4a2d762fa;9d8f106ba368;44a7aaf5851d,9db4a2d762fa;9d8f106ba368,9d8f106ba368;9db4a2d762fa,16149,6148,369,6517,0,3,3,"To change the wording of those validation errors, you have two different mechanisms depending on which error you mean:
+
+- **For a field that is too long**: add a custom `errorMessage` in the field’s JSON schema definition in `App/models/*.schema.json`. This overrides the validation message for that field. [1][2]  
+  Example:
+  ```json
+  ""someField"": {
+    ""type"": ""string"",
+    ""maxLength"": ""4"",
+    ""errorMessage"": ""myCustomError""
+  }
+  ```
+  If you want multilingual support, use a text key from the resource files instead of hardcoded text. [1]
+
+- **For a required field left blank**: you can replace the default required-field message by adding `requiredValidation` in the component’s `textResourceBindings`. [2]  
+  Example:
+  ```json
+  {
+    ""id"": ""firstName"",
+    ""type"": ""Input"",
+    ""textR…",
+bb378725-f45f-4468-b280-f76cad067ae4,2026-05-31T16:58:55.735802Z,enrichment-on,gc-16-change-the-error-text-shown-to-users,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,25,2,2,2,9db4a2d762fa;9d8f106ba368,9db4a2d762fa;9d8f106ba368,9d8f106ba368;9db4a2d762fa,13726,4370,286,4656,0,3,3,"You can change the wording in the **JSON schema** for the field by adding an `errorMessage` property where the field is defined in `App/models/*.schema.json` [1].
+
+- For a field that is **too long** or otherwise fails a validation rule, set `errorMessage` on that field, for example:  
+  ```json
+  ""someField"": {
+    ""type"": ""string"",
+    ""maxLength"": ""4"",
+    ""errorMessage"": ""myCustomError""
+  }
+  ```  
+  This custom message will be shown instead of the default validation text [1][2].
+
+- For a **required field** that is left blank, the default message is **""You have to fill out "" / ""Du må fylle ut "" / ""You have to fill out ""** depending on language, and the field name is inserted automatically [2].  
+  If you want different wording, you need to customize the validation message in the schema …",
+3537a873-e61a-44c5-914c-bbc96c234b56,2026-05-31T16:59:10.556815Z,enrichment-on,gc-17-auto-fill-name-and-address-from-registers,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.3333333333333333,true,true,true,2,false,true,46,8,4,3,0eb04db689d9;a590caa6182f;88d42770643c;0359f331aded;8b873a66731b;bfe49011a0cb;140d42d1ce13;c1564b5e700e,0eb04db689d9;0359f331aded;8b873a66731b;c1564b5e700e,ac3a1bc9aec5;0eb04db689d9;a590caa6182f,14820,6155,348,6503,0,3,3,"Yes — the form can be automatically prefilled with the person’s data, including name and address, so the user does not have to type it manually [1][2].
+
+For **person prefill**, the available values include these name and address-related fields [1]:
+- `Name`
+- `FirstName`
+- `MiddleName`
+- `LastName`
+- `MailingAddress`
+- `MailingPostalCode`
+- `MailingPostalCity`
+- `AddressMunicipalNumber`
+- `AddressMunicipalName`
+- `AddressStreetName`
+- `AddressHouseNumber`
+- `AddressHouseLetter`
+- `AddressPostalCode`
+- `AddressCity`
+
+A few important details:
+- The exposed personal data belongs to the **person the form is instantiated on behalf of**. So if someone starts the form for another person, it is that other person’s data that is exposed [1].
+- If you need data beyond the standard prefill fields, or …",
+5a6bfcf0-e3b2-4c74-bdd0-81fdad190ba0,2026-05-31T16:59:31.279278Z,enrichment-on,gc-17-auto-fill-name-and-address-from-registers,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.0,true,true,true,1,false,,25,5,3,3,8b873a66731b;ac3a1bc9aec5;88d42770643c;b7fdc7fa6739;3b265e4c766e,88d42770643c;b7fdc7fa6739;3b265e4c766e,ac3a1bc9aec5;0eb04db689d9;a590caa6182f,20722,17113,582,17695,8448,5,3,"Yes — your form can automatically prefill personal data, but the exact fields depend on which prefill source you use and how your data model is set up. The built-in prefill sources are the Business Register (`ER`), the Population Register (`DSF`), and the user’s Altinn profile (`UserProfile`). [2][3]
+
+For a person’s name, the closest match in the available `UserProfile` values is `Party.Name`, and the profile also includes `UserName`, `PhoneNumber`, `Email`, `PartyId`, `Party.PartyId`, `Party.PartyTypeName`, `Party.OrgNumber`, `Party.SSN`, `Party.UnitType`, `Party.isDeleted`, `Party.Person`, `Party.Organization`, `Party.ChildParties`, `UserType`, and some profile settings. [1]
+
+For address, the provided sources do not list a general “address” field in the available prefill values, so I can…",
+53cae672-0c79-4eda-b3a7-6229d891b605,2026-05-31T16:59:44.768454Z,enrichment-on,gc-17-auto-fill-name-and-address-from-registers,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,1,false,,24,6,3,3,b7fdc7fa6739;0eb04db689d9;88d42770643c;8b873a66731b;3b265e4c766e;7f3e12483d0f,b7fdc7fa6739;0eb04db689d9;3b265e4c766e,ac3a1bc9aec5;0eb04db689d9;a590caa6182f,13489,4595,376,4971,0,3,3,"Yes — the form can automatically prefill a person’s details so they don’t have to type them in themselves [1][3].
+
+For **personal data from the Population Register (DSF)**, the available prefill values include [2]:
+- **SSN**
+- **Name**
+- **FirstName**
+- **MiddleName**
+- **LastName**
+- **TelephoneNumber**
+- **MobileNumber**
+- **MailingAddress**
+- **MailingPostalCode**
+- **MailingPostalCity**
+- **AddressMunicipalNumber**
+- **AddressMunicipalName**
+- **AddressStreetName**
+- **AddressHouseNumber**
+- **AddressHouseLetter**
+- **AddressPostalCode**
+- **AddressCity**
+
+So if you want the person’s **name and address**, the closest matching source labels are **Name** and the address-related fields such as **MailingAddress** or the more detailed **AddressStreetName / AddressHouseNumber / AddressPostal…",
+c7cb78d2-0eb7-4815-a24b-5db525156ffc,2026-05-31T17:00:01.533794Z,enrichment-on,gc-18-add-a-payment-step-to-the-process,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,2,false,true,39,4,2,2,d738ada53303;1959e6ab6e4f;c0db84ac5786;1adc4d0e5473,1959e6ab6e4f;c0db84ac5786,1959e6ab6e4f;c0db84ac5786,16765,6599,435,7034,0,3,3,"To wire up a payment step by hand, you need to configure it in two places: the process BPMN and the app’s data types. [1][2]
+
+### 1) Add the payment task and gateway in `App/config/process/process.bpmn`
+Add a process step with `taskType` set to `payment`, and add an exclusive gateway after it to handle the `confirm` and `reject` paths. [1]
+
+The payment task must include these actions: `confirm`, `pay`, and `reject`. [1]
+
+Example structure: [1]
+
+```xml
+<bpmn:task id=""Task_2"" name=""Betaling"">
+  <bpmn:incoming>Flow_t1_t2</bpmn:incoming>
+  <bpmn:outgoing>Flow_t2_g1</bpmn:outgoing>
+  <bpmn:extensionElements>
+    <altinn:taskExtension>
+      <altinn:taskType>payment</altinn:taskType>
+      <altinn:actions>
+        <altinn:action>confirm</altinn:action>
+        <altinn:action>pay</altinn:action>
+…",
+93eb1478-3f4c-4f3c-b612-bbce6a0c885f,2026-05-31T17:00:18.163591Z,enrichment-on,gc-18-add-a-payment-step-to-the-process,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,20,4,3,2,1959e6ab6e4f;c0db84ac5786;55d69543c590;1adc4d0e5473,1959e6ab6e4f;c0db84ac5786;1adc4d0e5473,1959e6ab6e4f;c0db84ac5786,16629,4720,434,5154,0,3,3,"To wire up a payment step by hand, you need to configure three parts: the BPMN process, the payment layout set, and the payment data types. [1][2]
+
+### 1) Add the payment task and gateway in `App/config/process/process.bpmn`
+Add a `bpmn:task` with `taskType` set to `payment`, and include the three actions `confirm`, `pay`, and `reject`. The task must also point to the payment data types via `paymentDataType` and `paymentReceiptPdfDataType`. [1]
+
+A matching example is:
+
+```xml
+<bpmn:task id=""Task_2"" name=""Betaling"">
+  <bpmn:incoming>Flow_t1_t2</bpmn:incoming>
+  <bpmn:outgoing>Flow_t2_g1</bpmn:outgoing>
+  <bpmn:extensionElements>
+    <altinn:taskExtension>
+      <altinn:taskType>payment</altinn:taskType>
+      <altinn:actions>
+        <altinn:action>confirm</altinn:action>
+        <altinn:ac…",
+9fbcbd5a-c1cd-4da4-b4f2-dfdb69e86561,2026-05-31T17:00:36.103721Z,enrichment-on,gc-18-add-a-payment-step-to-the-process,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,21,4,3,2,d738ada53303;c0db84ac5786;1959e6ab6e4f;1adc4d0e5473,d738ada53303;c0db84ac5786;1959e6ab6e4f,1959e6ab6e4f;c0db84ac5786,17939,4512,390,4902,0,3,3,"To wire up a payment step manually, you need to configure it in three places: the app’s data types, the BPMN process, and the payment layout set. [1][2][3]
+
+### 1) Add the required data types
+Add two data types to `App/config/applicationmetadata.json` in the `dataTypes` array: one for payment state/information and one for the PDF receipt. [2]
+
+Example from the source: [2]
+```json
+{
+  ""id"": ""paymentInformation"",
+  ""allowedContentTypes"": [
+    ""application/json""
+  ],
+  ""allowedContributors"": [
+    ""app:owned""
+  ],
+  ""maxCount"": 1,
+  ""minCount"": 0
+}
+```
+
+```json
+{
+  ""id"": ""paymentReceiptPdf"",
+  ""allowedContentTypes"": [
+    ""application/pdf""
+  ],
+  ""allowedContributors"": [
+    ""app:owned""
+  ],
+  ""maxCount"": 1,
+  ""minCount"": 0
+}
+```
+
+The source says `allowedContributors` must be set to `""app:ow…",
+4485b8c8-f581-40b3-af7f-2e1559ae8eec,2026-05-31T17:00:49.129344Z,enrichment-on,gc-19-let-users-attach-documents,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,1,false,,24,5,3,2,39c780dca91d;a3a55131b768;954c1431a728;7def5fc412ac;d9b164a1c4f3,39c780dca91d;a3a55131b768;7def5fc412ac,a458dd169020;8c7a8757bae6,13025,4526,334,4860,0,3,3,"Use the **File upload component** in Altinn Studio to let people attach documents to your form [1][3].
+
+To limit uploads, you can configure:
+- **Custom file types / allowedContentTypes** to restrict which file types are accepted [1][2].
+- **Minimum/maximum number of file attachments** using **minCount** and **maxCount** [1][2].
+- **Maximum file size** using **maxSize** in MB [1][2].
+
+If you want the user to be able to upload **zero files**, set **minCount** to `0` [1][2].
+
+One small ambiguity: the source uses both **“file upload component”** and **“FileUpload”** as the component type name, but they refer to the same building block [1][2].",
+49586458-4f8c-4990-aaf2-925f2d27e800,2026-05-31T17:01:03.679631Z,enrichment-on,gc-19-let-users-attach-documents,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,2,false,true,45,5,3,2,39c780dca91d;a3a55131b768;954c1431a728;7def5fc412ac;d9b164a1c4f3,39c780dca91d;a3a55131b768;7def5fc412ac,a458dd169020;8c7a8757bae6,14550,6507,350,6857,0,3,3,"Use the **File upload component** in Altinn Studio to let people attach documents to your form [1][3].
+
+To limit uploads:
+- **File types:** set **custom file types** / **allowedContentTypes** so only approved MIME types can be uploaded; users will be blocked if the file type is not on the list [1].
+- **Number of files:** set **minimum/maximum amount of file attachments** in the component, or in `applicationMetadata.json` use **minCount** and **maxCount** for the attachment type [1][2].
+- **File size:** set the maximum file size in **MB** [1][2].
+
+One small ambiguity: the source uses both the GUI setting names and the metadata names. In the form builder, you configure the **File upload component** [1]; in `applicationMetadata.json`, the corresponding attachment limits are described with `al…",
+707d5c73-b7ce-4e61-baa9-4f384bf8cde5,2026-05-31T17:01:16.496788Z,enrichment-on,gc-19-let-users-attach-documents,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,1,false,,24,4,1,2,39c780dca91d;a3a55131b768;954c1431a728;d9b164a1c4f3,39c780dca91d,a458dd169020;8c7a8757bae6,12817,4577,322,4899,0,3,3,"Use the **file upload component** in Altinn Studio to let people attach documents to your form [1].
+
+To limit uploads, you can configure:
+- **Custom file types** to restrict which file types are allowed [1].
+- **Minimum/maximum number of file attachments** to control how many files can be uploaded through the component [1].
+- **Maximum file size** in MB [1].
+
+If you need different document types or stricter rules, the context also says you can use multiple file upload components, depending on the characteristics of the documents and the restrictions you want to impose [1].",
+7494e760-7b03-48f2-a951-0f656ac32c93,2026-05-31T17:01:31.903345Z,enrichment-on,gc-20-configure-layout-sets-and-page-order,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,42,2,2,2,7df452fd81ec;49c2faf02b9c,7df452fd81ec;49c2faf02b9c,7df452fd81ec;736efe1d44d4,15405,6203,319,6522,0,3,3,"To configure an app with multiple pages, you define the pages in a layout set and then control their order in the `Settings.json` file for that layout set. Layout pages are placed in the `layouts` folder, and each process task can have its own layout set. The order of the pages is set in the `pages.order` array. [1]
+
+Example `layout-sets.json`:
+```json
+{
+  ""$schema"": ""https://altinncdn.no/toolkits/altinn-app-frontend/4/schemas/json/layout/layout-sets.schema.v1.json"",
+  ""sets"": [
+    {
+      ""id"": ""form-a"",
+      ""dataType"": ""schema_4222_160523_forms_212_20160523"",
+      ""tasks"": [""Task_1""]
+    },
+    {
+      ""id"": ""form-b"",
+      ""dataType"": ""schema_3161_140411_forms_1549_11554"",
+      ""tasks"": [""Task_2""]
+    }
+  ]
+}
+```  
+This maps each layout set to the relevant process task. The `id` is…",
+f1fcaaed-77b3-450b-aad5-de1754995a5f,2026-05-31T17:01:44.826068Z,enrichment-on,gc-20-configure-layout-sets-and-page-order,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,0.5,true,true,true,1,false,,25,3,2,2,736efe1d44d4;7df452fd81ec;4b58ea73f594,7df452fd81ec;4b58ea73f594,7df452fd81ec;736efe1d44d4,12922,4371,313,4684,0,3,3,"For an app with multiple pages, you configure **layout sets** in `App/ui/layout-sets.json` and put each set’s pages in its own `layouts` folder. Each process task can have its own layout set, and the `layout-sets.json` file defines which task each layout set is used for. The `id` is case sensitive and should match the folder name exactly. [1]
+
+Example structure: `App/ui/form-a/layouts/...` and `App/ui/form-b/layouts/...`, with matching entries in `layout-sets.json` for `form-a` and `form-b`. [1]
+
+To configure the **page order**, use the `pages.order` setting in `App/ui/*/Settings.json`. The order is given as an array of page IDs, for example: `[""student-info"", ""school-work"", ""well-being""]`. [2] The docs also note that page order can be configured via **Navigation** settings. [1]
+
+If you wa…",
+39dc903a-2d14-4711-8c42-1ab5a85ecffb,2026-05-31T17:01:59.625749Z,enrichment-on,gc-20-configure-layout-sets-and-page-order,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,0.5,true,true,true,2,false,true,46,4,1,2,7df452fd81ec;49c2faf02b9c;ad737a3c1f9a;736efe1d44d4,7df452fd81ec,7df452fd81ec;736efe1d44d4,14799,6277,342,6619,0,3,3,"To configure **layout sets** for an app with multiple pages, place the layout pages in the `layouts` folder for each layout set, and define which process task each layout set should be used for in `layout-sets.json`. The `id` is case sensitive and should match the folder name exactly. [1]
+
+Example `layout-sets.json`: [1]
+
+```json
+{
+  ""$schema"": ""https://altinncdn.no/toolkits/altinn-app-frontend/4/schemas/json/layout/layout-sets.schema.v1.json"",
+  ""sets"": [
+    {
+      ""id"": ""form-a"",
+      ""dataType"": ""schema_4222_160523_forms_212_20160523"",
+      ""tasks"": [""Task_1""]
+    },
+    {
+      ""id"": ""form-b"",
+      ""dataType"": ""schema_3161_140411_forms_1549_11554"",
+      ""tasks"": [""Task_2""]
+    }
+  ]
+}
+```
+
+To configure the **page order**, use the `pages.order` setting in the relevant `Settings.js…",
+2812f628-ba83-48ca-8c07-36fe4c2919b5,2026-05-31T17:02:16.490932Z,enrichment-on,gc-21-start-a-new-instance-via-api-with-prefill,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,47,7,3,2,6bbfb3935810;bfe49011a0cb;0359f331aded;44cfbde67552;76759fa7bb44;11812562f230;e6c87871137d,6bbfb3935810;bfe49011a0cb;0359f331aded,6bbfb3935810;c1564b5e700e,16864,6396,403,6799,0,3,3,"Use the app’s instantiation API and send a `multipart/form-data` request with an `instance` JSON part plus the initial field data as additional parts. The `instance` part should identify the person via `instanceOwner` — for a person, use `personNumber` (or the official identity number if you don’t know Altinn’s internal `instanceOwner.partyId`), and Altinn will resolve it to `instanceOwner.partyId` [1].
+
+Example request structure: [1][2]
+
+```http
+POST {basePath}
+Content-Type: multipart/form-data; boundary=""abcdefg""
+
+--abcdefg
+Content-Type: application/json; charset=utf-8
+Content-Disposition: form-data; name=""instance""
+
+{
+  ""instanceOwner"": {
+    ""personNumber"": ""12247918309""
+  }
+}
+
+--abcdefg
+Content-Type: application/xml
+Content-Disposition: form-data; name=""Endring-av-navn""
+
+<?xml version…",
+3eda677f-6615-4318-a2b3-f755613a6934,2026-05-31T17:02:33.694727Z,enrichment-on,gc-21-start-a-new-instance-via-api-with-prefill,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,46,6,3,2,6bbfb3935810;bfe49011a0cb;34e021ea361b;8ab383fc52aa;2cf2db708add;6657c548caf3,6bbfb3935810;bfe49011a0cb;8ab383fc52aa,6bbfb3935810;c1564b5e700e,17203,6388,392,6780,0,3,3,"From an external system, you should start the instance with a `POST` request to the app’s instantiation endpoint, and include an `instance` JSON part plus the initial field values as multipart form parts whose names match the data type names defined in the application metadata. [1][2]
+
+A typical request looks like this: [1][2]
+
+```http
+POST {basePath}
+Content-Type: multipart/form-data; boundary=""abcdefg""
+
+--abcdefg
+Content-Type: application/json; charset=utf-8
+Content-Disposition: form-data; name=""instance""
+
+{
+  ""instanceOwner"": {
+    ""personNumber"": ""12247918309""
+  }
+}
+
+--abcdefg
+Content-Type: application/xml
+Content-Disposition: form-data; name=""Endring-av-navn""
+
+<?xml version=""1.0""?>
+<Skjema>...</Skjema>
+
+--abcdefg--
+```
+
+If you are using the simplified API instead of multipart, the end…",
+0d90096b-8f86-4f33-ac65-52f7aa83a4b6,2026-05-31T17:02:51.131142Z,enrichment-on,gc-21-start-a-new-instance-via-api-with-prefill,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,2,false,true,45,6,3,2,6bbfb3935810;44cfbde67552;0359f331aded;bfe49011a0cb;8ab383fc52aa;34e021ea361b,6bbfb3935810;bfe49011a0cb;8ab383fc52aa,6bbfb3935810;c1564b5e700e,17435,6442,423,6865,0,3,3,"Use the **simplified instantiation** endpoint `POST {basePath}/create` if you want to start a new instance and include initial field values in the request [1]. Altinn supports **prefill** in the instantiation request, and the form data is attached as **multipart/form-data** [2].
+
+For a given person, you identify the instance owner in the `instance` JSON part using the person’s identity, typically `personNumber` (or `PartyId` in some examples) [1][2]. Example structure:
+
+```http
+POST {basePath}/create
+Content-Type: multipart/form-data; boundary=""abcdefg""
+
+--abcdefg
+Content-Type: application/json; charset=utf-8
+Content-Disposition: form-data; name=""instance""
+
+{
+  ""appId"": ""org/app"",
+  ""instanceOwner"": {
+    ""personNumber"": ""12247918309"",
+    ""organisationNumber"": null
+  }
+}
+
+--abcdefg
+Conten…",
+a7bf1024-cd82-4844-aa85-2403c5824115,2026-05-31T17:03:05.496075Z,enrichment-on,gc-22-which-test-logins-when-running-locally,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,1,false,,25,5,3,4,a79b2583b9f2;9a53ae7fdb0b;08576d8f877c;2e08a7e4f677;800f5b714dec,a79b2583b9f2;9a53ae7fdb0b;08576d8f877c,9a53ae7fdb0b;2f38ea1a18f7;a79b2583b9f2;a6d6148b4fd3,14364,4528,346,4874,0,3,3,"When testing locally, the standard test users available in localtest are the ones shown in the “Test users” documentation: **Sophie** is the main named fake person, and she can be used in different roles/scopes: as **CEO (DAGL)** for DDG Fitness AS and its subsidiaries, as **LEDE (Leader)** for EAS Health Consulting, and as **MEDL (Member)** for **Oslos Vakreste Borettslag** [2]. The localtest docs also say there is a built-in **system** and **system user** associated with **950474084 Oslos Vakreste Borettslag**, and you can get a token for that via `/Home/GetTestSystemUserToken` or `/Home/Tokens` [1][3].
+
+Yes, you can also customize the local test data yourself: if the default users don’t fit, you can make your app respond with a JSON document at `/[org]/[appId]/testData.json`, typically …",
+af09e688-5178-4edf-b7f1-e6fe75d74640,2026-05-31T17:03:19.357882Z,enrichment-on,gc-22-which-test-logins-when-running-locally,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.25,0.25,0.25,0.25,true,true,true,1,false,,25,4,1,4,a79b2583b9f2;1dc794bca3d7;f5b3430d30cc;377150c306bf,a79b2583b9f2,9a53ae7fdb0b;2f38ea1a18f7;a79b2583b9f2;a6d6148b4fd3,13861,4694,389,5083,0,3,3,"When you test locally in **localtest**, you can log in as the provided **built-in system and system user associated with 950474084 Oslos Vakreste Borettslag**. You can get the token via `/Home/GetTestSystemUserToken` or by visiting `/Home/Tokens`. [1]
+
+If the default test users don’t fit your needs, you **can customize the app’s test data** by serving a JSON document at `/[org]/[appId]/testData.json` — the simplest way is to place it at `App/wwwroot/testData.json`. That lets you use alternative organization numbers or personal identification numbers, so yes, you can add your own with a different ID number. [1]
+
+One small ambiguity: the source does not list all the “fake people” by name or ID; it only explicitly mentions the built-in **system user** tied to **950474084 Oslos Vakreste Borett…",
+dfed407a-4667-49d3-9a97-a3991dba1f21,2026-05-31T17:03:32.202764Z,enrichment-on,gc-22-which-test-logins-when-running-locally,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.5,0.5,0.5,0.5,true,true,true,1,false,,25,4,2,4,a79b2583b9f2;9a53ae7fdb0b;2e08a7e4f677;800f5b714dec,a79b2583b9f2;9a53ae7fdb0b,9a53ae7fdb0b;2f38ea1a18f7;a79b2583b9f2;a6d6148b4fd3,12844,4282,287,4569,0,3,3,"When testing locally, you can log in as the standard test users provided in localtest, including the built-in **system** and **system user** for **950474084 Oslos Vakreste Borettslag** [1]. The standard user set also includes **Sophie**, who is available as a test user and has roles for **DDG Fitness AS**, **EAS Health Consulting**, and **Oslos Vakreste Borettslag** [2].
+
+Yes, you can customize the local test data with your own values, including using **alternative organization numbers or personal identification numbers** if the default users do not fit your needs [1]. The docs say you can do this by serving a JSON document at `/[org]/[appId]/testData.json`, typically by placing it at `App/wwwroot/testData.json` [1].
+
+So, in short: the built-in fake people are the standard localtest users …",
+4c115320-d289-43e7-993c-175232b9c07b,2026-05-31T17:03:47.292681Z,enrichment-on,gc-23-what-info-government-stores-about-messages,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,2,false,true,37,7,1,3,82ad7fb84323;831b2a861032;b8ddca7bace0;e00057498d4d;d1b16e295b68;1543a3f4e321;f4cf576e3402,b8ddca7bace0,a233d1c22ebe;b8ddca7bace0;ea7de904e1aa,15089,6224,437,6661,0,3,3,"The government does **not** keep the actual content of your digital messages in Dialogporten/Altinn Correspondence. The content itself — such as body text, forms, form data entered by users, and attachments — is only **referenced by URLs** to the resources in the digital service platform where the service is realized [1].
+
+What is kept is mainly the **dialogue state and metadata** about the message, and the service platform writes updates on behalf of the service owner [1]. The system also keeps related information such as the **seen log** and, in some cases, **dialog labels** that users can assign [1].",
+2334ecd8-fdc4-4335-a20c-2e74b4ec4209,2026-05-31T17:04:01.040793Z,enrichment-on,gc-23-what-info-government-stores-about-messages,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,22,8,5,3,a233d1c22ebe;b8ddca7bace0;ea7de904e1aa;d1b16e295b68;831b2a861032;ebd89d3a9496;956256911f4b;3e5d3ec39d0e,a233d1c22ebe;b8ddca7bace0;ea7de904e1aa;956256911f4b;3e5d3ec39d0e,a233d1c22ebe;b8ddca7bace0;ea7de904e1aa,13747,4555,465,5020,0,3,3,"The government keeps the **metadata and state of the dialog**, not the full message content itself [1][2][3].
+
+More specifically, Dialogporten stores things like:
+- the **sender** and **recipient** [1]
+- a reference to the relevant **digital service definition** in the **Altinn Resource Registry** [1]
+- user-facing metadata such as **title**, **short summary text**, and **activity history** [1]
+- the dialog’s **status/state** and related audit information [1][4][5]
+
+The actual content of your digital messages — such as **body texts, forms, form data, and attachments** — is **not stored in Dialogporten**; it is only **referenced by URLs** to the service platform where the content lives, such as Altinn [2][3].
+
+So, in short: the government keeps the **dialog metadata and lifecycle history**,…",
+9f2155f5-35c7-4ed9-ab14-16e81615f3d9,2026-05-31T17:04:14.349385Z,enrichment-on,gc-23-what-info-government-stores-about-messages,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.6666666666666666,true,true,true,1,false,,16,4,2,3,a233d1c22ebe;831b2a861032;d1b16e295b68;b8ddca7bace0,a233d1c22ebe;b8ddca7bace0,a233d1c22ebe;b8ddca7bace0;ea7de904e1aa,13308,4550,464,5014,0,3,3,"The government keeps the **dialog** in Dialogporten, not the full message content [1][2].
+
+A dialog contains:
+- the **sender** and **recipient**
+- a reference to the **digital service definition** in the Altinn Resource Registry
+- metadata/content used to describe the state of the dialog, such as a **title**, **short summary text**, and **activity history** [1]
+
+What is **not** stored in the dialog itself:
+- the actual **body texts**
+- **forms**
+- **form data entered by users**
+- **attachments**  
+
+These are only **referenced by URL** to the service platform where the service is realized [2].
+
+So, in short: the government keeps **metadata and references about your digital messages/dialogs**, while the actual content stays in the underlying service platform [1][2].",
+15551ee9-f648-44e1-bfc0-535b1f342db1,2026-05-31T17:04:29.063324Z,enrichment-on,gc-24-group-related-letters-under-one-inbox-item,0,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,2,false,false,45,2,2,1,9fc8a7bd7ec2;831b2a861032,9fc8a7bd7ec2;831b2a861032,9fc8a7bd7ec2,14714,4610,418,5028,0,3,3,"To group several related letters under one item in the inbox, create them as **transmissions** in the same dialog instead of as separate correspondences [1][2].
+
+How to do it:
+- When you create the first correspondence, it gets a **dialogId** in its external reference [1].
+- For each later related letter, set an external reference with:
+  - `referenceType`: **`DialogportenDialogId`**
+  - `referenceValue`: the **dialogId** of the existing dialog you want to attach to [1].
+
+If you want them to appear as a specific transmission category, you can also set:
+- `referenceType`: **`DialogportenTransmissionType`**
+- `referenceValue`: for example **`Information`** or **`1`** if you want the default transmission type [1].
+
+So the key is: **reuse the existing dialogId via `DialogportenDialogId`** so t…",
+458cbe8a-ad77-4518-9b93-9f92a8adc8a8,2026-05-31T17:04:44.146742Z,enrichment-on,gc-24-group-related-letters-under-one-inbox-item,1,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,2,false,true,46,6,2,1,9fc8a7bd7ec2;8eb05cf419be;f39a9292b7a7;f73f296c04a0;045ad33a09d5;e00057498d4d,9fc8a7bd7ec2;e00057498d4d,9fc8a7bd7ec2,15083,6552,382,6934,0,3,3,"To have several related letters appear grouped under one item in the inbox, create them as part of the same **dialog** using the **Altinn 3 Correspondence API** and refer to the existing **dialogId** in the correspondence’s `externalReferences` with `referenceType` set to **`DialogportenDialogId`**. That makes the new correspondence part of a pre-existing dialog instead of a separate entry [1][2].
+
+In practice, the first correspondence gets a `dialogId`, and later related correspondences should include that `dialogId` as the `referenceValue` in `externalReferences` [1]. If you also want to control how the item is shown, you can set the transmission type with `DialogportenTransmissionType` (for example, `Information`) [1].
+
+Example:
+```json
+{
+  ""correspondence"": {
+    ""..."": ""..."",
+    ""ext…",
+8237b5fb-43d2-4375-bfd7-f4047ed32bcb,2026-05-31T17:04:59.686841Z,enrichment-on,gc-24-group-related-letters-under-one-inbox-item,2,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,22,8,2,1,9fc8a7bd7ec2;93576af31a2a;9084294cfb55;73e075cf955b;e00057498d4d;b8ddca7bace0;6f00003435ce;65043cbc3cdd,9fc8a7bd7ec2;93576af31a2a,9fc8a7bd7ec2,15539,4591,436,5027,0,3,3,"To group several related letters under one item in the inbox, create them as **transmissions** in the same **dialog** using the **Altinn 3 Correspondence API** [1].
+
+How it works:
+- When the first correspondence is created, it gets a **dialogId** in its external references [1].
+- For each later related letter, set an external reference with:
+  - `referenceType`: **`DialogportenDialogId`**
+  - `referenceValue`: the **dialogId** of the existing dialog you want to group it under [1].
+
+You can also set the transmission’s type with `DialogportenTransmissionType` if needed; otherwise it defaults to **Information (1)** [1].
+
+Example:
+```json
+{
+  ""correspondence"": {
+    ""..."": ""..."",
+    ""externalReferences"": [
+      {
+        ""referenceValue"": ""the-existing-dialogId"",
+        ""referenceType"": ""Di…",
+7ceb5a3e-af11-4c99-8b56-19e6766f7568,2026-05-31T17:05:16.030630Z,enrichment-on,gc-25-message-blocks-me-from-opening-attachment-or-button,0,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,24,8,4,3,c15fd0c441ce;33dcab0f31d0;7acc0fae76e9;d4c8f0e1816c;99849fcf3f03;7b7461fd4c38;e8581528604f;6b9dd5097d9f,c15fd0c441ce;33dcab0f31d0;e8581528604f;6b9dd5097d9f,7862f7d4c489;506bcbea034e;2fa2b30bb3b8,16343,4526,405,4931,0,3,3,"The most likely reason is that the message or the specific attachments have **different access management** than the correspondence itself, so you can see the message but not everything attached to it [2][3].
+
+There are two common cases:
+
+1. **You have access to the correspondence, but not the attachment(s)**  
+   Attachments can be initialized with their **own resource**, separate from the correspondence’s resource, so access to the message does not automatically mean access to the attachment [2][3]. This is exactly used when, for example, someone may distribute the mail internally but should **not** be able to read the attachment [1][2].
+
+2. **The attachment has expired**  
+   If an attachment has an expiry date and that date has been reached, it is marked as expired, deleted from storag…",
+bb33816c-8f4c-4684-981a-5469ca2f6f0c,2026-05-31T17:05:31.884476Z,enrichment-on,gc-25-message-blocks-me-from-opening-attachment-or-button,1,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,2,false,true,45,4,3,3,c15fd0c441ce;33dcab0f31d0;a3a55131b768;e8581528604f,c15fd0c441ce;33dcab0f31d0;e8581528604f,7862f7d4c489;506bcbea034e;2fa2b30bb3b8,15853,6347,411,6758,0,3,3,"The most likely reason is that the attachments have **different access management than the message/correspondence itself**. Altinn Correspondence supports setting access on an attachment that differs from the access management of the message it is attached to, so you may be able to open the correspondence but not the attachment. [3]
+
+In this solution, attachment access is controlled by the **resource used when initializing the attachment**. If the correspondence and attachments were initialized separately, they can have different resources and therefore different permissions. [2] That means the person who can read the correspondence may still get a **“forbidden”** error on an attachment if they are not allowed to view or download that attachment’s resource. [2]
+
+This is also why some butto…",
+20dfefa5-edce-4403-bb6b-951f8cadd01f,2026-05-31T17:05:54.164053Z,enrichment-on,gc-25-message-blocks-me-from-opening-attachment-or-button,2,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,0.3333333333333333,0.3333333333333333,0.3333333333333333,0.3333333333333333,true,true,true,2,false,true,46,6,3,3,c15fd0c441ce;33dcab0f31d0;7acc0fae76e9;2cd0f84abcad;506bcbea034e;db2dfe196222,33dcab0f31d0;7acc0fae76e9;506bcbea034e,7862f7d4c489;506bcbea034e;2fa2b30bb3b8,22279,6575,436,7011,0,3,3,"The most likely reason is that the message or its attachments are protected by different access rules, so you can see the dialog but not everything inside it. In Altinn, attachments can have their own access management based on the resource used when the attachment was initialized, and they can be initialized separately from the correspondence specifically so that someone can read the correspondence but not the attachment itself. [1]
+
+That means some attachments may be greyed out because your current access only covers the correspondence, not those attachments. [1] If one action gave a `403 Forbidden`, that usually means your token or access level was not sufficient for that resource. [3]
+
+There are a few possible reasons, depending on the message type:
+
+- The attachment has its own resour…",

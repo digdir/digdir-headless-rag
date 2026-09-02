@@ -1,0 +1,46 @@
+;; Pattern E: Multi-turn conversation — prior conversation context informs follow-up
+;; Synthetic fixture testing conversation history flow
+{:description "Multi-turn: follow-up question uses prior conversation as context"
+ :query "Hvordan fordeler de seg?"
+ :max-iterations 10
+
+ :conversation-history
+ [{:role :user :text "Hvor mange årsverk hadde Digdir i 2022?"}
+  {:role :assistant :text "Digdir hadde 330 utførte årsverk i 2022."}]
+
+ :llm-responses
+ [;; Iteration 0: search with follow-up context
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "The user is asking about the distribution of FTEs. I will search for breakdown information."
+                        :tool_calls [{:id "call_s1"
+                                      :type "function"
+                                      :function {:name "search_documents"
+                                                 :arguments "{\"queries\":[\"fordeling årsverk Digdir 2022\",\"avdelinger Digdir ansatte 2022\",\"organisasjonsstruktur Digdir 2022\"]}"}}]}}]}
+  ;; Iteration 1: rerank
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Let me rerank the results for the follow-up question."
+                        :tool_calls [{:id "call_r1"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Hvordan fordeler årsverk seg i Digdir 2022?\"}"}}]}}]}
+  ;; Iteration 2: generate
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Generating a response about FTE distribution."
+                        :tool_calls [{:id "call_g1"
+                                      :type "function"
+                                      :function {:name "generate_response"
+                                                 :arguments "{\"query\":\"Hvordan fordeler årsverk seg i Digdir 2022?\"}"}}]}}]}
+  ;; Final: text response
+  {:choices [{:finish_reason "stop"
+              :message {:content "Årsverkene i Digdir var fordelt på faste og midlertidige stillinger [9]."}}]}]
+
+ :tool-results
+ ["Retrieved 40 chunks (40 new unique). Workspace now has 40 total chunks."
+  "Reranked to top 10 chunks. Top results: 1. Digdir besto 31.12.2023 av 360 utførte årsverk fordelt på 345 faste og 15 midlertidige."
+  "Årsverkene i Digdir var fordelt på faste og midlertidige stillinger [9]."]
+
+ :expected {:iterations 3
+            :tool-sequence ["search_documents" "rerank_results" "generate_response"]
+            :response-pattern "fordelt|faste|midlertidige"
+            :exhausted false
+            :initial-message-count 4}}

@@ -1,0 +1,40 @@
+;; P3' of plans/proposed/read-stage-ceiling-plan.md — rank-lift sweep.
+;;
+;; P1 showed auto-read-top-k is mis-targeted: the cohort's goldens are DISPLAYED
+;; at LOW rank, so reading the top-K never reaches them (P(correct|read)=71% says
+;; the reads would help if delivered). This sweep tests the RANK-LIFT levers that
+;; pull a low-ranked displayed golden up into the read window:
+;;   - :search-strategy-quota — interleave top-Q per base strategy into the head
+;;     (surfaces single-strategy goldens demoted by the multi-strategy merge)
+;;   - :title-overlap-weight  — re-score visible chunks by title/url query-token
+;;     overlap (promotes on-topic title matches above content-dense neighbours)
+;; and one combined "lift + auto-read" config (lift the rank AND force the read).
+;;
+;; With the new golden-display-rank column we can see DIRECTLY whether each lever
+;; lowers the golden's rank, and whether lower rank converts to read → recall.
+;; Same 10-question read-limited cohort, N=3, judged. 4×10×3 = 120 runs.
+{:configs
+ [{:id "off"             :skill-graph-id :builtin/agent-rag-graph-bundled :skill-params {}}
+  {:id "strategy-quota-3" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/agent {:search-strategy-quota 3}}}
+  {:id "title-overlap-10" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/agent {:title-overlap-weight 10.0}}}
+  {:id "lift+read"        :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/agent {:search-strategy-quota 3
+                                  :title-overlap-weight 10.0
+                                  :auto-read-top-k 3}}}]
+ :repeats 3
+ :judge? true
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-authz-06-xacml-obligation-authlevel"
+                          "ue-authz-07-bruker-typer-authorization"
+                          "ue-broker-05-filstorrelse-grenser-multi"
+                          "ue-corr-01-events-webhook-subscription"
+                          "ue-corr-04-notification-order-sms-window"
+                          "ue-events-02-publisere-cloudevents"
+                          "ue-events-03-polling-vs-webhook"
+                          "ue-studio-02-pdf-service-task"
+                          "ue-studio-03-datamodell-filer"
+                          "ue-sys-01-leverandorstyrt-og-forhold"}}}

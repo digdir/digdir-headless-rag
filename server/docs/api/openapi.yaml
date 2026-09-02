@@ -6,12 +6,106 @@ info:
 
     ## Authentication
 
-    Most endpoints require an API key passed in the `X-API-Key` header.
-    API key management endpoints require JWT authentication via cookie.
+    The Public API uses API keys, passed either in the `X-API-Key` header
+    or as `Authorization: Bearer <key>`. The two are equivalent on every
+    public endpoint; the Bearer form exists so OpenAI clients work against
+    the `/v1` surface unchanged.
+    Internal Operator Console APIs use JWT authentication via cookie.
+
+    Public APIs are dataset-oriented and read-only with respect to dataset and pipeline state.
+    Pipeline mutation and execution remain Operator Console concerns.
 
     ## Rate Limiting
 
     Authentication endpoints are rate limited to 10 requests per 15 minutes per IP.
+
+    ## How much of this file is checked against the server
+
+    Other documents call this file the authoritative contract. Some of it is
+    checked against the running server and most of it is not, and the difference
+    is not visible from reading it — so it is stated here rather than assumed.
+
+    **Checked automatically**, by `digdir.api.doc-fidelity-test`:
+
+    - request bodies and query parameters, field for field, against the route
+      schemas the server coerces with (`digdir.api.request-doc-drift-test`)
+    - **endpoint existence**, both directions: every `/api/*` and `/v1/*` route
+      the server serves has an entry here, and every path here is served. The
+      public surface has no exceptions. Six Operator Console routes are served
+      and absent, enumerated in a register rather than excused by a prefix, so
+      a *new* console route still fails — see #369
+    - every documented 2xx declares a response shape, and that shape resolves
+      (`digdir.api.response-schema-coverage-test`)
+    - documented response EXAMPLES against what handlers emit, for the four
+      conversation endpoints (key sets) and for `GET /v1/models`,
+      `GET /api/datasets` and one documented 404 body (key sets **and value
+      types**) — `digdir.api.doc-fidelity-smoke-test`
+    - the **`schema` blocks in this file** against what handlers emit, by
+      property NAME, one level into arrays, for `GET /v1/models`,
+      `GET /api/datasets` and `GET /api/conversations`
+      (`openapi-response-schemas-match-what-handlers-emit` in
+      `digdir.api.doc-fidelity-smoke-test`). This is the schema side, distinct
+      from the EXAMPLE check above: it found `_skill_graph` declared against an
+      emitted `_mode` on its first run (#375). The schema drives the
+      comparison, so a handler that stops emitting a declared field fails
+      rather than removing its own comparison, and a `$ref` that resolves to
+      nothing fails rather than reading as agreement
+    - for `/api/mcp` only: that the supported-method list names
+      `server/discover` and not `initialize`, and that a JSON-RPC notification
+      is documented with the status the transport actually returns
+    - for `/api/mcp` only: that the **method list** — the `Mcp-Method` enum *and*
+      the "Supported methods" sentence — matches what `digdir.mcp.transport`
+      actually routes, in both directions (#368)
+    - for `/api/mcp` only: that the **request-metadata header parameters** are
+      exactly the three `digdir.mcp.transport/request-metadata-contract`
+      enforces — in both directions, so a header declared here but not read by
+      the server fails as loudly as one the server requires and this file omits
+      — plus their required-ness and, where the contract fixes a value set,
+      their `enum`
+
+    **Not checked, and hand-maintained** — including parts of `/api/mcp` that
+    the header guard above does *not* reach:
+
+    - which METHODS a client may call is checked; what each method DOES is not.
+      The names agree with `dispatch`; that `tools/call` behaves as described is
+      unverified by anything here.
+    - that `Mcp-Name` is required only for `tools/call`. OpenAPI cannot express
+      a conditionally required parameter, so it is declared `required: false`
+      and the condition lives in a description nothing reads.
+    - the `initialize` rejection, which is a method-level rule deliberately
+      outside the header contract, and the body-path precedence the contract
+      carries for each header
+    - that the JSON-RPC error codes named in prose are the ones returned
+    - that a declared response schema matches what its handler emits, for every
+      endpoint EXCEPT the three named in the checked list above and the
+      Pipeline detail response. The three that are checked compare property
+      NAMES only: a schema and a handler can still disagree here on type,
+      nullability, required-ness or enum and nothing notices.
+      `POST`/`PUT`/`DELETE` responses are unchecked from the schema side
+      entirely, and so is every 4xx/5xx schema
+    - **response correctness**, which the example checks above do not amount to.
+      They compare key sets and value types one level into arrays. Nullability,
+      deeper nesting, value semantics, and any array the server returns empty
+      are all still open after they pass — `/api/datasets` is in that last
+      category today, so its envelope is checked and the dataset object inside
+      it is not
+    - `/v1/chat/completions` and `/api/mcp` `tools/call` results, which need a
+      live model and a materialized dataset, and the whole `/console-api`
+      surface, which needs an operator JWT. **These are the highest-traffic
+      responses on the API and they are the least checked** — the coverage is
+      thinnest exactly where it would matter most
+    - what a documented endpoint MEANS. Existence is checked and inputs are
+      checked; that an operation does what its summary says is not, and cannot
+      be from route data alone
+    - the Operator Console surface's completeness, which is partial by register
+      rather than by rule — `/console-api/users/{id}/permissions` is documented
+      while `/console-api/users/{id}` is not, so that section implies a
+      completeness it does not have (#369)
+    - descriptions, examples and every English sentence in this file
+
+    A correction to one operation is not a warranty over the rest. If a claim
+    here matters to your client, the server is the authority — see
+    `server/docs/api/endpoints/` for the surfaces with hand-written references.
   version: 1.0.0
   contact:
     name: Digdir Support
@@ -23,132 +117,464 @@ servers:
     description: Staging
 
 tags:
-  - name: RAG
-    description: Retrieval-Augmented Generation endpoints
+  - name: MCP
+    description: |
+      Model Context Protocol server. JSON-RPC 2.0 over Streamable HTTP.
+      Full reference at [endpoints/mcp.md](./endpoints/mcp.md).
+  - name: OpenAI-compatible
+    description: |
+      OpenAI-compatible `/v1` surface. Each agent is exposed as a model so
+      any OpenAI client can talk to it unchanged. Full reference at
+      [endpoints/openai-compat.md](./endpoints/openai-compat.md).
+  - name: Datasets
+    description: Public read-only dataset state
   - name: Conversations
     description: Conversation management
+  - name: Pipelines
+    description: Operator Console dataset and pipeline management
   - name: API Keys
-    description: API key management (admin)
+    description: Operator Console API key management
 
 security:
   - ApiKeyAuth: []
 
 paths:
-  /api/rag:
+  /api/mcp:
     post:
       tags:
-        - RAG
-      summary: RAG Query
+        - MCP
+      summary: MCP JSON-RPC endpoint
       description: |
-        Execute a full RAG pipeline: retrieve relevant documents and generate an answer using an LLM.
+        Model Context Protocol server, revision `2026-07-28` and only that
+        revision. Accepts a single JSON-RPC 2.0 envelope per request.
+        Supported methods: `server/discover`, `tools/list`, `tools/call`,
+        `ping`.
 
-        The response includes the generated answer along with the source chunks used.
-      operationId: ragQuery
+        `server/discover` is mandatory in this revision and replaces the
+        handshake: it returns the supported versions, capabilities, server
+        identity and usage instructions in one round trip. There is no
+        `initialize` and no `notifications/initialized` — this revision has
+        no handshake and no session, so a request for `initialize` is
+        answered `400` with `-32022` naming the versions we speak.
+
+        Every request must carry the three request-metadata headers below,
+        mirrored from the body. The mirroring exists so an intermediary can
+        route on the header while the server executes on the body, which is
+        why a header that disagrees with the body is rejected rather than
+        ignored.
+
+        `tools/call` responses are plain JSON unless the request includes
+        a `_meta.progressToken`, in which case the response opens as
+        `text/event-stream` and streams `notifications/progress` frames
+        terminated by the final JSON-RPC result frame.
+
+        Per-API-key rate limited (120 requests / 60s by default; 429
+        on overflow). See [endpoints/mcp.md](./endpoints/mcp.md) for
+        the full protocol — OpenAPI cannot express JSON-RPC unions or
+        SSE responses without losing fidelity.
+      operationId: mcpJsonRpc
       security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: MCP-Protocol-Version
+          in: header
+          required: true
+          description: >-
+            The MCP revision this request is made under. Must be `2026-07-28`;
+            any other value is refused with `400` and `-32022` listing what we
+            support. Mirrors `params._meta["io.modelcontextprotocol/protocolVersion"]`
+            when the body carries it — the body field is optional, this header is not.
+          schema:
+            type: string
+            enum: ['2026-07-28']
+        - name: Mcp-Method
+          in: header
+          required: true
+          description: >-
+            Mirrors the `method` field of the body. A value that disagrees with
+            the body is refused with `400` and `-32020`.
+          schema:
+            type: string
+            enum: ['server/discover', 'tools/list', 'tools/call', 'ping']
+        - name: Mcp-Name
+          in: header
+          required: false
+          description: >-
+            Required for `tools/call`, where it mirrors `params.name`; not sent
+            for other methods. A value that disagrees with the body is refused
+            with `400` and `-32020`. Values outside plain ASCII are wrapped as
+            `=?base64?<b64>?=` and decoded before comparison.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonRpcRequest'
+      responses:
+        '200':
+          description: |
+            JSON-RPC response (success or error) for blocking calls,
+            or the opening of an `text/event-stream` for streaming
+            `tools/call`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcResponse'
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  SSE frames carrying JSON-RPC notifications/progress
+                  and a final JSON-RPC result frame.
+        '202':
+          description: |
+            Accepted, with no body — returned for a JSON-RPC notification
+            (a request carrying no `id`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcResponse'
+        '400':
+          description: |
+            The request never became a tool call. Carries a JSON-RPC error:
+            `-32020` (`HeaderMismatch`) for a missing or contradicting
+            request-metadata header, `-32022`
+            (`UnsupportedProtocolVersionError`) for an unsupported version or
+            for a legacy `initialize`, `-32602` for an unknown tool or agent,
+            and `-32700` for an unparseable body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcResponse'
+        '401':
+          description: Missing or invalid API key.
+        '404':
+          description: |
+            Unknown JSON-RPC method, with `-32601` and the method name in
+            `error.data.method`. The non-2xx status is required: a JSON-RPC
+            error inside a `200` is what a dual-era client reads as a legacy
+            server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcResponse'
+        '429':
+          description: Per-API-key rate limit exceeded.
+    get:
+      tags:
+        - MCP
+      summary: Not allowed — the MCP endpoint accepts POST only
+      description: >-
+        `GET` belonged to the pre-`2026-07-28` transport, where it opened the
+        standalone SSE stream. That stream no longer exists. Answered `405`
+        rather than `404` so a client can tell "wrong verb" from
+        "wrong endpoint".
+      operationId: mcpGetNotAllowed
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '405':
+          description: "Method Not Allowed, with an `Allow: POST` header."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcResponse'
+    delete:
+      tags:
+        - MCP
+      summary: Not allowed — the MCP endpoint accepts POST only
+      description: >-
+        `DELETE` belonged to the pre-`2026-07-28` transport, where it
+        terminated a protocol session. This revision has no sessions.
+        Answered `405` for the same reason as `GET`.
+      operationId: mcpDeleteNotAllowed
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '405':
+          description: "Method Not Allowed, with an `Allow: POST` header."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcResponse'
+
+  /v1/models:
+    get:
+      tags:
+        - OpenAI-compatible
+      summary: List models
+      description: |
+        One model per (agent × allowed skill graph) pair visible to the
+        authenticated key — the same surface MCP exposes as tools. Model
+        ids have the form `<agent-id>__<skill-graph-short-name>`; the
+        `_default` flag marks the agent's default graph.
+      operationId: listModels
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Model list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelList'
+        '401':
+          description: Missing or invalid API key.
+
+  /v1/chat/completions:
+    post:
+      tags:
+        - OpenAI-compatible
+      summary: Chat completion
+      description: |
+        OpenAI-compatible chat completion against a digdir agent.
+
+        The agent needs a dataset scope, and a stock OpenAI body has no
+        field for one. Supply it via the API key's dataset scopes, via the
+        `tenant` + `dataset_config_key` extension fields below, or via the
+        server's `TENANT` / `DATASET_CONFIG_KEY` environment defaults.
+        With none of them the call returns `400` with code
+        `no_dataset_scope`. Where the key HAS dataset scopes, the
+        `tenant` + `dataset_config_key` fields select among them and
+        cannot exceed them — naming a dataset outside the grant returns
+        `403` with code `dataset_not_authorized`.
+
+        Sampling parameters are accepted and ignored; generation settings
+        come from the agent's configuration. `stream: true` returns SSE
+        frames terminated by `data: [DONE]` — currently one content delta
+        rather than per-token streaming.
+
+        Per-API-key rate limited (120 requests / 60s by default).
+      operationId: createChatCompletion
+      security:
+        - BearerAuth: []
         - ApiKeyAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RagRequest'
-            examples:
-              simple:
-                summary: Simple query
-                value:
-                  query: "Hva er Altinn?"
-              withConversation:
-                summary: Continue conversation
-                value:
-                  query: "Kan du forklare mer?"
-                  conversation-id: "abc123xyz"
-              withOptions:
-                summary: With custom options
-                value:
-                  query: "Hva er Altinn?"
-                  model: "gpt-4o-2024-11-20"
-                  rerank-top-k: 20
-                  context-top-k: 5
+              $ref: '#/components/schemas/ChatCompletionRequest'
       responses:
         '200':
-          description: Successful response
+          description: |
+            Chat completion, or the opening of a `text/event-stream` when
+            `stream` is true.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RagResponse'
-              example:
-                answer: "Altinn er en digital plattform for offentlige tjenester i Norge..."
-                conversation-id: "abc123xyz"
-                model: "gpt-4o-2024-11-20"
-                chunks-used:
-                  - chunk-id: "chunk_001"
-                    doc-title: "Om Altinn"
-                    doc-num: "doc_123"
-                    content-markdown: "# Altinn\n\nAltinn er..."
+                $ref: '#/components/schemas/ChatCompletion'
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  SSE frames carrying `chat.completion.chunk` objects,
+                  terminated by `data: [DONE]`.
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: |
+            Bad request — `missing_model`, `missing_messages`,
+            `invalid_messages`, or `no_dataset_scope`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenAiError'
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Missing or invalid API key.
+        '403':
+          description: |
+            Agent or skill graph not permitted for this key, agent
+            disabled, or `dataset_not_authorized` — the named dataset is
+            outside this key's granted dataset scopes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenAiError'
         '404':
-          $ref: '#/components/responses/NotFound'
+          description: Unknown model, agent, skill graph, or dataset — including when no datasets are configured yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenAiError'
+        '429':
+          description: Per-API-key rate limit exceeded.
         '500':
-          $ref: '#/components/responses/InternalError'
+          description: The agent errored while answering (`invoke_failed`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenAiError'
 
-  /api/retrieve:
+  /api/runtime/config/resolve:
     post:
       tags:
-        - RAG
-      summary: Retrieve Documents
+        - Datasets
+      summary: Resolve runtime configuration
       description: |
-        Retrieve relevant documents without LLM generation.
-
-        Use this endpoint when you want to handle generation yourself or just need the source documents.
-        Returns ranked chunks with relevance scores and search attribution.
-      operationId: retrieve
+        Resolve one or more runtime config paths for a tenant. Documented from
+        the accepting schema in #177 — the endpoint predates its entry here.
+      operationId: resolveRuntimeConfig
       security:
+        - BearerAuth: []
         - ApiKeyAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RetrieveRequest'
-            examples:
-              simple:
-                summary: Simple retrieval
-                value:
-                  query: "Hva er Altinn?"
-              withOptions:
-                summary: With options
-                value:
-                  query: "Hva er Altinn?"
-                  top_k: 5
-                  include_query_expansion: true
-              withFilter:
-                summary: With filter
-                value:
-                  query: "tilgjengelighet"
-                  top_k: 10
-                  filter:
-                    fields:
-                      - field: "owner_short"
-                        selected_options: ["Digdir"]
-                        value_type: "string"
+              $ref: '#/components/schemas/ResolveRuntimeConfigRequest'
+      responses:
+        '200':
+          description: Resolved configuration values.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeConfigResolveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Missing or invalid API key.
+
+  /api/dataset/config/resolve:
+    post:
+      tags:
+        - Datasets
+      summary: Resolve dataset configuration
+      description: |
+        Resolve one or more dataset config paths. Identify the dataset by
+        `dataset-id`, by `dataset-ref`, or by `tenant` + `dataset-config-key`.
+        Documented from the accepting schema in #177.
+      operationId: resolveDatasetConfig
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveDatasetConfigRequest'
+      responses:
+        '200':
+          description: Resolved configuration values.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetConfigResolveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Missing or invalid API key.
+
+  /api/skills/{id}/execute:
+    post:
+      tags:
+        - Datasets
+      summary: Execute a skill
+      description: |
+        Execute a single skill by id. Documented from the accepting schema in
+        #177. For agent invocation use [`/api/mcp`](./endpoints/mcp.md) or the
+        OpenAI-compatible `/v1` surface instead.
+      operationId: executeSkill
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Skill identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteSkillRequest'
+      responses:
+        '200':
+          description: Skill output.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillExecutionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Missing or invalid API key.
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/config/{root}/nodes:
+    get:
+      tags:
+        - Configuration
+      summary: List Config Nodes
+      description: >-
+        List the configuration nodes under a config root for a tenant.
+        Documented as part of #267 — it was reachable and accepting a required
+        query parameter with no entry in this spec at all, so a caller had
+        nothing to work from and an omitted `tenant` produced a 400 they could
+        not explain.
+      operationId: listConfigNodes
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: root
+          in: path
+          required: true
+          description: Config root to list nodes for
+          schema:
+            type: string
+        - name: tenant
+          in: query
+          required: true
+          description: Tenant whose config nodes to list
+          schema:
+            type: string
+            minLength: 1
       responses:
         '200':
           description: Successful response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RetrieveResponse'
+                # Derived from list-config-nodes-handler's response-data and
+                # public-node-summary, not copied from a neighbour.
+                type: object
+                properties:
+                  root:
+                    type: string
+                  tenant:
+                    type: string
+                  allowed-config-keys:
+                    type: array
+                    items:
+                      type: string
+                  nodes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        config-key:
+                          type: string
+                        label:
+                          type: string
+                        enabled?:
+                          type: boolean
+                        parent-node-id:
+                          type: string
+                          description: Present only when the node has a parent
+                        parent-config-key:
+                          type: string
+                          description: Present only when the node has a parent
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: Missing or invalid query parameters.
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
 
   /api/conversations:
     get:
@@ -166,15 +592,23 @@ paths:
           schema:
             type: integer
             default: 50
+            minimum: 1
+            maximum: 100
         - name: page_index
           in: query
           description: Page number (0-indexed)
           schema:
             type: integer
             default: 0
-        - name: X-User-Email
+        - name: tags
+          in: query
+          description: Optional comma-separated tags; conversations must include all listed tags
+          schema:
+            type: string
+        - name: X-User-Id
           in: header
-          description: Filter by user email
+          required: true
+          description: Opaque external caller identifier used only for conversation scoping
           schema:
             type: string
       responses:
@@ -196,10 +630,10 @@ paths:
       security:
         - ApiKeyAuth: []
       parameters:
-        - name: X-User-Email
+        - name: X-User-Id
           in: header
           required: true
-          description: User email for the conversation
+          description: Opaque external caller identifier used only for conversation scoping
           schema:
             type: string
       requestBody:
@@ -227,6 +661,12 @@ paths:
         description: Conversation ID
         schema:
           type: string
+      - name: X-User-Id
+        in: header
+        required: true
+        description: Opaque external caller identifier used only for conversation scoping
+        schema:
+          type: string
 
     get:
       tags:
@@ -234,6 +674,13 @@ paths:
       summary: Get Conversation
       description: Get a specific conversation with all its messages.
       operationId: getConversation
+      parameters:
+        - name: include_diagnostics
+          in: query
+          required: false
+          description: Include normalized stored message diagnostics when available
+          schema:
+            type: boolean
       security:
         - ApiKeyAuth: []
       responses:
@@ -243,6 +690,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConversationWithMessages'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -269,6 +718,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Conversation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -293,12 +744,184 @@ paths:
                   success:
                     type: boolean
                     example: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/keys:
+  /api/datasets:
+    get:
+      tags:
+        - Datasets
+      summary: List Visible Datasets
+      description: List the datasets visible to the current API key through its dataset scopes.
+      operationId: listDatasets
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicDatasetListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/datasets/{dataset-id}:
+    parameters:
+      - name: dataset-id
+        in: path
+        required: true
+        description: Canonical globally unique dataset ID
+        schema:
+          type: string
+    get:
+      tags:
+        - Datasets
+      summary: Get Visible Dataset
+      description: Return one visible dataset.
+      operationId: getDataset
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicDatasetResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /console-api/permissions:
+    get:
+      tags:
+        - API Keys
+      summary: List available permissions
+      description: >-
+        Every permission that can be granted to a user. Documented from
+        `list-permissions-handler` in #369.
+      operationId: listOperatorPermissions
+      security:
+        - JwtAuth: []
+      responses:
+        '200':
+          description: Permissions listed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /console-api/access-policies:
+    get:
+      tags:
+        - API Keys
+      summary: List access policies
+      description: >-
+        Access policies visible to the authenticated operator. Documented from
+        `list-access-policies-handler` in #369.
+      operationId: listAccessPolicies
+      security:
+        - JwtAuth: []
+      responses:
+        '200':
+          description: Access policies listed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessPolicyListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /console-api/api-keys/{key-id}/rotate:
+    post:
+      tags:
+        - API Keys
+      summary: Rotate an API key
+      description: >-
+        Issues a replacement key and returns the new plaintext **once**. Only
+        the operator who created the key may rotate it. Documented from
+        `rotate-api-key-handler` in #369.
+      operationId: rotateApiKey
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: key-id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Key rotated. The plaintext is not retrievable again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RotateApiKeyResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: The key was created by a different operator.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /console-api/conversations:
+    get:
+      tags:
+        - Conversations
+      summary: List Conversations (operator console)
+      description: >-
+        Operator-console listing of conversations across callers. Accepts the
+        same pagination parameters as `GET /api/conversations` but is a
+        distinct endpoint — documented under #267, where its absence from this
+        spec was nearly missed because those parameter names ARE documented,
+        under the other path.
+      operationId: adminListConversations
+      parameters:
+        - name: page_size
+          in: query
+          description: Number of conversations per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: page_index
+          in: query
+          description: Page number (0-indexed)
+          schema:
+            type: integer
+            minimum: 0
+        - name: tags
+          in: query
+          description: Optional comma-separated tags; conversations must include all listed tags
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                # Same shape as GET /api/conversations because both handlers
+                # call the SAME formatter — conversations/format-conversation-list-response.
+                # Shared because the producer is shared, not because the
+                # endpoints look alike.
+                $ref: '#/components/schemas/ConversationListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /console-api/api-keys:
     get:
       tags:
         - API Keys
@@ -333,6 +956,18 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateApiKeyRequest'
+            example:
+              name: "Public Docs Integration"
+              dataset-scopes:
+                - tenant: "digdir"
+                  dataset-config-key: "public-docs"
+              allowed-config-keys:
+                - root: "dataset"
+                  tenant: "digdir"
+                  dataset-config-key: "public-docs"
+                - root: "runtime"
+                  tenant: "digdir"
+                  runtime-config-key: "default"
       responses:
         '201':
           description: API key created
@@ -340,6 +975,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateApiKeyResponse'
+              example:
+                api-key-id: "key_abc123"
+                api-key: "rag_abcdefghijklmnopqrstuvwxyz"
+                name: "Public Docs Integration"
+                dataset-scopes:
+                  - tenant: "digdir"
+                    dataset-config-key: "public-docs"
+                allowed-config-keys:
+                  - root: "dataset"
+                    tenant: "digdir"
+                    dataset-config-key: "public-docs"
+                  - root: "runtime"
+                    tenant: "digdir"
+                    runtime-config-key: "default"
+                warning: "This is the only time you will see this API key. Store it securely."
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -347,7 +997,73 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/keys/{key-id}/revoke:
+  /console-api/api-keys/{key-id}/allowed-config-keys:
+    put:
+      tags:
+        - API Keys
+      summary: Replace API Key Allowed Config Keys
+      description: Replace the config-management allowed config keys for an API key owned by the authenticated user.
+      operationId: updateApiKeyAllowedConfigKeys
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: key-id
+          in: path
+          required: true
+          description: API key ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateApiKeyAllowedConfigKeysRequest'
+            example:
+              allowed-config-keys:
+                - root: "platform"
+                  tenant: "digdir"
+                  platform-config-key: "default"
+                - root: "runtime"
+                  tenant: "digdir"
+                  runtime-config-key: "default"
+                - root: "dataset"
+                  tenant: "digdir"
+                  dataset-config-key: "public-docs"
+      responses:
+        '200':
+          description: API key allowed config keys updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyAllowedConfigKeysResponse'
+              example:
+                api-key-id: "key_abc123"
+                name: "Public Docs Integration"
+                allowed-config-keys:
+                  - root: "platform"
+                    tenant: "digdir"
+                    platform-config-key: "default"
+                  - root: "runtime"
+                    tenant: "digdir"
+                    runtime-config-key: "default"
+                  - root: "dataset"
+                    tenant: "digdir"
+                    dataset-config-key: "public-docs"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Not authorized to update this key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /console-api/api-keys/{key-id}/revoke:
     post:
       tags:
         - API Keys
@@ -385,6 +1101,534 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /console-api/users:
+    get:
+      tags:
+        - API Keys
+      summary: List users
+      description: >-
+        Every user with their granted permissions. Documented from
+        `list-users-handler` in #369.
+      operationId: listOperatorUsers
+      security:
+        - JwtAuth: []
+      responses:
+        '200':
+          description: Users listed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags:
+        - API Keys
+      summary: Create a user
+      description: Documented from the accepting schema in #177.
+      operationId: createOperatorUser
+      security:
+        - JwtAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /console-api/users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - API Keys
+      summary: Get a user
+      description: One user with their permissions. Documented from `get-user-handler` in #369.
+      operationId: getOperatorUser
+      security:
+        - JwtAuth: []
+      responses:
+        '200':
+          description: User found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - API Keys
+      summary: Delete a user
+      description: >-
+        Deletes the user. Refuses with `400` when the caller targets their own
+        account. Documented from `delete-user-handler` in #369.
+      operationId: deleteOperatorUser
+      security:
+        - JwtAuth: []
+      responses:
+        '200':
+          description: User deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /console-api/users/{id}/permissions:
+    put:
+      tags:
+        - API Keys
+      summary: Update a user's permissions
+      description: |
+        Add and/or remove permissions. Both fields are optional; sending
+        neither is a no-op. Documented from the accepting schema in #177.
+      operationId: updateOperatorUserPermissions
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserPermissionsRequest'
+      responses:
+        '200':
+          description: Updated permissions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /console-api/datasets:
+    get:
+      tags:
+        - Pipelines
+      summary: List Datasets
+      description: List durable parent datasets in the Operator Console.
+      operationId: listOperatorDatasets
+      security:
+        - JwtAuth: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorDatasetListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags:
+        - Pipelines
+      summary: Create Dataset
+      description: Create a durable parent dataset for the Operator Console.
+      operationId: createOperatorDataset
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: X-User-Email
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDatasetRequest'
+      responses:
+        '201':
+          description: Dataset created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorDatasetCreatedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /console-api/datasets/{dataset-id}:
+    parameters:
+      - name: dataset-id
+        in: path
+        required: true
+        description: Canonical globally unique dataset ID
+        schema:
+          type: string
+    get:
+      tags:
+        - Pipelines
+      summary: Get Dataset
+      description: Return one dataset and its child pipeline summaries.
+      operationId: getOperatorDataset
+      security:
+        - JwtAuth: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorDatasetResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+        - Pipelines
+      summary: Update Dataset
+      description: |
+        Update a dataset's name, description or enabled flag. All three are
+        optional. Documented from the accepting schema in #177 — the path was
+        here, this method was not.
+      operationId: updateOperatorDataset
+      security:
+        - JwtAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDatasetRequest'
+      responses:
+        '200':
+          description: Updated dataset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorDatasetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /console-api/datasets/{dataset-id}/pipelines:
+    parameters:
+      - name: dataset-id
+        in: path
+        required: true
+        description: Canonical globally unique dataset ID
+        schema:
+          type: string
+    get:
+      tags:
+        - Pipelines
+      summary: List Child Pipelines
+      description: List child pipelines under a dataset in the Operator Console.
+      operationId: listOperatorPipelines
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: tenant
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: dataset-config-key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorPipelineListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+        - Pipelines
+      summary: Create Child Pipeline
+      description: Create a child pipeline under an existing dataset.
+      operationId: createOperatorPipeline
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: X-User-Email
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePipelineRequest'
+      responses:
+        '201':
+          description: Pipeline created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineCreatedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /console-api/datasets/{dataset-id}/pipelines/{pipeline-id}:
+    parameters:
+      - name: dataset-id
+        in: path
+        required: true
+        description: Canonical globally unique dataset ID
+        schema:
+          type: string
+      - name: pipeline-id
+        in: path
+        required: true
+        description: Child pipeline identifier within the dataset
+        schema:
+          type: string
+    put:
+      tags:
+        - Pipelines
+      summary: Update Child Pipeline
+      description: Update pipeline properties for a child pipeline.
+      operationId: updateOperatorPipeline
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: X-User-Email
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: tenant
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: dataset-config-key
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePipelineRequest'
+      responses:
+        '200':
+          description: Pipeline updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    get:
+      tags:
+        - Pipelines
+      summary: Get Child Pipeline
+      description: Return resolved details for one child pipeline.
+      operationId: getOperatorPipeline
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: tenant
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: dataset-config-key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Pipelines
+      summary: Delete Child Pipeline
+      description: Soft-delete a child pipeline.
+      operationId: deleteOperatorPipeline
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: X-User-Email
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: tenant
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: dataset-config-key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pipeline deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /console-api/datasets/{dataset-id}/pipelines/{pipeline-id}/execute:
+    post:
+      tags:
+        - Pipelines
+      summary: Execute Child Pipeline
+      description: Start asynchronous execution for a child pipeline.
+      operationId: executeOperatorPipeline
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: dataset-id
+          in: path
+          required: true
+          description: Canonical globally unique dataset ID
+          schema:
+            type: string
+        - name: pipeline-id
+          in: path
+          required: true
+          description: Child pipeline identifier within the dataset
+          schema:
+            type: string
+        - name: X-User-Email
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: tenant
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: dataset-config-key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: Pipeline execution started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionStartedResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /console-api/datasets/{dataset-id}/pipelines/{pipeline-id}/executions:
+    get:
+      tags:
+        - Pipelines
+      summary: List Child Pipeline Executions
+      description: List execution history for a child pipeline.
+      operationId: listOperatorPipelineExecutions
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: dataset-id
+          in: path
+          required: true
+          description: Canonical globally unique dataset ID
+          schema:
+            type: string
+        - name: pipeline-id
+          in: path
+          required: true
+          description: Child pipeline identifier within the dataset
+          schema:
+            type: string
+        - name: tenant
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: dataset-config-key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineExecutionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -392,6 +1636,13 @@ components:
       in: header
       name: X-API-Key
       description: API key for authentication
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        The same API key as `ApiKeyAuth`, sent as `Authorization: Bearer
+        <key>`. Accepted on every public endpoint; required in practice by
+        OpenAI clients, which send this header on their own.
     JwtAuth:
       type: apiKey
       in: cookie
@@ -399,90 +1650,363 @@ components:
       description: JWT token in HTTP-only cookie
 
   schemas:
-    # Request Schemas
-    RagRequest:
+    # OpenAI-compatible /v1 — mirrors OpenAI's own shapes so existing
+    # clients validate. See endpoints/openai-compat.md.
+    ModelList:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Model'
+    Model:
+      type: object
+      properties:
+        id:
+          type: string
+          description: '`<agent-id>__<skill-graph-short-name>`'
+          example: builtin.agent-rag-agent__agent-rag-graph-bundled
+        object:
+          type: string
+          example: model
+        created:
+          type: integer
+          description: Unix seconds.
+        owned_by:
+          type: string
+          example: digdir-rag
+        description:
+          type: string
+        _agent_id:
+          type: string
+          description: digdir extension — the underlying agent id.
+        _mode:
+          type: string
+          description: >-
+            digdir extension — the mode's short name, unqualified: the half
+            after `__` in the model id. Was `_skill_graph` until the
+            public-identifiers ADR took the word "skill" off the wire (#122);
+            the handler and `openai-compat.md` renamed and this schema did not,
+            which is what `openapi-response-schemas-match-what-handlers-emit`
+            now catches.
+        _default:
+          type: boolean
+          description: digdir extension — present when this is the agent's default graph.
+    ChatCompletionRequest:
       type: object
       required:
-        - query
+        - model
+        - messages
       properties:
-        query:
-          type: string
-          description: The question to ask
-          example: "Hva er Altinn?"
-        conversation-id:
-          type: string
-          description: Continue an existing conversation
         model:
           type: string
-          description: LLM model to use
-          default: "gpt-4o-2024-11-20"
-        rerank-top-k:
-          type: integer
-          description: Maximum chunks to rerank
-        rerank-max-chunk-length:
-          type: integer
-          description: Maximum length per chunk for reranking
-        rerank-max-length:
-          type: integer
-          description: Maximum total length for reranking
-        context-top-k:
-          type: integer
-          description: Maximum chunks for context
-        context-max-chunk-length:
-          type: integer
-          description: Maximum length per context chunk
-        max-context-length:
-          type: integer
-          description: Maximum total context length
-
-    RetrieveRequest:
+          description: An `id` from `/v1/models`.
+          example: builtin.agent-rag-agent__agent-rag-graph-bundled
+        messages:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+          description: |
+            The last `user` message is the query; earlier turns become
+            conversation history.
+        stream:
+          type: boolean
+          default: false
+          description: Return `text/event-stream` instead of JSON.
+        tenant:
+          type: string
+          description: |
+            digdir extension. With `dataset_config_key`, selects the
+            dataset scope for this call, picking among the scopes the API
+            key allows. Both fields are required together.
+          example: digdir
+        dataset_config_key:
+          type: string
+          description: digdir extension — see `tenant`.
+          example: public-docs
+    ChatMessage:
       type: object
       required:
-        - query
+        - role
+        - content
       properties:
-        query:
+        role:
           type: string
-          description: The search query
-          example: "Hva er Altinn?"
-        top_k:
+          enum: [system, user, assistant]
+        content:
+          type: string
+    ChatCompletion:
+      type: object
+      properties:
+        id:
+          type: string
+          example: chatcmpl-GchQMEUfrQ2MRhlUxtNVS
+        object:
+          type: string
+          example: chat.completion
+        created:
           type: integer
-          description: Number of chunks to return
-          default: 10
-        include_query_expansion:
-          type: boolean
-          description: Use LLM to expand the query
-          default: true
-        filter:
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+              message:
+                $ref: '#/components/schemas/ChatMessage'
+              finish_reason:
+                type: string
+                example: stop
+        usage:
           type: object
-          description: Filter by document metadata
+          description: |
+            Present for compatibility; digdir does not meter tokens and
+            reports zeros.
           properties:
-            fields:
-              type: array
-              items:
+            prompt_tokens:
+              type: integer
+            completion_tokens:
+              type: integer
+            total_tokens:
+              type: integer
+        citations:
+          type: array
+          description: |
+            digdir extension — Perplexity-style list of source URLs.
+            Present only when the agent produced citations.
+          items:
+            type: string
+        sources:
+          type: array
+          description: |
+            digdir extension — Open WebUI's native source shape, rendered
+            as clickable references. Present only when the agent produced
+            citations.
+          items:
+            type: object
+            properties:
+              source:
                 type: object
                 properties:
-                  field:
+                  name:
                     type: string
-                    description: Field name to filter on
-                  selected_options:
-                    type: array
-                    items:
-                      type: string
-                    description: Values to filter for
-                  value_type:
+                  url:
                     type: string
-                    enum: [string, integer]
-                    default: string
+              document:
+                type: array
+                items:
+                  type: string
+    OpenAiError:
+      type: object
+      description: |
+        OpenAI's error envelope, used by `/v1` for its own errors. Note
+        that a 401 comes from shared auth middleware instead and returns
+        `{"error": "<string>"}` — branch on the status code.
+      properties:
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+            type:
+              type: string
+              example: invalid_request_error
+            code:
+              type: string
+              example: no_dataset_scope
+
+    # MCP — minimal JSON-RPC schemas. The real wire shape varies per
+    # method; see endpoints/mcp.md for full descriptions.
+    JsonRpcRequest:
+      type: object
+      required:
+        - jsonrpc
+        - method
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+          description: Omit for notifications.
+        method:
+          type: string
+          enum:
+            - initialize
+            - tools/list
+            - tools/call
+            - ping
+            - notifications/initialized
+        params:
+          type: object
+          additionalProperties: true
+    JsonRpcResponse:
+      type: object
+      required:
+        - jsonrpc
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
+            data:
+              type: object
+              additionalProperties: true
+
+    # Request Schemas
+    # RagRequest and RetrieveRequest were removed when /api/rag and
+    # /api/retrieve were hard-deleted in Phase 0 of the MCP migration.
+    # Equivalent MCP tool call arguments are documented in
+    # endpoints/mcp.md.
+
+    ResolveRuntimeConfigRequest:
+      type: object
+      description: |
+        Identify the runtime config to resolve. `tenant` and
+        `runtime-config-key` are required; the rest narrow the lookup.
+        Give either `path` or `paths`.
+      required:
+        - tenant
+        - runtime-config-key
+      properties:
+        tenant:
+          type: string
+        runtime-config-key:
+          type: string
+        agent-id:
+          type: string
+        agent:
+          type: string
+        dataset-id:
+          type: string
+        dataset-config-key:
+          type: string
+        dataset-ref:
+          $ref: '#/components/schemas/DatasetScope'
+        path:
+          type: string
+          description: A single config path to resolve
+        paths:
+          type: array
+          items:
+            type: string
+          description: Several config paths to resolve
+
+    ResolveDatasetConfigRequest:
+      type: object
+      description: |
+        Identify the dataset by `dataset-id`, by `dataset-ref`, or by `tenant`
+        plus `dataset-config-key`. Every field is optional in the schema; the
+        handler rejects a request that identifies nothing.
+      properties:
+        tenant:
+          type: string
+        dataset-id:
+          type: string
+        dataset-config-key:
+          type: string
+        dataset-ref:
+          $ref: '#/components/schemas/DatasetScope'
+        path:
+          type: string
+        paths:
+          type: array
+          items:
+            type: string
+
+    ExecuteSkillRequest:
+      type: object
+      required:
+        - inputs
+      properties:
+        inputs:
+          description: Skill inputs; shape depends on the skill
+        parameters:
+          description: Optional per-call skill parameters
+        tenant:
+          type: string
+        dataset-config-key:
+          type: string
+        dataset-ref:
+          $ref: '#/components/schemas/DatasetScope'
+
+    CreateUserRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+
+    UpdateUserPermissionsRequest:
+      type: object
+      description: Both fields optional; sending neither is a no-op.
+      properties:
+        add:
+          type: array
+          items:
+            type: string
+        remove:
+          type: array
+          items:
+            type: string
+
+    UpdateDatasetRequest:
+      type: object
+      description: All fields optional.
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        enabled?:
+          type: boolean
 
     CreateConversationRequest:
       type: object
       properties:
+        agent-id:
+          type: string
+          description: |
+            Agent the conversation belongs to. Accepted since the conversation
+            model became agent-scoped; documented here from #177.
         title:
           type: string
           description: Optional conversation title
         filterValue:
           type: object
           description: Optional filter for the conversation
+        tags:
+          type: array
+          items:
+            type: string
+          description: Optional conversation tags
 
     UpdateConversationRequest:
       type: object
@@ -490,126 +2014,241 @@ components:
         title:
           type: string
           description: New conversation title
+        tags:
+          type: array
+          items:
+            type: string
+          description: Replace the conversation tag set
 
-    CreateApiKeyRequest:
+    CreateDatasetRequest:
       type: object
       required:
         - name
-        - entity-id
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    CreateApiKeyRequest:
+      type: object
+      description: |
+        `name` is required, plus **one of** `dataset-scopes` or `policy-id` —
+        a key with neither is rejected. That either/or is not expressible in
+        `required`, so only `name` is listed there.
+
+        Two names are rejected with a 400 rather than ignored:
+        `skill-graphs` (renamed to `modes`) and `scopes` (never settable
+        here). Both used to be accepted and silently dropped.
+      required:
+        - name
       properties:
         name:
           type: string
           description: Human-readable name for the key
           example: "Production Integration"
-        entity-id:
+        dataset-scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatasetScope'
+          description: Datasets the key will be scoped to
+        policy-id:
           type: string
-          description: Entity ID the key will be scoped to
-          example: "entity-123"
+          description: Access policy to inherit grants from, instead of listing dataset-scopes
+        allowed-config-keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllowedConfigKey'
+        client-id:
+          type: string
+        agent-refs:
+          type: array
+          items:
+            type: string
+        modes:
+          type: array
+          description: >-
+            Namespaced mode ids this key may invoke,
+            e.g. `builtin/agent-rag-graph-bundled`.
+          items:
+            type: string
+
+    UpdateApiKeyAllowedConfigKeysRequest:
+      type: object
+      required:
+        - allowed-config-keys
+      properties:
+        allowed-config-keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllowedConfigKey'
+
+    DatasetScope:
+      type: object
+      required:
+        - tenant
+        - dataset-config-key
+      properties:
+        tenant:
+          type: string
+        dataset-config-key:
+          type: string
+
+    AllowedConfigKey:
+      oneOf:
+        - $ref: '#/components/schemas/PlatformAllowedConfigKey'
+        - $ref: '#/components/schemas/RuntimeAllowedConfigKey'
+        - $ref: '#/components/schemas/DatasetAllowedConfigKey'
+
+    PlatformAllowedConfigKey:
+      type: object
+      required:
+        - root
+        - tenant
+        - platform-config-key
+      properties:
+        root:
+          type: string
+          enum: [platform]
+        tenant:
+          type: string
+          example: digdir
+        node-id:
+          type: string
+        platform-config-key:
+          type: string
+          example: default
+
+    RuntimeAllowedConfigKey:
+      type: object
+      required:
+        - root
+        - tenant
+        - runtime-config-key
+      properties:
+        root:
+          type: string
+          enum: [runtime]
+        tenant:
+          type: string
+          example: digdir
+        node-id:
+          type: string
+        runtime-config-key:
+          type: string
+          example: default
+
+    DatasetAllowedConfigKey:
+      type: object
+      required:
+        - root
+        - tenant
+        - dataset-config-key
+      properties:
+        root:
+          type: string
+          enum: [dataset]
+        tenant:
+          type: string
+          example: digdir
+        node-id:
+          type: string
+        dataset-config-key:
+          type: string
+          example: public-docs
+
+    PublicDatasetSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        enabled?:
+          type: boolean
+        status:
+          type: string
+
+    OperatorPipelineSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        datasetId:
+          type: string
+        name:
+          type: string
+        sourceType:
+          type: string
+          nullable: true
+        enabled?:
+          type: boolean
+        nameAmbiguous:
+          type: boolean
+          description: |
+            Present and true only when the effective name could not be
+            resolved unambiguously. Absent otherwise.
+        sourceTypeAmbiguous:
+          type: boolean
+          description: |
+            Present and true only when the effective source type could not
+            be resolved unambiguously. Absent otherwise.
+
+    OperatorDatasetSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        enabled?:
+          type: boolean
+        pipelineCount:
+          type: integer
+        pipelines:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorPipelineSummary'
+
+    CreatePipelineRequest:
+      type: object
+      required:
+        - tenant
+        - dataset-config-key
+        - pipeline-name
+      properties:
+        tenant:
+          type: string
+        dataset-config-key:
+          type: string
+        pipeline-name:
+          type: string
+          description: Child materialization pipeline name
+        properties:
+          type: object
+          additionalProperties: true
+
+    UpdatePipelineRequest:
+      type: object
+      description: |
+        `properties` is optional — the schema accepts an empty body, and the
+        spec previously marked it required (#177).
+      properties:
+        properties:
+          type: object
+          additionalProperties: true
 
     # Response Schemas
-    RagResponse:
-      type: object
-      properties:
-        answer:
-          type: string
-          description: Generated answer
-        conversation-id:
-          type: string
-          description: Conversation ID
-        model:
-          type: string
-          description: Model used
-        chunks-used:
-          type: array
-          items:
-            $ref: '#/components/schemas/ChunkBasic'
-
-    RetrieveResponse:
-      type: object
-      properties:
-        chunks:
-          type: array
-          items:
-            $ref: '#/components/schemas/ChunkDetailed'
-        query_expansion:
-          type: object
-          properties:
-            enabled:
-              type: boolean
-            expanded_queries:
-              type: array
-              items:
-                type: string
-        search_stats:
-          type: object
-          properties:
-            phrase:
-              type: integer
-              description: Chunks found via phrase search
-            metadata:
-              type: integer
-              description: Chunks found via metadata search
-            content:
-              type: integer
-              description: Chunks found via content search
-            merged:
-              type: integer
-              description: Total unique chunks after merging
-
-    ChunkBasic:
-      type: object
-      properties:
-        chunk-id:
-          type: string
-        doc-title:
-          type: string
-        doc-num:
-          type: string
-        content-markdown:
-          type: string
-
-    ChunkDetailed:
-      type: object
-      properties:
-        chunk_id:
-          type: string
-        content_markdown:
-          type: string
-        metadata:
-          type: string
-          description: Formatted metadata headers
-        metadata_raw:
-          type: string
-          description: Raw metadata string
-        document:
-          type: object
-          properties:
-            doc_num:
-              type: string
-            title:
-              type: string
-            url:
-              type: string
-        relevance:
-          type: object
-          properties:
-            rerank_position:
-              type: integer
-              description: Position after reranking (1-indexed)
-            original_position:
-              type: integer
-              description: Position before reranking
-            normalized_score:
-              type: number
-              description: Relevance score (0-1)
-            search_types:
-              type: array
-              items:
-                type: string
-                enum: [phrase, metadata, content]
-            hit_count:
-              type: integer
-              description: Number of search methods that found this chunk
+    # RagResponse, RetrieveResponse, ChunkBasic, and ChunkDetailed were
+    # removed alongside /api/rag and /api/retrieve in Phase 0 of the MCP
+    # migration. MCP tool-call result shapes are described in
+    # endpoints/mcp.md.
 
     ConversationListResponse:
       type: object
@@ -620,9 +2259,9 @@ components:
             $ref: '#/components/schemas/Conversation'
         total:
           type: integer
-        page_size:
+        pageSize:
           type: integer
-        page_index:
+        pageIndex:
           type: integer
 
     Conversation:
@@ -632,10 +2271,15 @@ components:
           type: string
         topic:
           type: string
-        entity-id:
+        agentId:
           type: string
-        user-id:
+        userId:
           type: string
+          description: Opaque external caller identifier used only for public API conversation scoping
+        tags:
+          type: array
+          items:
+            type: string
         created:
           type: integer
           description: Unix timestamp
@@ -660,8 +2304,16 @@ components:
         role:
           type: string
           enum: [user, assistant]
+        tags:
+          type: array
+          items:
+            type: string
         created:
           type: integer
+        diagnostics:
+          type: object
+          additionalProperties: true
+          description: Optional normalized diagnostics for messages that were persisted with diagnostics and requested with include_diagnostics=true
 
     ApiKeyListResponse:
       type: object
@@ -672,18 +2324,75 @@ components:
             $ref: '#/components/schemas/ApiKeyInfo'
 
     ApiKeyInfo:
+      # Shape taken from `public-api-key` (api/routes/handlers.clj) by calling it
+      # and reading the result, not from a neighbouring schema. It previously
+      # declared `id`, which no handler emits — the producer emits `api-key-id`
+      # — and omitted eight fields it does emit, including `modes`, the grant
+      # field #167 renamed at this boundary (#201).
+      #
+      # Credential material is deliberately absent. Only non-secret display
+      # fragments are returned after the one-time creation response.
       type: object
       properties:
-        id:
+        api-key-id:
           type: string
+        key-prefix:
+          type: string
+          nullable: true
+          description: Non-secret leading characters used to identify the key.
+        key-last-four:
+          type: string
+          nullable: true
+          description: Non-secret final four characters used to identify the key.
         name:
           type: string
-        entity-id:
+        scopes:
+          type: array
+          items:
+            type: string
+        modes:
+          # The skill-graph grant. Named `modes` on the wire (#167) while the
+          # stored attribute remains :api-key/skill-graphs.
+          type: array
+          items:
+            type: string
+        agent-refs:
+          # Agent ids, as strings. `public-api-key` passes this through
+          # unchanged because the projection has already happened upstream:
+          # `normalize-key-entity` maps :api-key.agent-ref/agent-id out of each
+          # stored ref before the handler ever sees it.
+          type: array
+          items:
+            type: string
+        dataset-scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatasetScope'
+        allowed-config-keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllowedConfigKey'
+        client-id:
+          # First entry of the stored clients vector, so null when none is set.
           type: string
+          nullable: true
+        policy-id:
+          type: string
+          description: |
+            Present only when the key is bound to an access policy — the
+            producer adds it through a cond->. Absent otherwise.
+        usage-count:
+          type: integer
         created:
           type: integer
+        created-by:
+          type: string
         last-used:
           type: integer
+          nullable: true
+        expires-at:
+          type: integer
+          nullable: true
         revoked:
           type: boolean
 
@@ -697,11 +2406,432 @@ components:
           description: The actual API key (only shown once)
         name:
           type: string
-        entity-id:
+        dataset-scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatasetScope'
+        allowed-config-keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllowedConfigKey'
+        client-id:
           type: string
+        agent-refs:
+          type: array
+          items:
+            type: string
+        modes:
+          type: array
+          description: >-
+            Namespaced mode ids this key may invoke,
+            e.g. `builtin/agent-rag-graph-bundled`.
+          items:
+            type: string
         warning:
           type: string
           description: Reminder to store the key securely
+
+    ApiKeyAllowedConfigKeysResponse:
+      type: object
+      properties:
+        api-key-id:
+          type: string
+        name:
+          type: string
+        allowed-config-keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllowedConfigKey'
+
+    PublicDatasetListResponse:
+      type: object
+      properties:
+        datasets:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicDatasetSummary'
+
+    PublicDatasetResponse:
+      type: object
+      properties:
+        dataset:
+          $ref: '#/components/schemas/PublicDatasetSummary'
+
+    OperatorDatasetListResponse:
+      type: object
+      properties:
+        datasets:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorDatasetSummary'
+
+    OperatorPipelineListResponse:
+      type: object
+      description: |
+        Response of `GET /console-api/datasets/{datasetId}/pipelines`.
+        Referenced since the spec was written but never defined, which
+        made the document fail strict validation.
+      properties:
+        pipelines:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorPipelineSummary'
+
+    OperatorDatasetResponse:
+      type: object
+      properties:
+        dataset:
+          $ref: '#/components/schemas/OperatorDatasetSummary'
+
+    OperatorDatasetCreatedResponse:
+      type: object
+      properties:
+        datasetId:
+          type: string
+        dataset:
+          $ref: '#/components/schemas/OperatorDatasetSummary'
+
+    Pipeline:
+      # Shape verified against get-pipeline-handler (api/routes/datasets.clj),
+      # not against the neighbouring schemas. The handler starts from
+      # pipeline/get-dataset, then explicitly assoc's dataset-config-key and
+      # execution-pipeline-id and explicitly dissoc's tenant-config-key and id —
+      # so `id` is NOT part of this response despite having been advertised.
+      #
+      # additionalProperties stays true on purpose: the remaining fields are the
+      # resolved dataset/materialization properties, which are data-driven
+      # (config-db/get-dataset builds them from the property paths defined in the
+      # config tree) and so cannot be enumerated here without going stale.
+      type: object
+      additionalProperties: true
+      properties:
+        tenant:
+          type: string
+        pipeline-name:
+          type: string
+        dataset-config-key:
+          type: string
+        execution-pipeline-id:
+          type: string
+
+    PipelineDetailResponse:
+      type: object
+      properties:
+        pipeline:
+          $ref: '#/components/schemas/Pipeline'
+
+    PipelineCreatedResponse:
+      type: object
+      properties:
+        pipeline-name:
+          type: string
+        execution-pipeline-id:
+          type: string
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    ExecutionStartedResponse:
+      type: object
+      properties:
+        executionId:
+          type: string
+
+    PipelineExecution:
+      type: object
+      description: |
+        One row of the console executions endpoint. Nullability read off
+        list-executions-handler: everything but id, execution-pipeline-id,
+        status and startedAt is passed straight from the execution record
+        and serialises as null when unset.
+      properties:
+        id:
+          type: string
+        execution-pipeline-id:
+          type: string
+        status:
+          type: string
+        startedAt:
+          type: string
+        completedAt:
+          type: string
+          nullable: true
+        documentsProcessed:
+          type: integer
+          nullable: true
+        documentsFailed:
+          type: integer
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        startedBy:
+          type: string
+          nullable: true
+
+    PipelineExecutionListResponse:
+      type: object
+      properties:
+        executions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineExecution'
+
+    RuntimeConfigResolveResponse:
+      # Shape read from resolve-runtime-config-handler (api/routes/datasets.clj),
+      # not from the dataset variant below — the two differ, and assuming
+      # symmetry is what #145 got wrong.
+      type: object
+      properties:
+        root:
+          type: string
+          example: runtime
+        tenant:
+          type: string
+        runtime-config-key:
+          type: string
+        config:
+          # The resolved values themselves. Keys are config property paths from
+          # the config tree, so they are data-driven and cannot be enumerated
+          # here without going stale.
+          type: object
+          additionalProperties: true
+        traces:
+          # Per-path resolution traces, keyed the same data-driven way.
+          type: object
+          additionalProperties: true
+        authorization:
+          type: object
+          properties:
+            allowed:
+              type: boolean
+            matched-allowed-config-key:
+              type: string
+              nullable: true
+        compatibility:
+          type: object
+          properties:
+            status:
+              type: string
+              example: ok
+            checked-on-node:
+              type: string
+            agent-id:
+              type: string
+              nullable: true
+            dataset-id:
+              type: string
+              description: |
+                Present only when the request selected a dataset. Absent
+                otherwise — the handler adds it through a cond->.
+        node:
+          type: object
+          properties:
+            node-id:
+              type: string
+            runtime-config-key:
+              type: string
+
+    DatasetConfigResolveResponse:
+      # Read from resolve-dataset-config-handler. Note the differences from the
+      # runtime variant: dataset-config-key rather than runtime-config-key, and
+      # compatibility.dataset-id is unconditional here.
+      type: object
+      properties:
+        root:
+          type: string
+          example: dataset
+        tenant:
+          type: string
+        dataset-config-key:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+        traces:
+          type: object
+          additionalProperties: true
+        authorization:
+          type: object
+          properties:
+            allowed:
+              type: boolean
+            matched-allowed-config-key:
+              type: string
+              nullable: true
+        compatibility:
+          type: object
+          properties:
+            status:
+              type: string
+              example: ok
+            checked-on-node:
+              type: string
+            dataset-id:
+              type: string
+              nullable: true
+        node:
+          type: object
+          properties:
+            node-id:
+              type: string
+            dataset-config-key:
+              type: string
+
+    SkillExecutionResponse:
+      # execute-skill-handler wraps whatever the skill returned in `result`.
+      # That inner shape is per-skill and defined by the skill itself, so it is
+      # declared open rather than described — a schema promising a fixed shape
+      # here would be false for every skill but one.
+      type: object
+      properties:
+        result:
+          type: object
+          additionalProperties: true
+
+    User:
+      type: object
+      description: An operator-console user with the permissions granted to them.
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        created:
+          type: string
+          format: date-time
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+
+    UserListResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+
+    Permission:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+
+    PermissionListResponse:
+      type: object
+      properties:
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+
+    AccessPolicy:
+      type: object
+      description: >-
+        A named grant that API keys can be bound to. `modes` is the
+        skill-graph grant; it carries that name in both request and response
+        (`digdir.api.routes.handlers/public-modes-field`).
+      properties:
+        policy-id:
+          type: string
+        name:
+          type: string
+        created:
+          type: string
+          format: date-time
+        created-by:
+          type: string
+        tenants:
+          type: array
+          items:
+            type: string
+        clients:
+          type: array
+          items:
+            type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        modes:
+          type: array
+          items:
+            type: string
+        dataset-scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatasetScope'
+        agent-refs:
+          type: array
+          items:
+            type: string
+
+    AccessPolicyListResponse:
+      type: object
+      properties:
+        access-policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessPolicy'
+
+    DeletedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: User deleted
+
+    RotateApiKeyResponse:
+      description: >-
+        The rotated key's metadata plus the new plaintext, which is returned
+        only in this response and cannot be retrieved again.
+      allOf:
+        - $ref: '#/components/schemas/ApiKeyInfo'
+        - type: object
+          properties:
+            api-key:
+              type: string
+              description: The new API key. Shown once.
+            warning:
+              type: string
+
+    UserResponse:
+      # Emitted identically by create-user-handler (201) and
+      # update-user-permissions-handler (200); both build this map explicitly.
+      type: object
+      properties:
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            created:
+              type: string
+              format: date-time
+            permissions:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
 
     Error:
       type: object
@@ -736,7 +2866,7 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
           example:
-            error: "Entity not found"
+            error: "Resource not found"
 
     InternalError:
       description: Internal server error

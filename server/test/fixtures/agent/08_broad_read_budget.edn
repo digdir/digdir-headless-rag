@@ -1,0 +1,51 @@
+{:description "March 16 replay: broad annual-report range read should be clamped so the decisive table chunk can still be read"
+ :query "Hvor mange årsverk hadde Digdir i 2022?"
+ :max-iterations 10
+
+ :llm-responses
+ [;; Iteration 0: broad search
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg starter med et bredt søk i dokumentbasen."
+                        :tool_calls [{:id "call_s1"
+                                      :type "function"
+                                      :function {:name "search"
+                                                 :arguments "{\"queries\":[\"årsverk Digdir 2022\",\"bemanning Digdir 2022\",\"antall ansatte Digdir 2022\"]}"}}]}}]}
+  ;; Iteration 1: read the top turnover hit first
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg leser det øverste treffet først."
+                        :tool_calls [{:id "call_r1"
+                                      :type "function"
+                                      :function {:name "read_chunks"
+                                                 :arguments "{\"chunk_ids\":[\"turnover\"]}"}}]}}]}
+  ;; Iteration 2: ask for a broad range in the same document, mirroring the failing traces
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg trenger mer kontekst fra samme dokument, så jeg leser et bredt intervall rundt dette området."
+                        :tool_calls [{:id "call_r2"
+                                      :type "function"
+                                      :function {:name "read_chunks"
+                                                 :arguments "{\"doc_num\":\"33169\",\"chunk_range\":{\"from\":160,\"to\":170}}"}}
+                                     ]}}]}
+  ;; Iteration 3: read the decisive table chunk
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg leser nå tabell-chunken med nøkkeltall."
+                        :tool_calls [{:id "call_r3"
+                                      :type "function"
+                                      :function {:name "read_chunks"
+                                                 :arguments "{\"chunk_ids\":[\"table\"]}"}}]}}]}
+  ;; Iteration 4: rerank
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Nå reranker jeg den leste evidensen."
+                        :tool_calls [{:id "call_rr1"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 5: generate
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Nå har jeg nok evidens til å svare."
+                        :tool_calls [{:id "call_g1"
+                                      :type "function"
+                                      :function {:name "generate_response"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Final response
+  {:choices [{:finish_reason "stop"
+              :message {:content "Digdir hadde 356 avtalte årsverk og 326 utførte årsverk i 2022 [1]."}}]}]}

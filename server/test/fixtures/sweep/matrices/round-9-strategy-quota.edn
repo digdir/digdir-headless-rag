@@ -1,0 +1,95 @@
+;; Round 9 — strategy-quota sweep on widenet base
+;;
+;; Round-8 found that the widenet retrieval config (default merge
+;; weights + retrieve-top-k=300, no contribution caps) regressed
+;; recall@10 from 29.6% (r5-faithful production) to 1.9% in
+;; production-realistic agent-loop runs. Investigation traced the cause
+;; to filter #3 (search-result display window): the default ColBERT
+;; rerank order is dominated by multi-strategy hits with high merged
+;; scores, displacing single-strategy hits — especially phrase-only
+;; matches that contain navigational-query goldens.
+;;
+;; The fix added this session (`:search-strategy-quota`):
+;; the search handler reorders the display window so the top K chunks
+;; from each base strategy (phrase, metadata, content) are guaranteed
+;; representation, regardless of their merged rank. K=0 disables;
+;; K=5 was the smoke winner (3/10 hits on the toughest 5 questions
+;; vs 0/10 baseline).
+;;
+;; Round 9 sweeps K ∈ {0, 3, 5, 8} on the full 18-question chunks-
+;; scoreable set with 3 repeats to characterise the curve.
+;;
+;; Cells:
+;;   r9-q0  — quota=0 (current widenet behaviour, expected to reproduce
+;;            r8-widenet's ~1.9% as the variance-noise baseline)
+;;   r9-q3  — quota=3 (modest guarantee: 9 strategy-slots out of 20 visible)
+;;   r9-q5  — quota=5 (smoke winner: 15 strategy-slots out of 20)
+;;   r9-q8  — quota=8 (aggressive: 24 strategy-slots — exceeds display window;
+;;            tests whether the quota saturates or starts hurting)
+;;
+;; All cells use:
+;;   - skill-graph: :builtin/agent-rag-graph-faithful (Round-5 winner)
+;;   - retrieval: default merge weights, retrieve-top-k=300, rerank-candidate-k=100
+;;   - rerank: top-k=40, context-top-k=40
+;;   - agent default system prompt (minimal, committed Round 3)
+;;
+;; The new filter-4 measurement columns added this session
+;; (golden-in-search-pool?, golden-in-display?, golden-read?) will let
+;; us decompose each cell's recall@10 gap into upstream / display /
+;; agent-read failures, so we can identify whether quota saturates
+;; or starts displacing other useful chunks.
+;;
+;; Expected wall-clock:
+;;   4 cells × 18 questions × 3 repeats = 216 runs
+;;   × ~30s mean lat = ~108 min ≈ 1.8h
+;;
+;; Drive from REPL:
+;;   (digdir.sweep.runner/run-from-files
+;;     {:matrix-path "test/fixtures/sweep/matrices/round-9-strategy-quota.edn"})
+
+{:configs
+ [{:id "r9-q0"
+   :skill-graph-id :builtin/agent-rag-graph-faithful
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 1.0 :phrase 2.0 :metadata 0.2}
+                        :retrieve-top-k 300
+                        :rerank-candidate-k 100}
+    :builtin/rerank    {:top-k 40 :context-top-k 40}
+    :builtin/agent     {:search-strategy-quota 0}}}
+
+  {:id "r9-q3"
+   :skill-graph-id :builtin/agent-rag-graph-faithful
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 1.0 :phrase 2.0 :metadata 0.2}
+                        :retrieve-top-k 300
+                        :rerank-candidate-k 100}
+    :builtin/rerank    {:top-k 40 :context-top-k 40}
+    :builtin/agent     {:search-strategy-quota 3}}}
+
+  {:id "r9-q5"
+   :skill-graph-id :builtin/agent-rag-graph-faithful
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 1.0 :phrase 2.0 :metadata 0.2}
+                        :retrieve-top-k 300
+                        :rerank-candidate-k 100}
+    :builtin/rerank    {:top-k 40 :context-top-k 40}
+    :builtin/agent     {:search-strategy-quota 5}}}
+
+  {:id "r9-q8"
+   :skill-graph-id :builtin/agent-rag-graph-faithful
+   :skill-params
+   {:builtin/retrieval {:strategy-weights {:content 1.0 :phrase 2.0 :metadata 0.2}
+                        :retrieve-top-k 300
+                        :rerank-candidate-k 100}
+    :builtin/rerank    {:top-k 40 :context-top-k 40}
+    :builtin/agent     {:search-strategy-quota 8}}}]
+
+ :repeats 3
+ :max-clarification-rounds 2
+
+ :execution-scope
+ {:tenant "digdir"
+  :dataset-config-key "default"
+  :agent-id "builtin/agent-rag-agent"}
+
+ :question-filter {:grounding-modes #{:chunks+answer}}}

@@ -1,0 +1,29 @@
+;; P1 test of the query-planner :salient-noun-coverage lever, on the same 10
+;; retrieval-variance questions, off vs on, N=5. judge? false — the outcome is
+;; pool-rank variance + recall@20 (does the golden pool reliably top-20?), which
+;; don't need the judge. Each config is a delta over the real agent
+;; (corpus-aware-2hop); the only difference is the salient-noun flag.
+;;
+;; Success: the dominant generic-collapse questions (studio-02, studio-01,
+;; corr-01, api-04, authz-01) pool reliably top-10 across all 5 (variance gone /
+;; fewer never-pooled draws), recall@20 up, without regressing the others.
+;; 2 × 10 × 5 = 100 runs.
+{:configs
+ [{:id "off" :skill-graph-id :builtin/agent-rag-graph-bundled :skill-params {}}
+  {:id "salient-on" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/query-planner {:salient-noun-coverage true}}}]
+ :repeats 5
+ :judge? false
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-events-02-publisere-cloudevents"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-broker-03-store-filer-virusskann"
+                          "ue-broker-05-filstorrelse-grenser-multi"
+                          "ue-corr-01-events-webhook-subscription"
+                          "ue-sys-02-systembrukertoken-pdp-autorisasjon"
+                          "ue-api-06-app-openapi-swagger-spec"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-studio-02-pdf-service-task"}}}

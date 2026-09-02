@@ -2,58 +2,16 @@
   "Primary config accessor API.
 
    Replaces (get-in config/config [:services :azure-openai :api-key]) with:
-     (cfg/get :services :azure-openai :api-key)
+     (cfg/get {:tenant t} :services :azure-openai :api-key)
 
    Features:
    - Automatic decryption of encrypted values
-   - 8-level multi-dimensional resolution based on dimension count
-   - Entity-specific config overrides with {:entity \"id\"} option
-   - Caching with configurable TTL
-   - Database-backed configuration (requires CONFIG_MASTER_KEY environment variable)
-
-   Resolution Order (most to least specific):
-   - 3 dims: entity+tenant+env
-   - 2 dims: entity+tenant > entity+env > tenant+env (tiebreaker: entity > tenant > env)
-   - 1 dim:  entity > tenant > env
-   - 0 dims: global"
+   - Root-aware V2 resolution
+   - Database-backed configuration (requires CONFIG_MASTER_KEY environment variable)"
   (:refer-clojure :exclude [get])
   (:require [clojure.string :as str]
             [digdir.config.core :as core]
             [digdir.config.db :as config-db]))
-
-;; =============================================================================
-;; Runtime Config Cache
-;; =============================================================================
-
-;; Cache for non-entity-scoped config (global cache)
-(defonce ^:private !config-cache (atom nil))
-(defonce ^:private !cache-timestamp (atom 0))
-(def ^:private cache-ttl-ms 60000) ; 1 minute TTL
-
-(defn- cache-expired?
-  "Check if the config cache has expired."
-  []
-  (> (- (System/currentTimeMillis) @!cache-timestamp) cache-ttl-ms))
-
-(defn- ensure-cache!
-  "Ensure the config cache is populated and fresh.
-   This cache is for non-entity-scoped resolution (entity=nil)."
-  []
-  (when (or (nil? @!config-cache) (cache-expired?))
-    (let [conn (config-db/get-conn)]
-      (when conn
-        (let [tenant (core/get-tenant)
-              env (core/get-environment)
-              master-key (core/get-master-key)]
-          (reset! !config-cache
-                  (config-db/load-resolved-config @conn tenant env nil master-key))
-          (reset! !cache-timestamp (System/currentTimeMillis)))))))
-
-(defn invalidate-cache!
-  "Invalidate the config cache, forcing a reload on next access."
-  []
-  (reset! !config-cache nil)
-  (reset! !cache-timestamp 0))
 
 ;; =============================================================================
 ;; Path Utilities
@@ -85,231 +43,530 @@
   [path]
   (str/join "." (map name path)))
 
+(defn- path-parts->path
+  [path-parts]
+  (if (and (= 1 (count path-parts))
+           (or (vector? (first path-parts))
+               (string? (first path-parts))))
+    (normalize-path (first path-parts))
+    (vec path-parts)))
+
+(defn- path-str->path
+  [path-str]
+  (mapv keyword (str/split path-str #"\.")))
+
+(defn- value-at-path-str
+  [config path-str]
+  (get-in config (path-str->path path-str) ::not-found))
+
+(defn- config-conn!
+  [context]
+  (or (config-db/get-conn)
+      (throw (ex-info "Database connection not available" context))))
+
+(defn- normalize-platform-opts
+  "Validate + fill platform opts.
+
+   `tenant` MUST be provided by the caller. Before 2026-04, a nil tenant was
+   silently rewritten to the setup-time seed tenant `__platform-defaults__`.
+   That mechanism is retired (see plans/completed/global-config-root-plan.md
+   Phase 4). Callers that genuinely want system-wide values should explicitly
+   pass `core/global-tenant` (\"__global__\"); anything else should resolve
+   through a real tenant."
+  [{:keys [tenant] :as opts}]
+  (when (or (nil? tenant) (and (string? tenant) (str/blank? tenant)))
+    (throw (ex-info (str "cfg/get requires an explicit :tenant. Pass a tenant id, "
+                         "or `digdir.config.core/global-tenant` for system-wide reads. "
+                         "A nil tenant is no longer normalized to __platform-defaults__.")
+                    {:opts opts})))
+  opts)
+
+(defn- ensure-db-config!
+  [context]
+  (when-not (core/use-db-config?)
+    (throw (ex-info "Database config required. Set CONFIG_MASTER_KEY environment variable."
+                    context))))
+
+(defn- ensure-explicit-node-selection!
+  [{:keys [node-id tenant-config-key] :as context}]
+  (when-not (or (some? node-id) (some? tenant-config-key))
+    (throw (ex-info "Explicit node selection requires :node-id or :tenant-config-key"
+                    context))))
+
+(defn- decode-node-value
+  [value master-key]
+  (when value
+    (let [definition (:config.value/definition value)]
+      (config-db/decode-value (:config.value/raw value)
+                              (:config-def/value-type definition)
+                              (:config-def/encrypted? definition)
+                              master-key))))
+
+(defn- rooted-definition
+  [db root path-str]
+  (when-let [definition (config-db/get-definition db path-str)]
+    (when-not (= root (:config-def/root definition))
+      (throw (ex-info "V2 accessor requires a rooted definition"
+                      {:path path-str
+                       :root root
+                       :definition-root (:config-def/root definition)})))
+    definition))
+
+(defn- synthetic-root-trace
+  [{:keys [root tenant node-id path-str stop-reason]}]
+  {:selected-root root
+   :selected-tenant tenant
+   :selected-node node-id
+   :traversal-path (cond-> [] node-id (conj node-id))
+   :winning-node nil
+   :path path-str
+   :stop-reason stop-reason})
+
+(defn- resolve-root-value-with-trace
+  [db root tenant selected-node path default]
+  (let [path-str (path->string (normalize-path path))
+        selected-node-id (:config.node/id selected-node)
+        definition (rooted-definition db root path-str)
+        master-key (core/get-master-key)]
+    (if-not definition
+      {:value default
+       :trace (synthetic-root-trace {:root root
+                                     :tenant tenant
+                                     :node-id selected-node-id
+                                     :path-str path-str
+                                     :stop-reason :definition-not-found})
+       :node selected-node}
+      (let [{:keys [value trace]} (config-db/resolve-node-value-with-trace db
+                                                                           root
+                                                                           tenant
+                                                                           selected-node-id
+                                                                           path-str)
+            decoded-value (if value
+                            (decode-node-value value master-key)
+                            default)]
+        {:value decoded-value
+         :trace (assoc trace :decoded-value decoded-value)
+         :node selected-node}))))
+
+(defn- tenant-root-missing?
+  [e]
+  (= :tenant-root-missing (:kind (ex-data e))))
+
+(defn- resolve-missing-tenant-with-global-fallback
+  "When a tenant has no tree, fall back to global-only resolution for
+   inherit-owned paths. For fork-owned paths (or missing definitions), the
+   caller's original tenant-root exception should stand — signaled by
+   returning ::no-fallback so the caller re-throws."
+  [db root tenant path-str default]
+  (let [definition (config-db/get-definition db path-str)
+        master-key (core/get-master-key)]
+    (if (= :inherit (:config-def/ownership definition))
+      (let [{:keys [value trace]} (config-db/resolve-global-value-with-trace db root path-str)
+            decoded-value (if value (decode-node-value value master-key) default)]
+        {:value decoded-value
+         :trace (assoc trace
+                       :decoded-value decoded-value
+                       :selected-tenant tenant
+                       :tenant-tree-missing? true)
+         :node nil})
+      ::no-fallback)))
+
+(defn- definitions-by-path
+  [db]
+  (into {} (map (juxt :config-def/path identity))
+        (config-db/get-all-definitions db)))
+
+(defn- definitions-for-root
+  [all-defs-by-path root]
+  (into {} (filter (fn [[_ definition]]
+                     (= root (:config-def/root definition))))
+        all-defs-by-path))
+
+(defn- validate-rooted-paths!
+  [all-defs-by-path root path-strs]
+  (doseq [path-str path-strs]
+    (when-let [definition (clojure.core/get all-defs-by-path path-str)]
+      (when-not (= root (:config-def/root definition))
+        (throw (ex-info "V2 accessor requires a rooted definition"
+                        {:path path-str
+                         :root root
+                         :definition-root (:config-def/root definition)}))))))
+
+(defn- load-root-config-with-trace
+  [{:keys [db root tenant selected-node paths]}]
+  (let [all-defs-by-path (definitions-by-path db)
+        root-defs-by-path (definitions-for-root all-defs-by-path root)
+        path-strs (if (seq paths)
+                    (mapv #(path->string (normalize-path %)) paths)
+                    (vec (keys root-defs-by-path)))
+        _ (validate-rooted-paths! all-defs-by-path root path-strs)
+        {defined-paths true undefined-paths false}
+        (group-by #(contains? root-defs-by-path %) path-strs)
+        selected-node-id (:config.node/id selected-node)
+        master-key (core/get-master-key)
+        {:keys [results]} (when (seq defined-paths)
+                            (config-db/resolve-node-values-batch db root tenant
+                                                                  selected-node-id
+                                                                  defined-paths))]
+    (as-> {:config {} :traces {} :node selected-node} acc
+      (reduce
+       (fn [acc path-str]
+         (let [{:keys [value trace]} (clojure.core/get results path-str)
+               decoded-value (when value
+                               (decode-node-value value master-key))]
+           (cond-> (update acc :traces assoc path-str (assoc trace :decoded-value decoded-value))
+             value (update :config assoc-in (path-str->path path-str) decoded-value))))
+       acc
+       (or defined-paths []))
+      (reduce
+       (fn [acc path-str]
+         (update acc :traces assoc path-str
+                 (synthetic-root-trace {:root root
+                                        :tenant tenant
+                                        :node-id selected-node-id
+                                        :path-str path-str
+                                        :stop-reason :definition-not-found})))
+       acc
+       (or undefined-paths [])))))
+
+(defn- project-config
+  [config property->path]
+  (reduce-kv (fn [acc property path-str]
+               (let [value (value-at-path-str config path-str)]
+                 (if (= ::not-found value)
+                   acc
+                   (assoc acc property value))))
+             {}
+             property->path))
+
+(defn- project-config-by-path
+  [config path->property]
+  (reduce-kv (fn [acc path-str property]
+               (let [value (value-at-path-str config path-str)]
+                 (if (= ::not-found value)
+                   acc
+                   (assoc acc property value))))
+             {}
+             path->property))
+
+(defn- dataset-id-for-pipeline
+  [db dataset-id pipeline-id]
+  (or dataset-id
+      (get-in (config-db/get-dataset-pipeline db pipeline-id)
+              [:dataset.pipeline/dataset :dataset/id])
+      pipeline-id))
+
+(defn- resolve-dataset-materialization-context
+  [{:keys [tenant node-id tenant-config-key dataset-id pipeline-id path] :as opts}]
+  (let [context (cond-> {:pipeline-id pipeline-id}
+                  path (assoc :path path))]
+    (ensure-db-config! context)
+    (when (str/blank? pipeline-id)
+      (throw (ex-info "Missing required :pipeline-id" context)))
+    (ensure-explicit-node-selection! (assoc opts :pipeline-id pipeline-id)))
+  (let [conn (config-conn! {:tenant tenant})
+        db @conn
+        dataset-id (dataset-id-for-pipeline db dataset-id pipeline-id)
+        selected-node (config-db/resolve-dataset-node! db
+                                                       {:tenant tenant
+                                                        :node-id node-id
+                                                        :tenant-config-key tenant-config-key
+                                                        :dataset-id dataset-id
+                                                        :pipeline-id pipeline-id})]
+    {:db db
+     :tenant tenant
+     :dataset-id dataset-id
+     :selected-node selected-node}))
+
 ;; =============================================================================
 ;; Primary Accessor
 ;; =============================================================================
 
-(defn- parse-get-args
-  "Parse arguments to get function.
-   Supports:
-   - (get :a :b :c)
-   - (get [:a :b :c])
-   - (get :a :b :c \"default\")
-   - (get :a :b :c {:entity \"my-bot\"})
-   - (get :a :b :c {:entity \"my-bot\" :default \"val\"})
-
-   Returns: {:path [keywords], :entity string-or-nil, :default any}"
-  [args]
-  (let [last-arg (last args)
-        has-opts? (and (map? last-arg) (or (contains? last-arg :entity)
-                                            (contains? last-arg :default)))
-        opts (if has-opts? last-arg {})
-        path-args (if has-opts? (butlast args) args)
-        ;; Check if last path-arg is a non-keyword default value
-        [path-args default] (if (and (not has-opts?)
-                                     (> (count path-args) 1)
-                                     (not (keyword? (last path-args))))
-                              [(butlast path-args) (last path-args)]
-                              [path-args (:default opts)])
-        ;; Normalize path
-        path (if (and (= 1 (count path-args))
-                      (or (vector? (first path-args))
-                          (string? (first path-args))))
-               (normalize-path (first path-args))
-               (vec path-args))]
-    {:path path
-     :entity (:entity opts)
-     :default default}))
+(declare get-platform-value-with-trace)
 
 (defn get
-  "Get a config value from database.
+  "Get a platform config value from database, scoped by tenant.
 
    Requires database mode (CONFIG_MASTER_KEY must be set).
-   Supports entity-specific config overrides via {:entity \"id\"} option.
+   Platform-rooted definitions resolve through the Platform V2 tree.
 
    Usage:
-     (get :services :azure-openai :api-key)
-     (get [:services :azure-openai :api-key])
-     (get [:services :azure-openai :api-key] \"default-value\")
-     (get :services :azure-openai :deployment-name {:entity \"my-bot\"})
+     (get {:tenant t} :services :azure-openai :api-key)
+     (get {:tenant t} [:services :azure-openai :api-key])
+     (get {:tenant t :default \"fallback\"} :services :foo :bar)
 
-   Args:
-     path - Config path as keywords, vector, or dot-separated string
-     default - Default value if not found (optional)
-     opts - Options map with :entity and/or :default (optional)"
-  ([& args]
-   (let [{:keys [path entity default]} (parse-get-args args)]
+   Opts keys (all optional — caller supplies from its natural source):
+     :tenant — tenant identifier; nil selects setup-time platform defaults
+     :tenant-config-key — node selector within the tenant tree
+     :default — value returned if the path has no value"
+  [opts & path-or-keys]
+  (when-not (map? opts)
+    (throw (ex-info "cfg/get opts must be a map; pass {:tenant t} as the first argument"
+                    {:opts opts :path-or-keys path-or-keys})))
+  (let [{:keys [tenant tenant-config-key default]} (normalize-platform-opts opts)
+        path (path-parts->path path-or-keys)]
+    (when-not (core/use-db-config?)
+      (throw (ex-info "Database config required. Set CONFIG_MASTER_KEY environment variable."
+                      {:path path})))
+    (let [conn (config-conn! {:path path})
+          path-str (path->string path)
+          definition (config-db/get-definition @conn path-str)
+          root (:config-def/root definition)]
+      (cond
+        (nil? definition)
+        (throw (ex-info (str "No config definition registered for path " (pr-str path-str))
+                        {:path path-str}))
 
-     (when-not (core/use-db-config?)
-       (throw (ex-info "Database config required. Set CONFIG_MASTER_KEY environment variable."
-                       {:path path})))
+        (not= :platform root)
+        (throw (ex-info (str "Primary accessor only supports platform-rooted definitions, but "
+                             (pr-str path-str) " is rooted at " (pr-str root))
+                        {:path path-str
+                         :definition-root root}))
 
-     (if entity
-       ;; Entity-specific: resolve directly from DB (no cache)
-       (let [conn (config-db/get-conn)]
-         (if conn
-           (let [db @conn
-                 tenant (core/get-tenant)
-                 env (core/get-environment)
-                 master-key (core/get-master-key)
-                 path-str (path->string path)
-                 definition (config-db/get-definition db path-str)]
-             (if definition
-               (let [resolved (config-db/resolve-value db tenant env entity path-str)]
-                 (if resolved
-                   (config-db/decode-value (:config/value resolved)
-                                           (:config-def/value-type definition)
-                                           (:config-def/encrypted? definition)
-                                           master-key)
-                   default))
-               default))
-           (throw (ex-info "Database connection not available" {:path path}))))
-
-       ;; No entity: use cache
-       (do
-         (ensure-cache!)
-         (let [cached-value (get-in @!config-cache path ::not-found)]
-           (if (= cached-value ::not-found)
-             default
-             cached-value)))))))
-
-(defn get-raw
-  "Get the raw (possibly encrypted) value without decryption.
-
-   Useful for admin UI display.
-   Supports entity via last opts map: {:entity \"id\"}"
-  [& args]
-  (let [{:keys [path entity]} (parse-get-args args)
-        path-str (path->string path)
-        conn (config-db/get-conn)]
-    (when conn
-      (config-db/get-raw-value @conn
-                               (core/get-tenant)
-                               (core/get-environment)
-                               entity
-                               path-str))))
+        :else
+        (:value (get-platform-value-with-trace path
+                                               {:tenant tenant
+                                                :tenant-config-key tenant-config-key
+                                                :default default}))))))
 
 ;; =============================================================================
-;; Setters (with audit logging)
+;; Runtime V2 Accessor
 ;; =============================================================================
 
-(defn set!
-  "Set a config value with audit logging.
+(defn get-platform-value-with-trace
+  "Resolve a platform config value through the V2 node model.
 
-   Args:
-     path - Config path as keywords, vector, or string
-     value - The value to set
-     opts - Map with:
-       :user-email - Email of user making the change (required for audit)
-       :user-id - ID of user making the change
-       :ip-address - IP address of requester
-       :tenant - Override tenant (default: current tenant)
-       :environment - Override environment (default: current environment)
-       :entity - Entity to set value for (nil for non-entity-scoped)
-
-   Example:
-     (set! [:services :azure-openai :deployment-name] \"gpt-4o\"
-           {:user-email \"admin@digdir.no\" :user-id \"abc123\"})
-     (set! [:services :azure-openai :deployment-name] \"gpt-4-turbo\"
-           {:entity \"my-bot\" :user-email \"admin@digdir.no\"})"
-  [path value opts]
-  (let [path-vec (normalize-path path)
-        path-str (path->string path-vec)
-        conn (config-db/get-conn)
-        tenant (or (:tenant opts) (core/get-tenant))
-        env (or (:environment opts) (core/get-environment))
-        entity (:entity opts)
-        master-key (core/get-master-key)]
-
-    (when-not conn
-      (throw (ex-info "Database connection not available" {})))
-
-    ;; Get previous value for audit
-    (let [db @conn
-          previous (config-db/resolve-value db tenant env entity path-str)
-          previous-value (:config/value previous)
-          definition (config-db/get-definition db path-str)]
-
-      ;; Set the new value
-      (config-db/set-value! conn
-                            {:tenant tenant
-                             :environment env
-                             :entity entity
-                             :path path-str
-                             :value value
-                             :master-key master-key})
-
-      ;; Log audit (if audit ns is available)
-      (when-let [log-fn (try
-                          (require 'digdir.config.audit)
-                          (resolve 'digdir.config.audit/log-change!)
-                          (catch Exception _ nil))]
-        (log-fn conn
-                {:path path-str
-                 :tenant tenant
-                 :environment env
-                 :entity entity
-                 :action (if previous :update :create)
-                 :previous-value previous-value
-                 :new-value value
-                 :encrypted? (:config-def/encrypted? definition)
-                 :user-email (:user-email opts)
-                 :user-id (:user-id opts)
-                 :ip-address (:ip-address opts)}))
-
-      ;; Invalidate cache
-      (invalidate-cache!)
-
-      :ok)))
-
-(defn delete!
-  "Delete a config value.
-
-   Args:
-     path - Config path
-     opts - Map with audit info (same as set!, including :entity)"
+   Returns:
+   {:value decoded-value-or-default
+    :trace resolution-trace
+    :node selected-platform-node}"
   [path opts]
-  (let [path-vec (normalize-path path)
-        path-str (path->string path-vec)
-        conn (config-db/get-conn)
-        tenant (or (:tenant opts) (core/get-tenant))
-        env (or (:environment opts) (core/get-environment))
-        entity (:entity opts)]
+  (ensure-db-config! {:path path})
+  (let [{:keys [tenant node-id tenant-config-key default]} (normalize-platform-opts opts)
+        path-str (path->string (normalize-path path))
+        conn (config-conn! {:path path-str})
+        db @conn]
+    (try
+      (let [selected-node (config-db/resolve-platform-node! db
+                                                            {:tenant tenant
+                                                             :node-id node-id
+                                                             :tenant-config-key tenant-config-key})]
+        (resolve-root-value-with-trace db :platform tenant selected-node path-str default))
+      (catch clojure.lang.ExceptionInfo e
+        (if (tenant-root-missing? e)
+          (let [result (resolve-missing-tenant-with-global-fallback db :platform tenant path-str default)]
+            (if (= ::no-fallback result) (throw e) result))
+          (throw e))))))
 
-    (when-not conn
-      (throw (ex-info "Database connection not available" {})))
+(defn get-platform-value
+  "Resolve a platform config value through the V2 node model and return only the decoded value."
+  [path opts]
+  (:value (get-platform-value-with-trace path opts)))
 
-    ;; Get previous value for audit
-    (let [db @conn
-          previous (config-db/resolve-value db tenant env entity path-str)
-          previous-value (:config/value previous)
-          definition (config-db/get-definition db path-str)]
+(defn get-runtime-value-with-trace
+  "Resolve a runtime config value through the V2 node model.
 
-      ;; Delete the value
-      (config-db/delete-value! conn tenant env entity path-str)
+  Returns:
+  {:value decoded-value-or-default
+   :trace resolution-trace
+   :node selected-runtime-node}"
+  [path {:keys [tenant node-id tenant-config-key agent-id dataset-id default] :as _opts}]
+  (ensure-db-config! {:path path})
+  (when (str/blank? agent-id)
+    (throw (ex-info "Missing required :agent-id" {:path path})))
+  (ensure-explicit-node-selection! {:path path
+                                    :tenant tenant
+                                    :node-id node-id
+                                    :tenant-config-key tenant-config-key
+                                    :agent-id agent-id})
+  (let [path-str (path->string (normalize-path path))
+        conn (config-conn! {:path path-str})
+        db @conn]
+    (try
+      (let [selected-node (config-db/resolve-runtime-node! db
+                                                           {:tenant tenant
+                                                            :node-id node-id
+                                                            :tenant-config-key tenant-config-key
+                                                            :agent-id agent-id
+                                                            :dataset-id dataset-id})]
+        (resolve-root-value-with-trace db :runtime tenant selected-node path-str default))
+      (catch clojure.lang.ExceptionInfo e
+        (if (tenant-root-missing? e)
+          (let [result (resolve-missing-tenant-with-global-fallback db :runtime tenant path-str default)]
+            (if (= ::no-fallback result) (throw e) result))
+          (throw e))))))
 
-      ;; Log audit
-      (when-let [log-fn (try
-                          (require 'digdir.config.audit)
-                          (resolve 'digdir.config.audit/log-change!)
-                          (catch Exception _ nil))]
-        (log-fn conn
-                {:path path-str
-                 :tenant tenant
-                 :environment env
-                 :entity entity
-                 :action :delete
-                 :previous-value previous-value
-                 :new-value nil
-                 :encrypted? (:config-def/encrypted? definition)
-                 :user-email (:user-email opts)
-                 :user-id (:user-id opts)
-                 :ip-address (:ip-address opts)}))
+(defn get-runtime-value
+  "Resolve a runtime config value through the V2 node model and return only the decoded value."
+  [path opts]
+  (:value (get-runtime-value-with-trace path opts)))
 
-      ;; Invalidate cache
-      (invalidate-cache!)
+(defn load-runtime-config-v2-with-trace
+  "Load runtime config values through the V2 node model.
 
-      :ok)))
+   If :paths is omitted, all runtime-rooted definitions are considered.
+
+   Uses batch resolution to prefetch the ancestor chain and all node values
+   once, then resolves all paths against the cached data.
+
+  Returns:
+  {:config nested-map
+   :traces {\"path\" trace-map}
+   :node selected-runtime-node}"
+  [{:keys [tenant node-id tenant-config-key agent-id dataset-id paths] :as _opts}]
+  (ensure-db-config! {:agent-id agent-id})
+  (when (str/blank? agent-id)
+    (throw (ex-info "Missing required :agent-id" {})))
+  (ensure-explicit-node-selection! {:tenant tenant
+                                    :node-id node-id
+                                    :tenant-config-key tenant-config-key
+                                    :agent-id agent-id})
+  (let [conn (config-conn! {:tenant tenant})
+        db @conn
+        selected-node (config-db/resolve-runtime-node! db
+                                                       {:tenant tenant
+                                                        :node-id node-id
+                                                        :tenant-config-key tenant-config-key
+                                                        :agent-id agent-id
+                                                        :dataset-id dataset-id})]
+    (load-root-config-with-trace {:db db
+                                  :root :runtime
+                                  :tenant tenant
+                                  :selected-node selected-node
+                                  :paths paths})))
+
+(defn load-runtime-config-v2
+  "Load runtime config values through the V2 node model and return only the nested config map."
+  [opts]
+  (:config (load-runtime-config-v2-with-trace opts)))
+
+(defn get-runtime-skill-config-v2-with-trace
+  "Load canonical runtime skill config through the V2 node model.
+
+   Returns:
+   {:config {:retrieval-top-k 40 ...}
+    :traces {\"skills.retrieval.top-k\" {...}}
+    :node selected-runtime-node}"
+  [opts]
+  (let [skill-paths (->> config-db/skill-property-to-path vals sort vec)
+        {:keys [config traces node]} (load-runtime-config-v2-with-trace
+                                      (assoc opts :paths skill-paths))
+        flat-config (project-config config config-db/skill-property-to-path)]
+    {:config flat-config
+     :traces traces
+     :node node}))
+
+(defn get-runtime-skill-config-v2
+  "Load canonical runtime skill config through the V2 node model and return only the flat skill property map."
+  [opts]
+  (:config (get-runtime-skill-config-v2-with-trace opts)))
+
+;; =============================================================================
+;; Dataset V2 Accessor
+;; =============================================================================
+
+(defn resolve-dataset-runtime-node!
+  "Resolve a canonical dataset runtime node through the V2 tree model.
+
+   Required opts:
+   - one of :dataset-config-key, :tenant-config-key, :dataset-id, or :node-id
+
+   Optional opts:
+   - :tenant"
+  [{:keys [tenant node-id tenant-config-key dataset-config-key dataset-id] :as _opts}]
+  (ensure-db-config! {:tenant tenant
+                      :dataset-config-key dataset-config-key
+                      :dataset-id dataset-id
+                      :node-id node-id})
+  (when-not (or (some? node-id)
+                (some? tenant-config-key)
+                (some? dataset-config-key)
+                (some? dataset-id))
+    (throw (ex-info "Dataset runtime resolution requires :dataset-config-key, :dataset-id, or :node-id"
+                    {:tenant tenant
+                     :node-id node-id
+                     :dataset-config-key dataset-config-key
+                     :dataset-id dataset-id})))
+  (let [conn (config-conn! {:tenant tenant})
+        db @conn]
+    (:selected-node
+     (config-db/resolve-dataset-runtime-node! db
+                                              {:tenant tenant
+                                               :node-id node-id
+                                               :tenant-config-key tenant-config-key
+                                               :dataset-config-key dataset-config-key
+                                               :dataset-id dataset-id}))))
+
+(defn get-dataset-value-with-trace
+  "Resolve a dataset/materialization config value through the V2 node model."
+  [path {:keys [default] :as opts}]
+  (let [{:keys [db tenant selected-node]} (resolve-dataset-materialization-context
+                                           (assoc opts :path path))]
+    (resolve-root-value-with-trace db :dataset tenant selected-node path default)))
+
+(defn get-dataset-value
+  "Resolve a dataset/materialization config value and return only the decoded value."
+  [path opts]
+  (:value (get-dataset-value-with-trace path opts)))
+
+(defn load-dataset-config-v2-with-trace
+  "Load canonical dataset config values through the V2 node model.
+
+   If :paths is omitted, all dataset-rooted definitions are considered.
+
+  Returns:
+  {:config nested-map
+   :traces {\"path\" trace-map}
+   :node selected-dataset-node}"
+  [{:keys [tenant node-id tenant-config-key dataset-config-key dataset-id paths] :as _opts}]
+  (ensure-db-config! {:tenant tenant
+                      :dataset-config-key dataset-config-key
+                      :dataset-id dataset-id
+                      :node-id node-id})
+  (let [conn (config-conn! {:tenant tenant})
+        db @conn
+        selected-node (resolve-dataset-runtime-node!
+                       {:tenant tenant
+                        :node-id node-id
+                        :tenant-config-key tenant-config-key
+                        :dataset-config-key dataset-config-key
+                        :dataset-id dataset-id})]
+    (load-root-config-with-trace {:db db
+                                  :root :dataset
+                                  :tenant tenant
+                                  :selected-node selected-node
+                                  :paths paths})))
+
+(defn load-dataset-config-v2
+  "Load dataset config values through the V2 node model and return only the nested config map."
+  [opts]
+  (:config (load-dataset-config-v2-with-trace opts)))
+
+(defn get-dataset-pipeline-config-v2-with-trace
+  "Load canonical dataset/materialization pipeline config through the V2 node model."
+  [{:keys [pipeline-id] :as opts}]
+  (let [{:keys [db tenant dataset-id selected-node]} (resolve-dataset-materialization-context opts)
+        {:keys [config traces node]} (load-root-config-with-trace
+                                      {:db db
+                                       :root :dataset
+                                       :tenant tenant
+                                       :selected-node selected-node
+                                       :paths (sort config-db/pipeline-property-paths)})
+        flat-config (project-config-by-path config config-db/path-to-pipeline-property)]
+    {:config (merge {:id pipeline-id
+                     :dataset-id dataset-id
+                     :dataset-node-id (:config.node/id selected-node)
+                     :dataset-tenant-config-key (or (:tenant-config-key (config-db/parse-dataset-node-id
+                                                                          (:config.node/id selected-node)))
+                                                   (:config.node/tenant-config-key selected-node))}
+                    flat-config)
+     :traces traces
+     :node node}))
+
+(defn get-dataset-pipeline-config-v2
+  "Load canonical dataset/materialization pipeline config through the V2 node model."
+  [opts]
+  (:config (get-dataset-pipeline-config-v2-with-trace opts)))
 
 ;; =============================================================================
 ;; Permission-Checked Access
@@ -318,13 +575,13 @@
 (defn- check-permission!
   "Check if a user has permission for an action on a path.
    Throws ex-info if permission is denied."
-  [conn user-id path-str action]
+  [conn user-id path-str action opts]
   (when conn
     (when-let [check-fn (try
                           (require 'digdir.config.permissions)
                           (resolve 'digdir.config.permissions/can-access?)
                           (catch Exception _ nil))]
-      (when-not (check-fn @conn user-id path-str action)
+      (when-not (check-fn @conn user-id path-str action opts)
         (throw (ex-info "Permission denied"
                         {:path path-str :user-id user-id :action action}))))))
 
@@ -335,49 +592,18 @@
 
    Args:
      user-id - User ID to check permissions for
+     opts - Config opts map accepted by cfg/get
      path - Config path"
-  [user-id & path-parts]
-  (let [path (if (and (= 1 (count path-parts))
-                      (or (vector? (first path-parts))
-                          (string? (first path-parts))))
-               (normalize-path (first path-parts))
-               (vec path-parts))
+  [user-id opts & path-parts]
+  (when-not (map? opts)
+    (throw (ex-info "cfg/get-if-allowed opts must be a map; pass {:tenant t} after user-id"
+                    {:opts opts :path-parts path-parts})))
+  (let [path (path-parts->path path-parts)
         path-str (path->string path)
         conn (config-db/get-conn)]
 
-    (check-permission! conn user-id path-str :read)
-    (apply get path)))
-
-(defn set-if-allowed!
-  "Set a config value only if the user has permission.
-
-   Args:
-     user-id - User ID to check permissions for
-     path - Config path
-     value - The value to set
-     opts - Same as set! but user-id/user-email will be inferred if not provided"
-  [user-id path value opts]
-  (let [path-vec (normalize-path path)
-        path-str (path->string path-vec)
-        conn (config-db/get-conn)]
-
-    (check-permission! conn user-id path-str :write)
-    (#'set! path value (merge {:user-id user-id} opts))))
-
-(defn delete-if-allowed!
-  "Delete a config value only if the user has permission.
-
-   Args:
-     user-id - User ID to check permissions for
-     path - Config path
-     opts - Same as delete!"
-  [user-id path opts]
-  (let [path-vec (normalize-path path)
-        path-str (path->string path-vec)
-        conn (config-db/get-conn)]
-
-    (check-permission! conn user-id path-str :write)
-    (delete! path (merge {:user-id user-id} opts))))
+    (check-permission! conn user-id path-str :read opts)
+    (apply get opts path)))
 
 (defn evaluate-access
   "Evaluate a user's access to a config path without fetching the value.
@@ -400,134 +626,9 @@
         {:allowed? true :reason "Permissions module not loaded"})
       {:allowed? false :reason "Database not connected"})))
 
-;; =============================================================================
-;; Bulk Access
-;; =============================================================================
-
-(defn get-all
-  "Get all config values as a nested map.
-
-   This returns the full resolved config for the current tenant/environment."
-  []
-  (when-not (core/use-db-config?)
-    (throw (ex-info "Database config required. Set CONFIG_MASTER_KEY environment variable." {})))
-  (ensure-cache!)
-  @!config-cache)
-
-(defn get-section
-  "Get a section of config as a map.
-
-   Example: (get-section :services :azure-openai)
-   Returns: {:api-key \"...\" :endpoint \"...\" ...}"
-  [& path-parts]
-  (let [path (vec path-parts)]
-    (get-in (get-all) path)))
-
-;; =============================================================================
-;; Entity Access
-;; =============================================================================
-
-(defn get-for-entity
-  "Get a config value for a specific entity.
-   Shorthand for (get path {:entity entity-id})
-
-   Usage:
-     (get-for-entity \"my-bot\" :services :azure-openai :deployment-name)"
-  [entity-id & path-parts]
-  (apply get (concat path-parts [{:entity entity-id}])))
-
-(defn get-entity
-  "Get full entity configuration by ID.
-   Returns a map with all entity properties, or nil if entity not found.
-
-   Example:
-     (get-entity \"my-bot\")
-     => {:id \"my-bot\" :name \"My Bot\" :image \"bot.png\" ...}"
-  [entity-id]
-  (when-not (core/use-db-config?)
-    (throw (ex-info "Database config required. Set CONFIG_MASTER_KEY environment variable."
-                    {:entity entity-id})))
-  (when-let [conn (config-db/get-conn)]
-    (config-db/get-entity @conn
-                          (core/get-tenant)
-                          (core/get-environment)
-                          entity-id
-                          (core/get-master-key))))
-
-(defn list-entities
-  "List all entity IDs for the current tenant.
-
-   Returns a vector of entity ID strings."
-  []
-  (when-not (core/use-db-config?)
-    (throw (ex-info "Database config required. Set CONFIG_MASTER_KEY environment variable." {})))
-  (when-let [conn (config-db/get-conn)]
-    (config-db/list-entities @conn (core/get-tenant))))
-
-(defn get-entities
-  "Get all entity configurations as a vector of maps.
-   Each map contains the full entity configuration.
-
-   Returns: [{:id \"...\" :name \"...\" ...} ...]"
-  []
-  (when-not (core/use-db-config?)
-    (throw (ex-info "Database config required. Set CONFIG_MASTER_KEY environment variable." {})))
-  (let [entity-ids (list-entities)]
-    (vec (keep get-entity entity-ids))))
-
-(defn get-entities-for-tenant
-  "Get all entity configurations for a specific tenant.
-   Returns a vector of entity maps with their full configuration.
-
-   Args:
-     tenant - Tenant identifier
-
-   Returns: [{:id \"...\" :name \"...\" ...} ...]"
-  [tenant]
-  (when-not (core/use-db-config?)
-    (throw (ex-info "Database config required. Set CONFIG_MASTER_KEY environment variable."
-                    {:tenant tenant})))
-  (when-let [conn (config-db/get-conn)]
-    (let [entity-ids (config-db/list-entities @conn tenant)
-          env (core/get-environment)
-          master-key (core/get-master-key)]
-      (vec (keep #(config-db/get-entity @conn tenant env % master-key)
-                 entity-ids)))))
-
-;; =============================================================================
-;; Migration Helpers
-;; =============================================================================
-
 (comment
   (require '[digdir.config.accessor :as cfg])
 
-  ;; Get a config value
-  (cfg/get :services :azure-openai :api-key)
-  (cfg/get [:services :azure-openai :api-key])
-  (cfg/get [:services :azure-openai :api-key] "default")
-
-  ;; Get with entity-specific override
-  (cfg/get :services :azure-openai :deployment-name {:entity "my-bot"})
-  (cfg/get-for-entity "my-bot" :services :azure-openai :deployment-name)
-
-  ;; Set a value
-  (cfg/set! [:services :azure-openai :deployment-name] "gpt-4o"
-            {:user-email "admin@digdir.no" :user-id "abc123"})
-
-  ;; Set entity-specific value
-  (cfg/set! [:services :azure-openai :deployment-name] "gpt-4-turbo"
-            {:entity "my-bot" :user-email "admin@digdir.no" :user-id "abc123"})
-
-  ;; Entity management
-  (cfg/list-entities)         ;; => ["my-bot" "other-bot"]
-  (cfg/get-entity "my-bot")   ;; => {:id "my-bot" :name "My Bot" :image "..." ...}
-  (cfg/get-entities)          ;; => [{:id "my-bot" ...} {:id "other-bot" ...}]
-
   ;; Permission-checked access
-  (cfg/get-if-allowed "user-123" :services :azure-openai :api-key)
-  (cfg/set-if-allowed! "user-123" [:services :azure-openai :deployment] "gpt-4o"
-                       {:user-email "admin@digdir.no"})
-  (cfg/evaluate-access "user-123" [:services :azure-openai :api-key] :read)
-
-  ;; Get entire section
-  (get-section :services :azure-openai))
+  (cfg/get-if-allowed "user-123" {:tenant "ka"} :services :azure-openai :api-key)
+  (cfg/evaluate-access "user-123" [:services :azure-openai :api-key] :read))

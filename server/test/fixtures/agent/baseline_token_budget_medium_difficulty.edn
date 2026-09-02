@@ -1,0 +1,53 @@
+;; Medium-difficulty live regression cases.
+;;
+;; These are useful baseline checks because they should stay green at the
+;; current default token budget. They are not intended to prove that a relaxed
+;; budget unlocks harder cases.
+{:cases
+ [{:id "digdir-arsverk-utforte-2022-arsrapport"
+   :budget-dimension :read-chars
+   :query "Hvor mange utførte årsverk hadde Digdir per 31.12.2022, oppgitt i årsrapporten?"
+   :expected-answer-pattern "(?is)\\b326\\b.*(utførte|utforte)|(?:utførte|utforte).*\\b326\\b"
+   :golden-chunk-ids ["15a66d5ec5c5"]
+   :current-budget {:max-search-passes 4
+                    :max-read-operations 6
+                    :max-read-content-length 12000}
+   :relaxed-budget {:max-search-passes 4
+                    :max-read-operations 6
+                    :max-read-content-length 16000}}
+
+  {:id "digdir-arsverk-canonical-pivot"
+   :budget-dimension :canonical-pivot
+   :query "I Hovudtal for Digdir 2022, hva var tal utførte årsverk?"
+   :expected-answer-pattern "(?is)\\b326\\b.*(utførte|utforte)|(?:utførte|utforte).*\\b326\\b"
+   :golden-chunk-ids ["15a66d5ec5c5"]
+   :current-budget {:max-search-passes 4
+                    :max-read-operations 6
+                    :max-read-content-length 12000}
+   :relaxed-budget {:max-search-passes 5
+                    :max-read-operations 6
+                    :max-read-content-length 12000}}
+
+  {:id "digdir-arsverk-bilingual-scope"
+   :budget-dimension :mixed
+   :query "Hovudtal Digdir 2022: what were the avtalte and utførte årsverk figures?"
+   :expected-answer-pattern "(?is)(?=.*\\b356\\b)(?=.*\\b326\\b)(?=.*avtalte)(?=.*(?:utførte|utforte))"
+   :golden-chunk-ids ["15a66d5ec5c5"]
+   :current-budget {:max-search-passes 4
+                    :max-read-operations 6
+                    :max-read-content-length 12000}
+   :relaxed-budget {:max-search-passes 5
+                    :max-read-operations 7
+                    :max-read-content-length 12000}}
+
+  {:id "digdir-utforte-lonnsutgifter-2020-2023-anchored-extraction"
+   :budget-dimension :mixed
+   :query "Frå Hovudtal-tabellane i Digdirs årsrapportar for 2022 og 2023, oppgi tal utførte årsverk og lønsutgifter per årsverk for 2020, 2021, 2022 og 2023."
+   :expected-answer-pattern "(?is)(?=.*\\b2020\\b)(?=.*\\b2021\\b)(?=.*\\b2022\\b)(?=.*\\b2023\\b)(?=.*\\b330\\b)(?=.*\\b311\\b)(?=.*\\b326\\b)(?=.*\\b332\\b)(?=.*949\\s*142)(?=.*979\\s*491)(?=.*970\\s*798)(?=.*1\\s*031\\s*088)"
+   :golden-chunk-ids ["15a66d5ec5c5" "6aefa3a05c7d"]
+   :current-budget {:max-search-passes 4
+                    :max-read-operations 6
+                    :max-read-content-length 12000}
+   :relaxed-budget {:max-search-passes 5
+                    :max-read-operations 7
+                    :max-read-content-length 16000}}]}

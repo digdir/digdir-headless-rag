@@ -1,0 +1,122 @@
+;; public-docs v1 Exploratory Rerank Suite
+;;
+;; Status: Phase E output, 2026-04-21. Holds 12 candidates that did not
+;; promote to `public_docs_rerank_suite.edn` after the Phase D 3-run
+;; stability check. Classified per run variance:
+;;
+;;   - 2 stable-but-rank-ceiling-exceeded (stable rank >10)
+;;   - 2 marginal-variance (rank variance 3-5 across 3 runs)
+;;   - 7 marginal-one-miss (1 of 3 runs missed, other 2 hit)
+;;   - 1 always-missed (golden consistently not retrieved for the query)
+;;
+;; See `plans/in-progress/add-evals/claude-public-docs-stability-report.md`
+;; for per-case run data.
+;;
+;; Promotion rubric (copied from the v1 inventory §4): a case promotes when
+;; 3 consecutive `bb rerank-benchmark` runs return a primary :rerank-position
+;; ≤10 with variance ≤2. Re-run exploratory suite after any retrieval tuning
+;; and evaluate promotion candidates.
+;;
+;; Never run with --fail-on-gate true. This suite is diagnostic, not a gate.
+{:cases
+ [;; --- Stable but rank-ceiling-exceeded ------------------------------------
+  {:id               "altinn-correspondence-post-published"
+   :query            "Hva skjer med en correspondence etter at den er publisert i Altinn?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :factual
+   :golden-chunk-ids ["068a1c1b7fa5"]
+   :notes            "post-published flowchart. Phase D: stable at rerank=53 across 3 runs. Retrieval surfaces the golden consistently (retrieved=23) but rerank promotes unrelated chunks above it. Secondary goldens: 23313b9a4c7a (status enum), 4d401e4429c6 (triggers). Exceeds max-acceptable-rank=10; needs per-case rank ceiling (deferred per suite-specs §9) or retrieval-tuning before promotion."}
+
+  {:id               "altinn-systemuser-api-model"
+   :query            "Hvordan ser datamodellen for en system user ut i Altinn?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :exact-lookup
+   :golden-chunk-ids ["6d8a6a851332"]
+   :notes            "data-model fields. Phase D: stable at rerank=71 across 3 runs (retrieved=59). Rerank does not help this case. Secondary: 3846d1091eed, 779e40db9403. Exceeds max-acceptable-rank=10; retrieval-tuning needed."}
+
+  ;; --- Marginal variance (3-5 slot range, no miss) -------------------------
+  {:id               "altinn-studio-grouping-repeating"
+   :query            "Hva er forskjellen mellom repeterende og ikke-repeterende grupper i Altinn Studio?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :paraphrase
+   :pair-id          "altinn-studio-grouping"
+   :golden-chunk-ids ["9d621302f88b"]
+   :notes            "Phase D: marginal-variance rerank=3-6 across 3 runs (variance=3). Comparison-style query; secondary fd3c5cddbfbb (non-repeating counterpart) jointly answers the difference."}
+
+  {:id               "altinn-systemuser-api-opprett"
+   :query            "Hvordan oppretter jeg en systembruker via Altinn system user API?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :navigational
+   :golden-chunk-ids ["70a69fb50d45"]
+   :notes            "POST endpoint spec. Phase D: marginal-variance rerank=12-15 across 3 runs (variance=3). Exceeds max-acceptable-rank=10 in all 3 runs. Secondary: 8cd7ba4bc675."}
+
+  ;; --- Marginal one-miss (2/3 hit, 1/3 miss) -------------------------------
+  {:id               "altinn-authorization-accessgroups-knytning"
+   :query            "Hvordan knytter man en organisasjon til en tilgangsgruppe i registeret?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :navigational
+   :golden-chunk-ids ["a438b1775bf0"]
+   :notes            "Phase D: marginal-one-miss rerank=1,miss,1 across 3 runs. Re-run to see if stabilises. Secondary: a548f91970c3."}
+
+  {:id               "altinn-authorization-tilgangslister"
+   :query            "Hva er tilgangslister i Altinn Authorization og hva brukes de til?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :exact-lookup
+   :golden-chunk-ids ["2850f051d81a"]
+   :notes            "Phase D: marginal-one-miss rerank=miss,1,1 across 3 runs. Secondary: 65ac88e194a6."}
+
+  {:id               "altinn-broker-rest-usage"
+   :query            "Hvordan bruker jeg Altinn Broker med REST-API?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :navigational
+   :golden-chunk-ids ["0f3807200a65"]
+   :notes            "Phase D: marginal-one-miss rerank=miss,3,3 across 3 runs. Secondary: 05045ab7c1ab, 06f45de29249."}
+
+  {:id               "altinn-events-architecture"
+   :query            "Hvordan er Altinn Events arkitektonisk bygget opp?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :exact-lookup
+   :golden-chunk-ids ["7d33c4c5baf1"]
+   :notes            "Phase D: marginal-one-miss rerank=miss,14,14 across 3 runs. Even when hit, exceeds max-acceptable-rank=10. Secondary: 3018b3b4b1cd, f8091af1994f."}
+
+  {:id               "altinn-studio-grouping-repeating-edit"
+   :query            "Hvordan redigerer jeg en repeterende gruppe i Altinn Studio v8?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :navigational
+   :pair-id          "altinn-studio-grouping"
+   :golden-chunk-ids ["3685015c0f1c"]
+   :notes            "Phase D: marginal-one-miss rerank=miss,2,1 across 3 runs. Secondary: 0b98d0ff2a53."}
+
+  {:id               "altinn-systemuser-accept-request"
+   :query            "Hvordan aksepterer en sluttbruker en forespørsel om system user i Altinn?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :navigational
+   :golden-chunk-ids ["bbf82de07a2f"]
+   :notes            "Phase D: marginal-one-miss rerank=17,miss,10 across 3 runs. Even when hit, rank=10-17 — borderline at gate. Secondary: c1e41c9b98c2, d4be96620198."}
+
+  {:id               "altinn-systemuser-delegate-clients"
+   :query            "Hvordan delegere klienter til en system user i Altinn?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :navigational
+   :golden-chunk-ids ["434ca284c0bf"]
+   :notes            "Phase D: marginal-one-miss rerank=1,2,miss across 3 runs. Close to promotable; re-run after any tuning. Secondary: cf2b84ff15ba."}
+
+  ;; --- Always missed (retrieval consistently fails) ------------------------
+  {:id               "altinn-authorization-regler"
+   :query            "Hva er tilgangsregler i Altinn Authorization?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :exact-lookup
+   :golden-chunk-ids ["86a29a595367"]
+   :notes            "Phase D: always-missed across 3 runs. Golden chunk exists in the corpus (verified via Typesense filter_by chunk_id) but retrieval's 3-strategy search (phrase+metadata+content) never surfaces it for this query. Candidate for edit-query (try different phrasing) or retrieval-tuning investigation. Secondary: bf7466ce03c2."}]}

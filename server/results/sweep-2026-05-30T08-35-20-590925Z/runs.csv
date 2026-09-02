@@ -1,0 +1,80 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,recall-at-5,recall-at-10,recall-at-20,citation-recall,golden-in-search-pool?,golden-in-display?,golden-read?,search-passes,insufficiency-fired?,refinement-corpus-grounded?,enrichment-hits,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,cached-tokens,llm-calls,steps-executed,response,error
+f4b9399e-f293-4906-90c3-31ce749d1547,2026-05-30T08:35:42.098575Z,levers-off,hard-sms-segment-length,0,public-docs,new,"altinn-notifications,extraction,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,2,false,true,0,4,2,1,4b526125dd8b;98c77b6f796b;d3a8cfef9194;2b8fcaec8423,4b526125dd8b;d3a8cfef9194,9c58e66b93a3,21490,6306,351,6657,0,3,3,"En SMS-varsling kan inneholde **opptil 160 tegn** før den deles i flere segmenter, hvis den sendes som en **enkeltmelding** [1][2].
+
+Hvis meldingen er **lengre enn 160 tegn**, deles den automatisk i flere segmenter, der hvert segment kan være på **opptil 134 tegn** [1][2].",
+904749fd-2ae0-4e6e-ae72-f10369601ad2,2026-05-30T08:35:59.293395Z,levers-off,hard-consent-rights-token,0,public-docs,new,"compound,extraction,altinn-authorization,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,1,false,,0,6,1,1,f29d16a3f660;55feb621a0f4;ae4139c6b15b;20b17bd8ba74;86325153025c;a0c5bb0014fd,20b17bd8ba74,20b17bd8ba74,17194,4528,431,4959,0,3,3,"Du må sjekke **rettighetene som er angitt i `consentRights`** i samtykketokenet, og disse ligger under feltet **`authorization_details`** i tokenet. [1]
+
+Mer presist beskrives samtykketokenet som et vanlig Maskinporten-token som i tillegg har attributtet **`authorization_details`**, og det er dette feltet som inneholder informasjon om hvilke rettigheter samtykket gir. [1]
+
+Hvis du validerer mot tjenestens krav, skal du kontrollere at rettighetene i `consentRights` samsvarer med rettighetene tjenesten krever. [1]
+
+Det kan også være flere typer token å ta høyde for ved migrering:
+- **Eksisterende Altinn 2-token**
+- **Nye Altinn 3-token**
+- **Migrerte token** [1]
+
+For migrerte token kan ressurs-ID ha formatet **`{org}_{serviceCode}_{serviceEditionCode}`**, og parametere i samtykket blir konve…",
+6380dc2a-f092-4784-a4f0-f1deefbb563e,2026-05-30T08:37:09.289245Z,levers-off,hard-vergemaal-not-in-prod,0,public-docs,new,"open-ended,altinn-authorization,temporal,hard",complete,1,false,chunks+answer,true,1.0,1.0,1.0,0.0,true,true,true,2,false,false,0,3,0,1,11ae3c2cf496;245f1acff381;bdf22cba7939,,11ae3c2cf496,69995,18321,1169,19490,8448,5,3,"Søket bekrefter at de mest relevante dokumentene fortsatt er de om vergemål og policy/autorisasjon. Jeg har nok til å svare uten mer lesing: det ser ikke ut som en egen “aktiver i produksjon”-knapp i dokumentasjonen, men som en kombinasjon av policy-oppsett og integrasjon, med en eksplisitt advarsel om at funksjonen ennå ikke var i TEST/PROD i den ene teksten.
+Ja — i den tolkningen er svaret i dokumentasjonen omtrent slik:
+
+- **Tjenesteeier aktiverer ikke vergemål med en egen “switch” i Altinn 3-produksjon**.
+- I stedet må tjenesteeier:
+  1. **angi aktuelle legitimasjoner i policy-filen** for tjenesten,
+  2. **legge til aktørvalg** i tjenesten,
+  3. **gjøre autorisasjonsoppslag (PDP)** fra tjenesten.
+
+Dokumentasjonen sier også at:
+
+- Altinn Autorisasjon bruker **vergemålsinformasjon fra Fo…",
+0a5beffc-5163-4c73-8766-304115ddc9e2,2026-05-30T08:37:28.996532Z,levers-off,hard-correspondence-status-disambig,0,public-docs,new,"altinn-correspondence,list,compare,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,0,4,2,2,4236d1b1890c;068a1c1b7fa5;2b62d135d8d0;c0a62a9174d8,4236d1b1890c;068a1c1b7fa5,3e5d3ec39d0e;b2d5bb1a67a8,19706,4357,305,4662,0,3,3,"Etter at en melding er publisert, kan den ha disse statusene i mottakerfasen: **Hentet**, **Lest**, **Vedlegg Lastet Ned** / **AttachmentsDownloaded**, **Bekreftet**, **Slettet av Mottaker** / **PurgedByRecipient**, og **Slettet av Altinn** / **PurgedByAltinn**. [1][2]
+
+Det er litt terminologi-variasjon i kildene: [1] bruker de norske statusnavnene, mens [2] viser de tilsvarende engelske/tekniske navnene i flytdiagrammet. [1][2]",
+aac4aa67-e991-4752-a571-478e38bdac16,2026-05-30T08:37:45.993260Z,levers-off,hard-represent-bridging,0,public-docs,new,"paraphrase,altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,1,false,,0,6,4,1,0b03cca48e03;43dc53e15fa6;6618caf5dd0d;3133c3dc4f6f;b45f9b2e6e7b;6a0f583996bb,0b03cca48e03;43dc53e15fa6;6618caf5dd0d;6a0f583996bb,b0b0a702328c,16995,4682,468,5150,0,3,3,"Du gir noen lov til å representere deg overfor det offentlige ved å **gi fullmakt** i Altinn. [4]
+
+Hvis du mener en person eller virksomhet som skal opptre på vegne av en virksomhet, skjer dette gjennom registrerte **nøkkelroller** og tilhørende fullmakter i Enhetsregisteret/Altinn. Da kan den registrerte personen få fullmakter på vegne av virksomheten. [1]
+
+Hvis spørsmålet gjelder en **forretningsfører** eller **revisor**, finnes det egne fullmakter for dette:  
+- **forretningsfører for Borettslag og Eierseksjonssameie** får tilgang når forretningsfører registreres i Enhetsregisteret. [2]  
+- **ansvarlig revisor** får tilgang når kunden registrerer revisor i Enhetsregisteret. [3]
+
+Hvis du vil, kan jeg også forklare **hvordan du faktisk gjør det i Altinn**, steg for steg.",
+2f359122-b3fd-43be-8e85-4fa6ff168c51,2026-05-30T08:38:08.898616Z,levers-on,hard-sms-segment-length,0,public-docs,new,"altinn-notifications,extraction,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,true,false,1,false,,21,4,2,1,7be4323c6c0a;11584ff27179;d3a8cfef9194;4b526125dd8b,d3a8cfef9194;4b526125dd8b,9c58e66b93a3,22904,8176,406,8582,2688,4,3,"En SMS-varsling kan inneholde **160 tegn** før den deles i flere segmenter. Dette gjelder en **enkeltmelding**; hvis meldingen er lengre enn 160 tegn, deles den automatisk opp i flere segmenter. [1][2]",
+068bd6cf-7c77-45d9-b2a0-efaf726ef467,2026-05-30T08:38:40.078115Z,levers-on,hard-consent-rights-token,0,public-docs,new,"compound,extraction,altinn-authorization,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,1.0,true,true,true,2,false,false,40,9,2,1,1de0fdb54d6f;20b17bd8ba74;1f688619eaa7;55feb621a0f4;f29d16a3f660;c87d91b03977;86325153025c;ae4139c6b15b;a57cbb9f17bc,20b17bd8ba74;1f688619eaa7,20b17bd8ba74,31178,20804,611,21415,2688,5,3,"Du må sjekke at **rettighetene i samtykketokenet samsvarer med rettighetene tjenesten krever**. I kildene beskrives dette som å kontrollere rettighetene som ligger under **`consentRights`** i tokenet [1].
+
+Rettighetene ligger altså i feltet **`authorization_details`**, og inne i hvert objekt der finner du **`consentRights`** [1][2].  
+I eksemplene ser du også at hvert `authorization_details`-objekt har `type: ""urn:altinn:consent""` [1][2].
+
+Kort sagt:
+- **Sjekk:** `consentRights` [1]
+- **Hvor i tokenet:** `authorization_details[].consentRights` [1][2]
+
+Merk at kildene også viser at `consentRights` kan inneholde:
+- `action`
+- `resource`
+- `metadata` / `metaData`  
+og at migrerte samtykker kan få parametere konvertert til **små bokstaver** [1][2].",
+1e432fb3-5235-4b32-ae8b-759f2d939547,2026-05-30T08:39:14.363295Z,levers-on,hard-vergemaal-not-in-prod,0,public-docs,new,"open-ended,altinn-authorization,temporal,hard",complete,0,false,chunks+answer,true,1.0,1.0,1.0,0.0,true,true,true,2,false,false,31,3,0,1,bdf22cba7939;11ae3c2cf496;245f1acff381,,11ae3c2cf496,34284,19165,1038,20203,9984,5,3,"Jeg har nå de sentrale punktene: vergemål støttes via Folkeregisteret, og tjenesteeier må knytte legitimasjoner til tilgangspakker, lage tilgangsregler, legge til aktørvalg og gjøre autorisasjonsoppslag. Jeg skal nå formulere et kort, presist svar med tydelig produksjonsstatus og hva som må gjøres i praksis.
+For å ta i bruk vergemål i Altinn 3 i produksjon, gjør du dette:
+
+1. **Bruk Altinn Autorisasjon som støtte for vergemål**
+   - Vergemålsinformasjon hentes fra **Folkeregisteret**.
+   - Altinn kobler legitimasjonene til **tilgangspakker**.
+
+2. **Sett opp tilgangsregler for tjenesten din**
+   - Tjenesteeier må opprette **tilgangsregler** knyttet til de relevante tilgangspakkene.
+   - Du må angi hvilke **legitimasjoner** som skal gi tilgang.
+
+3. **Legg til aktørvalg i tjenesten**
+   - Tje…",
+1ac2a9db-16ee-4708-b8f7-3ddc5f96fb0e,2026-05-30T08:39:38.995232Z,levers-on,hard-correspondence-status-disambig,0,public-docs,new,"altinn-correspondence,list,compare,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,false,false,false,2,false,true,35,5,3,2,4236d1b1890c;c0a62a9174d8;068a1c1b7fa5;baca3ca2a832;98c916a11689,4236d1b1890c;068a1c1b7fa5;baca3ca2a832,3e5d3ec39d0e;b2d5bb1a67a8,24630,6349,383,6732,0,3,3,"Etter at en melding er publisert, kan den ha disse statusene i Altinn: **Hentet**, **Lest**, **Vedlegg Lastet Ned**, **Bekreftet**, **Slettet av Mottaker** og **Slettet av Altinn**. [1][2][3]
+
+Det er litt overlapp i kildene: [2] viser flyten med statusene **Fetched**, **Read**, **AttachmentsDownloaded**, **Confirmed**, **PurgedByRecipient** og **PurgedByAltinn**, mens [1] og [3] bruker de norske betegnelsene ovenfor. [1][2][3]",
+1a1de162-fe0f-47ca-b1fa-6c2c78282a08,2026-05-30T08:40:03.563755Z,levers-on,hard-represent-bridging,0,public-docs,new,"paraphrase,altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,true,false,false,2,false,true,30,6,3,1,bd738354dd2a;875df4fd624d;3133c3dc4f6f;30b3a88b65cf;e13801684142;b7f77d3834bd,bd738354dd2a;875df4fd624d;e13801684142,b0b0a702328c,24568,6499,467,6966,0,3,3,"Du gir noen lov til å representere deg overfor det offentlige ved å gi dem **fullmakt** i Altinn. [2]
+
+Det kan gjøres på ulike måter, avhengig av hva du vil gi tilgang til:  
+- **Direkte til en enkelttjeneste**  
+- **Til en tilgangspakke eller rolle** som tjenesten tilhører [2]
+
+Hvis du for eksempel vil at noen skal følge opp en sak hos Nav på dine vegne, kan du gi et familiemedlem fullmakt til det. [1]
+
+Hvis du mener **systemtilgang** for et fagsystem, opprettes det i Altinn-portalen av sluttbrukeren med rollen **tilgangsstyrer** når det ikke er mulig fra fagsystemet. [3]",

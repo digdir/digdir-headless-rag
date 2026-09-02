@@ -1,8 +1,34 @@
 (ns digdir.util.logging
   "Utilities for safe and efficient logging of complex data structures.
 
-   Includes Telemere wrappers for automatic truncation of RAG pipeline data."
-  (:require [clojure.string :as str]
+   Includes Telemere wrappers for automatic truncation of RAG pipeline data.
+
+   ## Which log shapes are QUERYABLE (#183)
+
+   Confirmed by capturing real signals, not read from docs:
+
+     (t/log! :warn [::id {..}])                    :id nil,  :data nil
+     (t/log! {:level :warn :id ::id :data {..}})   :id set,  :data set
+     (t/event! ::id {:data {..}})                  :id set,  :data set
+
+   The FIRST form renders both the id and the map into the signal's message
+   string. It looks structured in the log and is prose: nothing can filter or
+   aggregate on it, and counting occurrences means parsing text.
+
+   Most of the codebase is already fine — the overwhelming majority of events
+   use `t/event!`. The vector form is a minority pattern, and it is only a
+   defect where something needs to COUNT or FILTER the event rather than read
+   it. `digdir.api.routes.endpoints/request-fields-discarded` was converted for
+   exactly that reason (#174 needs a count); `digdir.llm.marker` is the
+   in-repo example of the opts-map form.
+
+   So: if you are adding an event that a log processor will query, use
+   `t/event!` or the opts-map form. If you are adding a human-readable line,
+   the vector form is fine — just do not build a pipeline on its :data.
+
+   NOTE the wrapper below (`log!`) passes the vector form through to
+   `t/log!`, so it inherits this behaviour and cannot fix it for its callers."
+  (:require
             [taoensso.telemere :as t]))
 
 ;; ============================================================================

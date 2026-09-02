@@ -104,12 +104,11 @@
       (.toLocaleString date))))
 
 (defn calculate-progress
-  "Calculate progress percentage"
-  [processed failed]
-  (let [total (+ (or processed 0) (or failed 0))]
-    (if (pos? total)
-      (* 100 (/ (or processed 0) total))
-      0)))
+  "Calculate progress percentage as `(processed / total) * 100`. Returns nil
+   if the total isn't known so callers can render an indeterminate bar."
+  [processed total]
+  (when (and total (pos? total))
+    (min 100 (long (/ (* 100 (or processed 0)) total)))))
 
 ;; =============================================================================
 ;; Components
@@ -197,8 +196,9 @@
     (let [status (:pipeline-execution/status execution)
           docs-processed (or (:pipeline-execution/documents-processed execution) 0)
           docs-failed (or (:pipeline-execution/documents-failed execution) 0)
+          docs-total (:pipeline-execution/documents-total execution)
           error-message (:pipeline-execution/error-message execution)
-          progress (calculate-progress docs-processed docs-failed)]
+          progress (calculate-progress docs-processed docs-total)]
 
       (dom/div
         (dom/props {:style card-style})
@@ -227,21 +227,26 @@
             (dom/text "Status"))
           (StatusBadge status))
 
-        ;; Progress bar (for running executions)
+        ;; Progress bar (for running executions). `progress` is nil when the
+        ;; total isn't known yet — fall back to copy-only text in that case.
         (when (= status :running)
           (dom/div
             (dom/props {:style {:margin-bottom "1.5rem"}})
             (dom/div
               (dom/props {:style {:margin-bottom "0.5rem" :font-weight "500"}})
               (dom/text "Progress"))
-            (dom/div
-              (dom/props {:style progress-bar-container-style})
+            (when progress
               (dom/div
-                (dom/props {:style (merge progress-bar-fill-style
-                                         {:width (str progress "%")})})))
+                (dom/props {:style progress-bar-container-style})
+                (dom/div
+                  (dom/props {:style (merge progress-bar-fill-style
+                                           {:width (str progress "%")})}))))
             (dom/div
               (dom/props {:style {:margin-top "0.25rem" :font-size "0.75rem" :color "#6b7280"}})
-              (dom/text (str docs-processed " documents processed, " docs-failed " failed")))))
+              (dom/text (if docs-total
+                          (str docs-processed " / " docs-total
+                               " documents processed, " docs-failed " failed")
+                          (str docs-processed " documents processed, " docs-failed " failed"))))))
 
         ;; Statistics
         (dom/div
@@ -305,44 +310,36 @@
               (dom/text started-by))))))))
 
 (e/defn ExecutionsList
-  "List of executions for a pipeline"
-  [pipeline-id]
+  "List of executions for a dataset"
+  [dataset-id]
   (e/client
     (let [!selected-execution (atom nil)
           selected-execution (e/watch !selected-execution)]
-
       (if selected-execution
         ;; Show details view
         (ExecutionDetails selected-execution !selected-execution)
-
         ;; Show list view
         (dom/div
           (dom/props {:style container-style})
-
           ;; Header
           (dom/div
             (dom/props {:style header-style})
             (dom/h2
               (dom/props {:style {:margin "0" :font-size "1.5rem" :color "#111827"}})
               (dom/text "Execution History")))
-
           ;; Executions table
           (dom/div
             (dom/props {:style card-style})
-
             (let [db (e/server (e/watch (db/get-conn)))
-                  pid (e/client pipeline-id)
-                  executions (e/server (executor/list-executions db pid))]
-
+                  did (e/client dataset-id)
+                  executions (e/server (executor/list-executions db did))]
               (e/client
                 (if (empty? executions)
                   (dom/p
                     (dom/props {:style {:text-align "center" :color "#6b7280" :padding "2rem"}})
-                    (dom/text "No executions found for this pipeline."))
-
+                    (dom/text "No executions found for this dataset."))
                   (dom/table
                     (dom/props {:style table-style})
-
                     ;; Header
                     (dom/thead
                       (dom/tr
@@ -354,13 +351,12 @@
                         (dom/th (dom/props {:style th-style}) (dom/text "Completed"))
                         (dom/th (dom/props {:style th-style}) (dom/text "Started By"))
                         (dom/th (dom/props {:style th-style}) (dom/text "Actions"))))
-
                     ;; Body
                     (dom/tbody
                       (e/for-by :pipeline-execution/id [exec executions]
-                        (ExecutionRow exec !selected-execution))))))))))))
+                        (ExecutionRow exec !selected-execution)))))))))))))
 
 (e/defn Executions
   "Main executions monitoring component"
-  [pipeline-id]
-  (ExecutionsList pipeline-id))
+  [dataset-id]
+  (ExecutionsList dataset-id))

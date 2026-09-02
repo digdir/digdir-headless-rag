@@ -1,0 +1,18 @@
+;; P2 full-batch verification of the salient-noun-coverage lever.
+;;
+;; P1 (10-question cohort, N=5) was a clear win: never-pooled 11/50 -> 3/50,
+;; recall@20 0.47 -> 0.55, with one already-good question (api-04) mildly
+;; regressed. This verifies on ALL 42 questions, off vs on, N=3, JUDGED — to
+;; confirm a net recall/judge lift AND no regression on the CLEAN-20 that already
+;; work (the api-04 risk: does forcing a salient noun hurt already-good questions
+;; at scale?). 2 × 42 × 3 = 252 judged runs.
+{:configs
+ [{:id "off" :skill-graph-id :builtin/agent-rag-graph-bundled :skill-params {}}
+  {:id "salient-on" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/query-planner {:salient-noun-coverage true}}}]
+ :repeats 3
+ :judge? true
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-01-filoverforing-tilstander" "ue-broker-02-slette-tid-tilgjengelig" "ue-broker-03-store-filer-virusskann" "ue-broker-04-overgang-a2-a3-forskjeller" "ue-broker-05-filstorrelse-grenser-multi" "ue-events-01-abonnement-filtre" "ue-events-02-publisere-cloudevents" "ue-events-03-polling-vs-webhook" "ue-studio-01-skjul-felt-uttrykk" "ue-studio-02-pdf-service-task" "ue-studio-03-datamodell-filer" "ue-studio-04-non-repeating-group" "ue-studio-05-tekstressurser-sprak" "ue-studio-06-options-kilder-kodeliste" "ue-studio-07-validering-uttrykk-fil" "ue-corr-01-events-webhook-subscription" "ue-corr-02-transmission-group-dialog" "ue-corr-03-system-til-system-nedlasting" "ue-corr-04-notification-order-sms-window" "ue-notif-05-umiddelbar-varsling-otp" "ue-notif-06-egendefinert-avsender-epost-dns" "ue-notif-07-standard-avsender-sms-epost" "ue-dialog-01-aktivitetslogg" "ue-dialog-02-seen-log" "ue-dialog-03-unauthorized-urls" "ue-dialog-04-activity-entity-fields" "ue-dialog-05-search-rest-graphql" "ue-dialog-06-skrivehandlinger" "ue-dialog-07-webapi-sdk" "ue-authz-01-delegere-tilgangspakke-api" "ue-authz-02-tilgangsliste-handlingsfilter" "ue-authz-03-validere-samtykketoken" "ue-authz-04-opprette-tilgangsliste-medlemmer" "ue-authz-05-xacml-policy-regelstruktur" "ue-authz-06-xacml-obligation-authlevel" "ue-authz-07-bruker-typer-authorization" "ue-sys-01-leverandorstyrt-og-forhold" "ue-sys-02-systembrukertoken-pdp-autorisasjon" "ue-sys-03-brukerstyrt-vs-leverandorstyrt" "ue-api-04-instances-get-no-list" "ue-api-05-events-post-app-token" "ue-api-06-app-openapi-swagger-spec" }}}

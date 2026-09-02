@@ -1,10 +1,11 @@
 (ns digdir.docs.loader
   {:clj-kondo/ignore true}
   (:require [digdir.rag.chunking :as document-chunking]
+            [digdir.docs.retrieval-record :as rr]
+            [digdir.docs.schema-drift :as schema-drift]
             [digdir.rag.typesense :as ts-utils]
             [clojure.string :as str]
             [digdir.llm.kudos :as kudos]
-            [digdir.llm.kudos-preprod :as kudos-preprod]
             [typesense.client :as ts]
             [clojure.edn :as edn]
             [clojure.data.json :as json]
@@ -12,10 +13,11 @@
             [net.cgrand.xforms.rfs :as rfs]
             [missionary.core :as m]
             [clojure.java.io :as jio]
+            [digdir.docs.file-fetch :as file-fetch]
             [digdir.llm.marker :as marker]
             [duratom.core :refer [duratom]]
             [clojure.java.shell :refer [sh]]
-            [wkok.openai-clojure.api :as openai]
+            [digdir.llm.client :as openai]
             [taoensso.telemere :as t]
             [valuehash.api]
             [digdir.util.core :refer :all]
@@ -27,7 +29,8 @@
             [medley.core :as y]
             [clojure.set :as set]
             [lambdaisland.deep-diff2 :as ddiff]
-            [digdir.config.accessor :as cfg]))
+            [digdir.config.accessor :as cfg]
+            [digdir.docs.pipeline.core :as pcore]))
 
 (sh "mkdir" "-p" "state")
 
@@ -54,7 +57,9 @@
 
                    (swap! !signal-window #(take 400 (conj % (-> signal
                                                                 (update :msg_ force)
-                                                                 ;; TODO: teach electric to transfer time and error values otw
+                                                                ;; Instants and the Throwable in :error have no
+                                                                ;; wire encoding in Electric, so the UI reads
+                                                                ;; these signals as strings.
                                                                 (update :inst str)
                                                                 (update :end-inst str)
                                                                 (update :error str))))))
@@ -181,11 +186,26 @@
                 (:concerned_year doc)
                 [(:concerned_year doc)]
 
-                ;; Fallback: use publish_date year if no concerned year info
+                ;; No concerned-year information: emit nothing (#238).
+                ;;
+                ;; This used to substitute the publish year. That fabricated a
+                ;; value indistinguishable from a real one - nothing downstream
+                ;; could tell a derived year from a registered one - and it was
+                ;; wrong for 216 of the 2,638 documents whose title states a
+                ;; single differing year. The property removed here is
+                ;; FABRICATION WITHOUT PROVENANCE, not the wrong values: a
+                ;; correction pass alone would be overwritten, because this fn
+                ;; recomputes the field on every upsert.
+                ;;
+                ;; Deriving a year from elsewhere cannot be right in general
+                ;; either. 29% of the ground truth in #228 was a range or
+                ;; several years, so no single-scalar fallback can be correct
+                ;; for those however it is computed. A value that cannot be
+                ;; right 29% of the time should not be invented at all; an
+                ;; empty list is the honest answer and it makes the gap
+                ;; countable, which it previously was not.
                 :else
-                (if-let [year (extract-year-from-date (:publish_date doc))]
-                  [year]
-                  []))))))
+                [])))))
 
 (defn mk-require-url-file
   "Download file from URL to a temp file.
@@ -202,7 +222,12 @@
              (jio/copy in out))
            (.getAbsolutePath temp-file))))
 
-(defn sha256-short-hash [v]
+(defn sha256-short-hash
+  "Second copy of `digdir.docs.pipeline.core/sha256-short-hash`, used by the
+   legacy KUDOS ingest path. Same 12-character truncation, so the same 48-bit
+   collision bound applies — see that docstring; phrases are the binding
+   keyspace, not chunks."
+  [v]
   (->> v valuehash.api/sha-256-str (take 12) (apply str)))
 
 (defn exponential-backoff [n]
@@ -221,9 +246,9 @@
 (defn pdf->md
   "Convert PDF to markdown using Marker service API.
   Caching is handled server-side by the Marker API."
-  [filename]
+  [tenant filename]
   (try
-    (marker/->md filename)
+    (marker/->md tenant filename)
     (catch clojure.lang.ExceptionInfo e
       (if (pdfium-data-format-error? e)
         (do
@@ -242,8 +267,9 @@
                                     :overlap 20
                                     :unit :character}} text]
   #_(t/log! ["Fixed width chunking" width overlap unit])
-  (mapv (fn [c] {:chunk_id (sha256-short-hash (str/join c))
-                 :content_markdown (str/join c)})
+  ;; No :chunk_id here — see pcore/chunk-id. chunk-doc assigns ids once it
+  ;; knows which document the text belongs to.
+  (mapv (fn [c] {:content_markdown (str/join c)})
         (partition-all width (- width overlap) text)))
 
 (defn header-based-chunks [kview text]
@@ -251,8 +277,8 @@
   (let [doc {:page-content text}]
     (->> (document-chunking/split-into-chunks-by-headers kview [doc])
          (mapv (fn [{:keys [page-content metadata]}]
-                 {:chunk_id (sha256-short-hash page-content)
-                  :content_markdown page-content
+                 ;; No :chunk_id here — see pcore/chunk-id.
+                 {:content_markdown page-content
                   :metadata (prn-str metadata)})))))
 
 (defn chunk-doc [{:as kview
@@ -260,10 +286,9 @@
   (fn [doc]
     (t/event! :document-loading/chunking-document {:data {:id (:id doc)
                                                           :strategy strategy}})
-    (def jkdaljdkal doc)
     (let [all-chunks (mapcat
                       (fn [file]
-                        (let [md (pdf->md (:path file))]
+                        (let [md (pdf->md (:tenant kview) (:path file))]
                           (case strategy
                             :fixed-width (fixed-width-chunks kview md)
                             :header-based (header-based-chunks kview md))))
@@ -283,9 +308,17 @@
 
                                         :else true)))
                                   all-chunks)]
-      (assoc doc :chunks (vec (map-indexed (fn [index chunk]
-                                             (assoc chunk :doc_num (:doc_num doc) :chunk_index index))
-                                           filtered-chunks))))))
+      (assoc doc :chunks
+             (->> filtered-chunks
+                  ;; Ids are derived here, not in the chunker: this is the
+                  ;; first point that knows the document. See pcore/chunk-id.
+                  (pcore/assign-chunk-ids (:doc_num doc))
+                  (map-indexed (fn [index chunk]
+                                 (assoc chunk
+                                        :doc_num (:doc_num doc)
+                                        :chunk_index index
+                                        :content_length (count (:content_markdown chunk)))))
+                  vec)))))
 
 (defn extract-ns-from-map [m ns]
   (into {}
@@ -383,68 +416,121 @@
             :doc-exists? (document-inserted? kview documents-coll test-doc)
             :should-skip-upsert? (document-inserted? kview documents-coll test-doc)})) ; document doesn't exist if exception is thrown 
 
+(defn file-digests
+  "The distinct sha256 digests of a document's files, as a FLAT vector.
+
+   The digests already exist inside :files, but :files is an array of objects
+   and the documents collection is created with enable_nested_fields false - a
+   setting Typesense will not let you change on an existing collection, so
+   `files.sha256` cannot be made filterable without dropping and recreating the
+   collection (#228).
+
+   A flat sibling field sidesteps that entirely. It costs nothing to write, and
+   because Typesense indexes values that are ALREADY STORED when a field is
+   later declared, it can be turned into a real lookup by one schema PATCH -
+   measured at 0.91s over 11,306 documents, with no reindex and no re-upsert.
+   Writing it now is what makes that PATCH cheap later; until then it is simply
+   stored, exactly as :concerned_year and :publish_date already are."
+  [doc]
+  (vec (distinct (keep :sha256 (:files doc)))))
+
+(defn indexable-files
+  "A document's files with the ingest-host scratch path removed (#253).
+
+   :path is assoc'd during loading by mk-require-url-file and points at a
+   java.io.File/createTempFile on whichever machine ran the ingest. It is
+   deleted when that run finishes, so by the time anyone can read it out of the
+   index it has ALWAYS been wrong - and it sits beside size, pages, sha256 and
+   mimetype, every one of which is real, with nothing marking it as scratch.
+
+   Dropped from the projection rather than from the pipeline: :path is load
+   bearing DURING ingest (loader.clj passes it to pdf->md), it is only the
+   stored copy that is meaningless."
+  [doc]
+  (mapv #(dissoc % :path) (:files doc)))
+
 (defn prepare-doc [doc]
   (let [all-orgs (concat (:owners doc) (:recipients doc) (:publishers doc))
         display-names (vec (distinct (extract-display-names all-orgs)))]
 
-    (select-keys (assoc doc :orgs_long display-names)
+    (select-keys (assoc doc
+                        :orgs_long display-names
+                        :files (indexable-files doc)
+                        :file_sha256 (file-digests doc)
+                        :total_chunks (count (:chunks doc)))
                  [:id :doc_num :title :authors :orgs_long
-                  :concerned_year :files :publish_date :type :language
-                  :concerned_years])))
+                  ;; The two range fields are the FIRST branches of
+                  ;; fill-in-doc-fields' cond, and they are what a multi-year
+                  ;; document uses - 29% of ground-truth values in #228 were
+                  ;; ranges or multiple years, not single years. Dropping them
+                  ;; here left the collection unable to distinguish a
+                  ;; range-supplied concerned_years from a fabricated one,
+                  ;; which is why #238's population could only be found by
+                  ;; comparing against titles. Restoring them is a
+                  ;; prerequisite for measuring that population, not a
+                  ;; convenience. They are stored-but-not-indexed: the docs
+                  ;; schema declares neither, and Typesense keeps and returns
+                  ;; unknown fields - :concerned_year and :publish_date have
+                  ;; been riding along undeclared for the same reason.
+                  :concerned_year :concerned_year_from :concerned_year_to
+                  :files :file_sha256 :publish_date :type :language
+                  :concerned_years :total_chunks
+                  ;; #308 C. Computed by mk-prepare-document-t from the
+                  ;; previously indexed document; they must be listed here
+                  ;; or upsert destroys them on the next run.
+                  :last_retrieval_success_at :first_retrieval_failure_at
+                  :last_retrieval_failure_at :consecutive_retrieval_failures
+                  :retrieval_attempts])))
+
+(defn- delete-orphans!
+  "Delete docs in `coll` for `doc-num` whose Typesense `:id` is NOT
+   in `current-ids`. Mirrors
+   digdir.docs.pipeline.storage/delete-orphan-{chunks,phrases}! so
+   the kudos loader gets the same cleanup. Filters on `id`, not
+   `chunk_id`, to catch legacy auto-id rows from before chunks/phrases
+   carried an explicit `:id`."
+  [coll doc-num current-ids]
+  (when (and (seq current-ids) (not (str/blank? (str doc-num))))
+    (let [filter-by (str "doc_num:=" doc-num
+                         " && id:!=[" (str/join "," current-ids) "]")]
+      (t/event! :document-loading/deleting-orphans
+                {:data {:coll coll
+                        :doc-num doc-num
+                        :keep-count (count current-ids)}})
+      (ts/delete-documents! ts-admin coll {:filter_by filter-by}))))
 
 (defn store-doc [store kview]
   (let [[documents-coll chunks-coll phrases-coll] (coll-ids kview)]
     (case (:store/type store)
+      ;; Always upserts; orphan-cleanup after each batch. See
+      ;; digdir.docs.pipeline.storage/store-complete-document! for the
+      ;; long-form explanation of why we pin :id on chunks/phrases and
+      ;; why the delete filters on :id rather than :chunk_id.
       :typesense (fn [doc]
-
-                   ;; TODO: get back to this after rendering real
-                   ;; data.... preparing the list is good too fwiw.
-                   (if (document-inserted? kview documents-coll doc) ; document doesn't exist
-                     (do
-
-;; Megahack: I was getting some weird c++
-                       ;; errors... memory corruption and so forth.
-                       ;;
-                       ;; Caused by data races or something, I'll try
-                       ;; slowing it down.
-                       (Thread/sleep 1000)
-
-                       (t/event! :document-loading/document-already-in-typesense-skipping-upsert)
-                       ;; It's likely that we'll have some documents
-                       ;; which are inserted in documents-coll but not
-                       ;; in chunks-coll and phrases-coll.
-                       ;;
-                       ;; Therefore this code is slightly buggy, but
-                       ;; right now performance is more important
-                       ;;
-                       ;; I'm 100% that we can have a query that looks
-                       ;; up in phrases-coll, but i don't have the
-                       ;; time right now
-                       (t/event! :document-loading/TODO:-handle-partially-inserted-documents-correctly))
-                     (do
-
-                       (def last-inserted-doc doc)
-                       (t/event! :document-loading/upserting-to-documents-typesense-collection)
-                       (ts/upsert-document! ts-admin documents-coll (prepare-doc doc))
-                       (t/event! :document-loading/upserting-to-chunks-typesense-collection
-                                 {:data {:chunk-count (count (:chunks doc))}})
-                       (def doc doc)
-                       (def chunks-coll chunks-coll)
-                       (let [chunk-response (ts/upsert-documents! ts-admin chunks-coll
-                                                                  (mapv #(dissoc % :search-phrases :embedding)
-                                                                        (:chunks doc)))]
-                         #_(t/log! ["Chunk upsert response: " chunk-response]))
-                       (t/event! :document-loading/upserting-to-phrases-typesense-collection)
-                       (def phrases (mapcat #(for [phrase (:search-phrases %)]
-                                               {:search_phrase phrase
-                                                :chunk_id (:chunk_id %)
-                                                :doc_num (:doc_num doc)})
-                                            (:chunks doc)))
-                       (ts/upsert-documents! ts-admin phrases-coll phrases)
-
-                       (say "Stored")))
-
-                   (t/event! :document-loading/document-upserted))
+                   (let [chunks (mapv #(-> %
+                                           (dissoc :search-phrases :embedding)
+                                           (assoc :id (:chunk_id %)))
+                                      (:chunks doc))
+                         current-chunk-ids (mapv :id chunks)
+                         phrases (mapcat (fn [c]
+                                           (for [phrase (:search-phrases c)]
+                                             {:id (sha256-short-hash (str (:chunk_id c) "|" phrase))
+                                              :search_phrase phrase
+                                              :chunk_id (:chunk_id c)
+                                              :doc_num (:doc_num doc)}))
+                                         (:chunks doc))
+                         current-phrase-ids (mapv :id phrases)]
+                     (t/event! :document-loading/upserting-to-documents-typesense-collection)
+                     (ts/upsert-document! ts-admin documents-coll (prepare-doc doc))
+                     (t/event! :document-loading/upserting-to-chunks-typesense-collection
+                               {:data {:chunk-count (count chunks)}})
+                     (ts/upsert-documents! ts-admin chunks-coll chunks)
+                     (delete-orphans! chunks-coll (:doc_num doc) current-chunk-ids)
+                     (t/event! :document-loading/upserting-to-phrases-typesense-collection)
+                     (ts/upsert-documents! ts-admin phrases-coll phrases)
+                     (delete-orphans! phrases-coll (:doc_num doc) current-phrase-ids)
+                     (say "Stored")
+                     (t/event! :document-loading/document-upserted)))
 
       :dev/duratom (fn [doc]
                      (swap! !duratom-store update documents-coll (fnil conj #{}) doc)))))
@@ -471,11 +557,64 @@
     (m/?
      (mk-require-url-file "https://github.com/olavfosse.png"))))
 
-(defn mk-require-doc-files-t [kview doc]
+(defn mk-require-file
+  "Download an indexed `files[]` entry's binary to a temp file; return the path.
+
+   Goes through `file-fetch/fetch-file!`, which hops to the landing page's
+   `citation_pdf_url` when the indexed url serves HTML, and verifies the bytes
+   against the entry's `sha256`/`size` before returning them (#239). Replaces
+   the url-only fetch, which handed whatever came back straight to Marker."
+  [file]
+  (m/via m/blk
+         (let [ext (url-extension (:url file))
+               temp-file (java.io.File/createTempFile "pdf-" ext)]
+           (t/event! :require-file
+                     {:data {:url (:url file)
+                             :temp-path (.getAbsolutePath temp-file)}})
+           (with-open [out (jio/output-stream temp-file)]
+             (jio/copy (file-fetch/fetch-file! file) out))
+           (.getAbsolutePath temp-file))))
+
+(defn indexed-document
+  "The document as currently indexed, or nil when it is not indexed yet.
+
+   Needed because the writer uses Typesense `action=upsert`, which replaces the
+   whole document: anything not in `prepare-doc`'s payload is destroyed. The
+   retrieval-record fields therefore have to be read and carried forward (#308)."
+  [documents-coll doc]
+  (try
+    (ts/retrieve-document ts-admin documents-coll (:id doc))
+    (catch Exception _ nil)))
+
+(defn mk-require-doc-files-t
+  "Download the document's files, or record that they are unreachable.
+
+   A file that is deterministically unreachable is a state of the world, not a
+   failed attempt, so it does not throw: the document comes back tagged
+   `::unreachable` and continues through the pipeline to be written with its
+   retrieval record (#308 B and C).
+
+   The discriminator is the one `worth-retrying?` already uses, which #320
+   established for the retry ladder. That is deliberate — \"re-requesting cannot
+   change this\" and \"this is not a fault\" are the same judgement, and letting
+   them drift apart would mean a 404 that stops being retried but still aborts
+   the run, or the reverse.
+
+   Genuine faults — a digest mismatch, a hop that yields non-PDF, a timeout —
+   still throw and still consume the failure budget, which is what it is for."
+  [kview doc]
   (m/sp
-   (let [paths (m/? (apply m/join vector (map (=> :url mk-require-url-file) (:files doc))))
-         files (mapv #(assoc %1 :path %2) (:files doc) paths)]
-     (assoc doc :files files))))
+   (try
+     (let [paths (m/? (apply m/join vector (map mk-require-file (:files doc))))
+           files (mapv #(assoc %1 :path %2) (:files doc) paths)]
+       (assoc doc :files files))
+     (catch Exception e
+       (if (worth-retrying? e)
+         (throw e)
+         (do
+           (t/event! :document-loading/file-unreachable
+                     {:data {:doc-id (:id doc) :reason (ex-message e)}})
+           (assoc doc ::unreachable (ex-message e) :files [])))))))
 
 (defn mk-chunk-doc-t [kview doc]
   (m/via m/blk ((chunk-doc kview) doc)))
@@ -490,37 +629,44 @@
 ;; big processes, for small single-threaded side effects there's not
 ;; that much to gain, so don't put in energy and lines to using
 ;; Missionary in leafs where it doesn't actually matter.
-(def openai-implementations
-  {:lm-studio {:api-endpoint "http://localhost:1234/v1"
-               :request {:timeout 300000}}
-   #_#_:runpod {:api-endpoint "https://fboqsdcxlh2yxt-8000.proxy.runpod.net/v1"
-                :request {:timeout 30000}}
-   :azure-openai {:api-key (cfg/get :services :azure-openai :api-key)
-                  :api-endpoint (cfg/get :services :azure-openai :api-endpoint)
-                  :impl :azure
-                  :request {:timeout 30000}
-                  ;;  :trace (fn [request response]
-                  ;;           #_(println "Request:" request)
-                  ;;           (println "Response:" response))
-                  }
-   :openrouter {:api-key (cfg/get :services :openrouter :api-key)
-                :api-endpoint "https://openrouter.ai/api/v1"
-                :request {:timeout 30000}}})
+(defn openai-implementation
+  [tenant impl]
+  (case impl
+    :lm-studio {:api-endpoint "http://localhost:1234/v1"
+                :request {:timeout 300000}}
+    #_#_:runpod {:api-endpoint "https://fboqsdcxlh2yxt-8000.proxy.runpod.net/v1"
+                 :request {:timeout 30000}}
+    :azure-openai {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
+                   :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
+                   :impl :azure
+                   :request {:timeout 30000}
+                   ;;  :trace (fn [request response]
+                   ;;           #_(println "Request:" request)
+                   ;;           (println "Response:" response))
+                   }
+    :openrouter {:api-key (cfg/get {:tenant tenant} :services :openrouter :api-key)
+                 :api-endpoint "https://openrouter.ai/api/v1"
+                 :request {:timeout 30000}}
+    (throw (ex-info "Unknown OpenAI implementation" {:impl impl}))))
 ;; azure-openai
 
-(defn create-chat-completion [conversation]
+(defn create-chat-completion [tenant conversation]
   ;; Idea is to dispatch to the right provider based on the model name
   (if (#{:google/gemma-3-27b-it :google/gemma-3-12b-it :dphn/Dolphin-Mistral-24B-Venice-Edition} (:model conversation))
     (openai/create-chat-completion conversation
-                                   (openai-implementations :openrouter))
+                                   (openai-implementation tenant :openrouter))
     (openai/create-chat-completion
      (assoc conversation
-            :model (cfg/get :services :azure-openai :deployment-name))
-     (openai-implementations :azure-openai))))
+            :model (cfg/get {:tenant tenant} :services :azure-openai :deployment-name))
+     (openai-implementation tenant :azure-openai))))
 
 (defn mk-distill-search-phrases-t [{:search-phrases/keys [model fallback-model prompt] :as kview} chunk]
   (m/via m/blk
-         (let [cache-key (str (:chunk_id chunk) "-" (sha256-short-hash model) "-" (sha256-short-hash prompt))
+         ;; Keyed on content, not chunk_id: the phrases depend only on the
+         ;; chunk text, and document-scoped ids (#72) would otherwise cost one
+         ;; LLM call per copy of every duplicated chunk. Mirrors
+         ;; digdir.docs.pipeline.search-phrases/cache-key.
+         (let [cache-key (str (sha256-short-hash (:content_markdown chunk)) "-" (sha256-short-hash model) "-" (sha256-short-hash prompt))
                cache-dir "cache/search-phrases/"
                cache-path (str cache-dir cache-key ".edn")
                file (jio/file cache-path)]
@@ -536,15 +682,16 @@
 
              (do
                #_(say "BE WARE: CACHE MISS, CALLING OUT TO OPEN ARTIFICIAL INTELLIGENCE GEE PEE TEE 4 o")
-               (t/event! :document-loading/search-phrases-distillation-cache-miss
+              (t/event! :document-loading/search-phrases-distillation-cache-miss
                          #_{:data {:chunk chunk}})
-               (let [generate-with-model (fn [model]
+               (let [tenant (:tenant kview)
+                     generate-with-model (fn [model]
                                            (->
                                             (let [convo {:model model
                                                          :messages [{:role "user"
                                                                      :content (str/replace prompt "REPLACE_ME" (:content_markdown chunk))}]}]
                                               #_(t/log! ["Generating search phrases with model" model])
-                                              (create-chat-completion convo))
+                                              (create-chat-completion tenant convo))
                                             :choices
                                             first
                                             :message
@@ -582,18 +729,34 @@
 
 
 
-(defn mk-prepare-document-t [kview doc]
+(defn mk-prepare-document-t
+  "Prepare one document, recording whether its file could be retrieved.
+
+   An unreachable document skips chunking and phrase distillation — there is no
+   content to chunk — but is still prepared and still written, carrying the
+   retrieval record that says why it has none (#308 C). That is the whole
+   difference between a document we cannot fetch and a document we have
+   forgotten about."
+  [kview doc]
   (m/sp
    #_(m/? (m/sleep 10000))
-   (as-> doc doc
-     (fill-in-doc-fields doc)
-
-     (m/? (mk-require-doc-files-t kview doc))
-     (m/? (mk-chunk-doc-t kview doc))
-     (m/? (mk-distill-doc-search-phrases-t kview doc))
-     (do (say "Prepared")
-         (t/event! :document-loading/document-prepared)
-         doc))))
+   (let [[documents-coll _ _] (coll-ids kview)
+         prior (indexed-document documents-coll doc)
+         now (quot (System/currentTimeMillis) 1000)
+         doc (m/? (mk-require-doc-files-t kview (fill-in-doc-fields doc)))
+         unreachable? (contains? doc ::unreachable)
+         doc (if unreachable?
+               (assoc doc :chunks [] :search_phrases [])
+               (as-> doc d
+                 (m/? (mk-chunk-doc-t kview d))
+                 (m/? (mk-distill-doc-search-phrases-t kview d))))]
+     (say (if unreachable? "Prepared (file unreachable)" "Prepared"))
+     (t/event! (if unreachable?
+                 :document-loading/document-prepared-unreachable
+                 :document-loading/document-prepared))
+     (merge doc (rr/observe prior
+                            (if unreachable? :unreachable :success)
+                            now)))))
 
 #_(Vibe "render these documents in a nice way and implement affordances to call the callbacks"
         documents
@@ -728,6 +891,12 @@
              :stem false
              :store true
              :type "string"}
+            {:facet false
+             :index true
+             :name "content_length"
+             :optional true
+             :sort true
+             :type "int32"}
             #_{:facet true
                :index true
                :infix false
@@ -870,6 +1039,39 @@
         :dev/duratom (swap! !duratom-store assoc documents-coll {})
         :typesense (do
                      (create-docs-coll store documents-coll)
+                     ;; #377. Placed HERE rather than at boot because this is the
+                     ;; moment the schema is about to matter: the collection is
+                     ;; named, reachable, and about to be written to. At boot
+                     ;; there is no single collection to check, and it would emit
+                     ;; :unreachable for every dataset whose Typesense is not
+                     ;; configured — normal in dev, and a warning everyone
+                     ;; ignores is worse than none because it occupies the slot.
+                     ;;
+                     ;; WHAT A READER HERE MIGHT OVER-READ, and it differs from
+                     ;; the boot-time reader's version:
+                     ;;
+                     ;; 1. `create-docs-coll` ran one line up, which does NOT
+                     ;;    mean the collection matches the file. On conflict it
+                     ;;    returns :already-exists and alters nothing. An
+                     ;;    existing collection keeps whatever schema it was born
+                     ;;    with — which is the entire reason this check is here
+                     ;;    and not assumed away.
+                     ;; 2. Reachable a moment ago is not reachable now. The
+                     ;;    check can still come back :unreachable, and that is
+                     ;;    UNKNOWN rather than clean. Do not collapse the three
+                     ;;    states to a boolean on the grounds that the
+                     ;;    collection is reachable by construction here; it is
+                     ;;    reachable by assumption, which is a different thing.
+                     ;; 3. This compares against `docs_schema.edn`, which only
+                     ;;    `create-docs-coll` reads. It says nothing about the
+                     ;;    website, folder or episerver collections — those build
+                     ;;    their schemas in code and cannot drift from this file.
+                     ;;
+                     ;; Reports, never throws: a materialization must not fail
+                     ;; over the shape of a collection it did not create.
+                     (schema-drift/report! (ts-utils/make-ts-settings
+                                             {:tenant (:tenant kview)})
+                                           documents-coll)
                      (create-chunks-coll store kview)
                      (create-phrases-coll store kview))))))
 
@@ -887,9 +1089,7 @@
             (fn
               ([] nil)
               ([_ _] nil))
-            (let [documents-by-ids (if (:kudos/use-preprod? kview)
-                                     kudos-preprod/documents-by-ids
-                                     kudos/documents-by-ids)]
+            (let [documents-by-ids (partial kudos/documents-by-ids (kudos/profile kview))]
               (mk-store-documents-f
                kview
                (mk-prepare-documents-f
@@ -900,12 +1100,9 @@
   (m/ap (m/amb (m/?> f1) (m/?> f2))))
 
 (defn mk-materialize-t [kview]
-  (let [documents-by-ids (if (:kudos/use-preprod? kview)
-                           kudos-preprod/documents-by-ids
-                           kudos/documents-by-ids)
-        documents (if (:kudos/use-preprod? kview)
-                    kudos-preprod/documents
-                    kudos/documents)]
+  (let [kudos-profile (kudos/profile kview)
+        documents-by-ids (partial kudos/documents-by-ids kudos-profile)
+        documents (partial kudos/documents kudos-profile)]
     (m/sp (t/event! :document-loading/materializing-kview
                     {:data {:kview kview
                             :colls (coll-ids kview)}})
@@ -928,7 +1125,7 @@
           (t/event! :document-loading/done))))
 
 (comment
-  (def prepared-docs (m/? (m/reduce conj (mk-prepare-documents-f kview (m/eduction (take 7)  (kudos/documents kview))))))
+  (def prepared-docs (m/? (m/reduce conj (mk-prepare-documents-f kview (m/eduction (take 7)  (kudos/documents (kudos/profile kview) kview))))))
 
   (defn analyze-doc [doc]
     (sort-by first
@@ -937,8 +1134,8 @@
 
   (mapv analyze-doc prepared-docs)
 
-  (defonce with-concat (first (m/? (m/reduce conj (mk-prepare-documents-f kview (m/eduction (take 1)  (kudos/documents kview)))))))
-  (defonce without-concat (first (m/? (m/reduce conj (mk-prepare-documents-f kview (m/eduction (take 1)  (kudos/documents kview)))))))
+  (defonce with-concat (first (m/? (m/reduce conj (mk-prepare-documents-f kview (m/eduction (take 1)  (kudos/documents (kudos/profile kview) kview)))))))
+  (defonce without-concat (first (m/? (m/reduce conj (mk-prepare-documents-f kview (m/eduction (take 1)  (kudos/documents (kudos/profile kview) kview)))))))
 
   ;; Similar total length (good thing)
   (count (->> with-concat :chunks (mapv :content_markdown) str/join)) => 89666
@@ -1010,7 +1207,9 @@ Make sure that the last line only contains the search phrases and nothing else.
 <chunk>
 REPLACE_ME
 </chunk>"
-   :store/coll-prefix (cfg/get :services :typesense :collection-prefix)
+   ;; Legacy sample config: keep this self-contained so namespace load does not
+   ;; depend on any specific tenant surviving in the live config DB.
+   :store/coll-prefix "digdir_rag_"
    
    :stores #{{:store/type :typesense}}
    #_(str "TEST-" (str/trim (:out (clojure.java.shell/sh "whoami"))) "-DELETE_ME-")})
@@ -1024,9 +1223,7 @@ REPLACE_ME
 
 (defn mk-import-single-document-t [kview doc-id]
   "Import a single Kudos document by ID"
-  (let [documents-by-ids (if (:kudos/use-preprod? kview)
-                           kudos-preprod/documents-by-ids
-                           kudos/documents-by-ids)]
+  (let [documents-by-ids (partial kudos/documents-by-ids (kudos/profile kview))]
     (m/sp
       (t/event! :document-loading/importing-single-document {:data {:doc-id doc-id}})
       (m/? (m/via m/blk (create-stores kview)))
@@ -1050,17 +1247,16 @@ REPLACE_ME
     nil))
 
 (comment
-  (def res1 (m/? (m/reduce conj (kudos/documents-by-ids [427804 419959 422033]))))
-  (def res2 (m/? (m/reduce conj (kudos-preprod/documents-by-ids [425391 417293 419466]))))
+  (def res1 (m/? (m/reduce conj (kudos/documents-by-ids kudos/prod [427804 419959 422033]))))
+  (def res2 (m/? (m/reduce conj (kudos/documents-by-ids kudos/preprod [425391 417293 419466]))))
   (ddiff/pretty-print (ddiff/diff res1 res2))
   (ddiff/pretty-print (ddiff/diff (first res1) (first res2)))
 
   (prn :foo)
 
-  (def res1b (m/? (m/reduce conj (mk-prepare-documents-f kview (kudos/documents-by-ids [427804 #_#_419959 422033])))))
-  (def res2b (m/? (m/reduce conj (mk-prepare-documents-f kview (kudos-preprod/documents-by-ids [425391 #_#_417293 419466])))))
+  (def res1b (m/? (m/reduce conj (mk-prepare-documents-f kview (kudos/documents-by-ids kudos/prod [427804 #_#_419959 422033])))))
+  (def res2b (m/? (m/reduce conj (mk-prepare-documents-f kview (kudos/documents-by-ids kudos/preprod [425391 #_#_417293 419466])))))
   (ddiff/pretty-print (ddiff/diff res1b res2b)) ;; lgtm
   (ddiff/pretty-print (ddiff/diff (first res1b) (first res2b))) ;; lvgtm
 
   )
-

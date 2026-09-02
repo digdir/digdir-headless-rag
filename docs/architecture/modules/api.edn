@@ -1,0 +1,54 @@
+{:id "api",
+ :plane "experience",
+ :name "Headless HTTP API",
+ :note "REST + OpenAI-compatible",
+ :icon "api",
+ :color "#74a7ff",
+ :status "External surface",
+ :summary
+ "Programmatic access for conversations, datasets and chat completions.",
+ :description
+ "The Ring/Jetty and Reitit HTTP surface validates requests, establishes caller context, applies rate limits and exposes REST-shaped console and compatibility endpoints.",
+ :responsibilities
+ ["Expose versioned HTTP endpoints and response envelopes"
+  "Apply request coercion, rate limiting and error shaping"
+  "Resolve request context before handing work to the runtime"],
+ :files
+ ["server/src/digdir/api/http.clj" "server/src/digdir/api/routes.clj"],
+ :input "HTTP requests + X-API-Key",
+ :output "JSON, SSE and OpenAI-compatible responses",
+ :edges
+ [{:to "auth",
+   :kind :call,
+   :target :call,
+   :label "Permission checks on the request principal",
+   :witness
+   {:file "server/src/digdir/api/http.clj",
+    :requires digdir.config.permissions}}
+  {:to "scope",
+   :kind :call,
+   :target :call,
+   :label "Resolve tenant, dataset and key scopes",
+   :witness
+   {:file "server/src/digdir/api/routes.clj",
+    :requires digdir.api.context}}],
+ :contract
+ {:input
+  [:map
+   [:question :string]
+   [:dataset :string]
+   [:stream {:optional true} :boolean]
+   [:conversation_id {:optional true} :string]],
+  :output
+  [:map
+   [:answer :string]
+   [:citations
+    [:vector
+     [:map
+      [:chunk_id :string]
+      [:doc_num :string]
+      [:title {:optional true} :string]
+      [:url {:optional true} :string]]]]
+   [:conversation_id :string]]},
+ :keywords
+ "endpoint rest http conversations datasets rate limits openai external"}

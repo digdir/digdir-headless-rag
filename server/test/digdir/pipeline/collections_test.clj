@@ -1,6 +1,7 @@
 (ns digdir.pipeline.collections-test
   "Tests for pipeline collection name generation."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [digdir.pipeline.collections :as collections]))
 
 ;; =============================================================================

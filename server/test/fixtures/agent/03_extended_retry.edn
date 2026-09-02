@@ -1,0 +1,88 @@
+;; Pattern C: Extended retry — 7+ iterations, diminishing returns, exhaustion
+;; Source: agent-trace-2026-02-09T18-02-26-422248Z.txt (7 iter, 104 chunks)
+{:description "Pattern C: Extended retry reaching iteration limit with exhaustion fallback"
+ :query "Hvor mange årsverk hadde Digdir i 2022?"
+ :max-iterations 7
+
+ :llm-responses
+ [;; Iteration 0: two parallel searches
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "I need to search with multiple query variations."
+                        :tool_calls [{:id "call_s1"
+                                      :type "function"
+                                      :function {:name "search_documents"
+                                                 :arguments "{\"queries\":[\"årsverk Digdir 2022\",\"antall ansatte Digdir 2022\",\"bemanning Digdir 2022\"]}"}}
+                                     {:id "call_s2"
+                                      :type "function"
+                                      :function {:name "search_documents"
+                                                 :arguments "{\"queries\":[\"bemanning Digdir\",\"årsverk Digitaliseringsdirektoratet\",\"ressursbruk Digdir\"]}"}}]}}]}
+  ;; Iteration 1: rerank
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Let me rerank the accumulated chunks."
+                        :tool_calls [{:id "call_r1"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 2: first generate — insufficient context
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Attempting to generate a response."
+                        :tool_calls [{:id "call_g1"
+                                      :type "function"
+                                      :function {:name "generate_response"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 3: plan new queries
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "The answer was not found. Let me plan better queries."
+                        :tool_calls [{:id "call_p1"
+                                      :type "function"
+                                      :function {:name "plan_queries"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 4: search with new terms
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Searching with expanded query terms."
+                        :tool_calls [{:id "call_s3"
+                                      :type "function"
+                                      :function {:name "search_documents"
+                                                 :arguments "{\"queries\":[\"Digitaliseringsdirektoratet årsverk 2022\",\"bemanning Digdir årsrapport 2022\",\"ressursbruk Digdir ansatte 2022\"]}"}}]}}]}
+  ;; Iteration 5: rerank again
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Reranking with expanded workspace."
+                        :tool_calls [{:id "call_r2"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 6: second generate — still insufficient
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Let me try generating again with the expanded context."
+                        :tool_calls [{:id "call_g2"
+                                      :type "function"
+                                      :function {:name "generate_response"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Exhaustion fallback (called with nil tools by agentic-loop)
+  {:choices [{:finish_reason "stop"
+              :message {:content "Based on the available information, the exact number of FTEs at Digdir in 2022 was not found in the retrieved documents. However, there are 360 FTEs reported for 2023."}}]}]
+
+ :tool-results
+ [;; call_s1
+  "Retrieved 40 chunks (40 new unique). Workspace now has 40 total chunks."
+  ;; call_s2
+  "Retrieved 40 chunks (32 new unique). Workspace now has 72 total chunks."
+  ;; call_r1
+  "Reranked to top 10 chunks. Top results: 1. Digdir hadde pr 31.12.2022 seks lærlinger."
+  ;; call_g1 — insufficient
+  "Basert på den tilgjengelige informasjonen, er det ikke spesifikt oppgitt hvor mange årsverk Digdir hadde i 2022.\n\n[SYSTEM: The generated response indicates the answer was NOT found in the current context. Do NOT return this as your final answer. Instead, try searching with different terms — use synonyms, rephrase the question, try broader or more specific queries.]"
+  ;; call_p1
+  "Generated 1 search phrases: \"Hvor mange årsverk hadde Digdir i 2022?\""
+  ;; call_s3
+  "Retrieved 40 chunks (32 new unique). Workspace now has 104 total chunks."
+  ;; call_r2
+  "Reranked to top 10 chunks. Top results: 1. I 2022 rekrutterte vi 56 faste og 41 midlertidige stillinger."
+  ;; call_g2 — still insufficient
+  "Basert på den tilgjengelige informasjonen, er det ikke spesifikt oppgitt hvor mange årsverk Digdir hadde i 2022.\n\n[SYSTEM: The generated response indicates the answer was NOT found in the current context. Do NOT return this as your final answer. Instead, try searching with different terms — use synonyms, rephrase the question, try broader or more specific queries.]"]
+
+ :expected {:iterations 7
+            :tool-sequence ["search_documents" "search_documents" "rerank_results"
+                            "generate_response" "plan_queries" "search_documents"
+                            "rerank_results" "generate_response"]
+            :response-pattern "360|not found|ikke.*oppgitt"
+            :exhausted true}}

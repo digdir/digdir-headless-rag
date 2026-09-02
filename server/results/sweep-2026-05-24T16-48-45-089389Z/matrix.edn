@@ -1,0 +1,1 @@
+{:configs [{:id "patched-smoke-default", :skill-graph-id :builtin/agent-rag-graph-bundled, :skill-params #:builtin{:retrieval {:strategy-weights nil}}}], :n-questions 1, :repeats 1, :execution-scope {:tenant "digdir", :dataset-config-key "default", :agent-id "builtin/agent-rag-agent"}, :max-clarification-rounds 2, :run-timeout-ms 180000, :started-at "2026-05-24T16:48:45.090036Z"}

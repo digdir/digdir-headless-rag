@@ -1,0 +1,960 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,answer-judge-verdict,answer-judge-score,answer-judge-rationale,answer-judge-model,task-difficulty,task-difficulty-rationale,recall-at-5,recall-at-10,recall-at-20,citation-recall,golden-in-search-pool?,golden-pool-rank,golden-in-display?,golden-display-rank,golden-read?,golden-features,pool-head,search-passes,issued-queries,insufficiency-fired?,refinement-corpus-grounded?,enrichment-hits,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,cached-tokens,llm-calls,steps-executed,response,error
+7062f921-2ea5-4a6d-817e-fbb749aa8cc7,2026-06-02T16:09:14.819013Z,off,ue-broker-03-store-filer-virusskann,0,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"df9c39f17a534 R23.2 P2.6 h2.0 or0.8 L693 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Very large files",,1,altinn broker maximum file size 2gb file size limit send files larger than 2gb | files up to 2gb | maximum file size,false,,0,3,2,1,462659d19025;0127378417da;a7b06845f4f1,462659d19025;0127378417da,462659d19025,14033,4376,327,4703,0,3,3,"Yes, but only under certain conditions. Altinn Broker is restricted to files up to 2 GB by default because of the virus scan limitation [1]. You can send files larger than 2 GB if the resource has disabled virus scan, but such resources must be pre-approved [1].
+
+The maximum file size is described in two ways in the sources: one says the theoretical maximum is 1.6 TB [1], and another says the system supports file transfers up to 1600 GB without virus scanning [2]. These are effectively the same scale, but the source terminology differs, so the safest answer is: up to 1.6 TB / 1600 GB without virus scanning, and up to 2 GB with virus scanning [1][2].",
+9108e563-5065-46f1-a224-d1bfa5f81b20,2026-06-02T16:09:28.404809Z,window-2000,ue-broker-03-store-filer-virusskann,0,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"df9c39f17a534 R23.2 P2.6 h2.0 or1.0 L693 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Very large files",,1,altinn broker maximum file size 2gb file size limit send files larger than 2gb | limited to 2gb file size | files larger than 2gb | files up to 2gb | maximum file size | file size below the configured limit,false,,0,3,1,1,462659d19025;050f67e402d9;14d38d41ea63,462659d19025,462659d19025,13583,4413,343,4756,0,3,3,"Yes, but with conditions: Altinn Broker is **restricted to files up to 2GB by default** because of the virus scan limitation, so files larger than 2GB can only be sent if the resource has **disabled virus scan** and that setup has been **pre-approved** [1].  
+
+As for the maximum size, the documentation gives **two different figures**: the **theoretical maximum size is 1.6TB**, while they **regularly benchmark it only up to 100GB** [1]. So the answer depends on whether you mean the documented theoretical limit or the tested/benchmarked size [1].",
+867f2af0-f77e-4190-b9e5-c67683c4b2ab,2026-06-02T16:09:40.584970Z,off,ue-broker-03-store-filer-virusskann,1,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"df9c39f17a534 R22.1 P2.6 h2.0 or1.2 L693 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Very large files",,1,altinn broker maximum file size 2gb file size limit | limited to 2gb file size | files larger than 2gb | maximum file size | file size below the configured limit | altinn broker file storage,false,,0,3,1,1,462659d19025;050f67e402d9;a7b06845f4f1,462659d19025,462659d19025,12178,4214,270,4484,0,3,3,"Yes, but only under certain conditions. Altinn Broker is restricted to files up to 2 GB by default because of the virus scan restriction, but you can send files larger than 2 GB if the resource has disabled virus scan; such resources must be pre-approved [1].
+
+As for the maximum file size, the documentation gives two different scopes: the **theoretical maximum size** is **1.6 TB**, while the system is only **regularly benchmarked up to 100 GB** [1]. So the answer depends on whether you mean the documented theoretical limit or the regularly tested size [1].",
+e3e46cd6-acbb-4df7-9f2d-54127b47232d,2026-06-02T16:09:53.747790Z,window-2000,ue-broker-03-store-filer-virusskann,1,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"df9c39f17a534 R22.5 P2.6 h2.0 or0.8 L693 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Very large files",,1,altinn broker maximum file size 2 gb file size limit send files larger than 2gb | files up to 2gb | maximum file size,false,,0,1,1,1,462659d19025,462659d19025,462659d19025,13161,4449,255,4704,0,3,3,"Yes, but only under certain conditions: Altinn Broker is restricted to files up to 2 GB by default because of the virus scan limitation, but you can send files larger than 2 GB if the resource has disabled virus scan and that resource has been pre-approved [1].
+
+For the maximum file size, the source gives two different figures depending on scope: the **theoretical maximum size** is **1.6 TB**, while they **regularly benchmark** only up to **100 GB** [1]. The source also says they can make changes to accommodate files larger than 1.6 TB if needed [1].",
+f0a1f3be-3cde-4b5d-a481-3faab0ecf406,2026-06-02T16:10:05.945683Z,off,ue-broker-03-store-filer-virusskann,2,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"df9c39f17a534 R23.3 P2.6 h2.0 or1.1 L693 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Very large files",,1,altinn broker maximum file size 2gb send files larger than 2gb | limited to 2gb file size | files larger than 2gb | transfer of files larger than 2 gb | enable files above 2gb | maximum file size,false,,0,5,2,1,462659d19025;050f67e402d9;5ebfb5d57656;0127378417da;14d38d41ea63,462659d19025;0127378417da,462659d19025,12196,4311,299,4610,0,3,3,"Yes, but only under certain conditions. Altinn Broker is restricted to files up to **2 GB by default** because of the virus scan limitation, but you can send files larger than 2 GB if the resource has **disabled virus scan** and that has been **pre-approved** [1].
+
+The **maximum file size** is described in two ways in the sources:
+- The **theoretical maximum size** is **1.6 TB** [1].
+- Another page says Altinn Broker supports file transfers up to **1600 GB without virus scanning** and up to **2 GB with virus scanning** [2].
+
+So, the closest source-based answer is: **yes, files larger than 2 GB can be sent if virus scan is disabled and approved, and the maximum is stated as 1.6 TB / 1600 GB without virus scanning** [1][2].",
+2df0e80b-b8bb-4f93-8f77-a997480a71f3,2026-06-02T16:10:18.090608Z,window-2000,ue-broker-03-store-filer-virusskann,2,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"df9c39f17a534 R23.2 P2.6 h2.0 or1.0 L693 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Very large files",,1,altinn broker maximum file size 2gb file size limit send files larger than 2gb | limited to 2gb file size | files larger than 2gb | files up to 2gb | maximum file size | file size below the configured limit,false,,0,3,2,1,462659d19025;050f67e402d9;14d38d41ea63,462659d19025;050f67e402d9,462659d19025,12143,4399,347,4746,0,3,3,"Yes, but with conditions: Altinn Broker is **restricted to files up to 2GB by default** because of the virus scan limitation, so files larger than 2GB can only be sent if the resource has **disabled virus scan** and that setup has been **pre-approved** [1].  
+
+As for the maximum size, the documentation gives two different figures depending on scope: the **theoretical maximum size is 1.6TB** [1], while the **Initialize and upload FileTransfer** endpoint is explicitly **limited to 2GB** [2]. So the answer depends on which upload method and configuration you mean [1][2].",
+61a61700-c171-4094-b4cb-30f27ca90c16,2026-06-02T16:10:31.699074Z,off,ue-broker-03-store-filer-virusskann,3,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"df9c39f17a534 R23.1 P2.6 h2.0 or1.0 L693 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Very large files",,1,altinn broker file size limit maximum file size 2gb send files larger than 2gb | limited to 2gb file size | files larger than 2gb | files up to 2gb | maximum file size | file size below the configured limit,false,,0,3,1,1,462659d19025;050f67e402d9;593b1001cb56,462659d19025,462659d19025,13605,4420,339,4759,0,3,3,"Yes, but only under certain conditions. Broker is restricted to files up to 2 GB by default because of the virus scan limitation, but you can send files larger than 2 GB if the resource has disabled virus scan, and such resources must be pre-approved. [1]
+
+As for the maximum file size, the documentation gives two different scopes: the **theoretical maximum size** is **1.6 TB**, while Altinn Broker is only **regularly benchmarked up to 100 GB**. [1] So the answer depends on whether you mean the documented theoretical limit or the regularly tested size.",
+525fe344-7f73-4cdb-b3e7-c834b4257e52,2026-06-02T16:10:44.830112Z,window-2000,ue-broker-03-store-filer-virusskann,3,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"df9c39f17a534 R23.2 P2.6 h2.0 or0.8 L693 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Very large files",,1,altinn broker maximum file size 2gb file size limit send files larger than 2gb | files up to 2gb | maximum file size,false,,0,3,2,1,462659d19025;0127378417da;14d38d41ea63,462659d19025;0127378417da,462659d19025,13128,4397,327,4724,0,3,3,"Yes, but only if the resource has **disabled virus scan**; by default, Broker is restricted to files up to **2 GB** because of the virus scan limitation, and resources that disable virus scan must be **pre-approved** [1].  
+
+The **maximum file size** is described in two ways in the sources: one says the **theoretical maximum size is 1.6 TB** [1], while another says Altinn Broker supports file transfers up to **1600 GB without virus scanning** and up to **2 GB with virus scanning** [2]. These are effectively the same limit expressed in different units, but the source terminology differs [1][2].",
+7de93e57-022f-4844-8517-51be4c7d8ac1,2026-06-02T16:10:57.544913Z,off,ue-broker-03-store-filer-virusskann,4,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,95,false,,false,"df9c39f17a534 R— P1.1 h1.0 or0.2 L693 0/? ty:phrase b[0.0,0.0,0.0,0.1,0.0,0.0] | Very large files","d479e27df943e R19.0 P2.5 h2.0 or0.9 L2440 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get ;; d375dd431865e R17.5 P2.6 h2.0 or1.3 L1034 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Send files ;; d0fd4df1a9003 R16.5 P3.7 h3.0 or0.7 L2833 1/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | News ;; de960d2f402e0 R15.6 P2.5 h2.0 or0.6 L962 5/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Getting started ;; db6c43b81c669 R15.4 P2.6 h2.0 or1.3 L2528 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Technical overview ;; dae6e914f9ecd R15.4 P2.5 h2.0 or0.5 L996 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Capabilities ;; d479e27df943e R15.3 P2.5 h2.0 or0.5 L1353 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get ;; d910e06f25460 R15.1 P2.6 h2.0 or1.3 L881 5/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Solution architecture",1,altinn broker maximum file size 2gb file size limit | altinn broker | maximum file size | limited to 2gb file size | altinn broker file store | altinn 2 broker file storage,false,,0,2,2,1,050f67e402d9;0127378417da,050f67e402d9;0127378417da,462659d19025,12713,4360,288,4648,0,3,3,"Yes, but the maximum depends on whether virus scanning is involved.
+
+- The **/broker/api/v1/filetransfer/upload** endpoint says the **form-data initialize-and-upload** operation is **limited to 2 GB file size** [1].
+- The broader Altinn Broker overview says the system supports file transfers **up to 1600 GB without virus scanning** and **up to 2 GB with virus scanning** [2].
+
+So, if you mean the **upload endpoint described here**, the maximum is **2 GB** [1]. If you mean Altinn Broker in general, there is an ambiguity: **up to 1600 GB without virus scanning**, but only **up to 2 GB with virus scanning** [2].",
+f358a32b-645a-4911-a826-482e5be1c603,2026-06-02T16:11:09.673575Z,window-2000,ue-broker-03-store-filer-virusskann,4,public-docs,new,"altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"df9c39f17a534 R23.2 P2.6 h2.0 or1.0 L693 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Very large files",,1,altinn broker maximum file size 2gb file size limit send files larger than 2gb | limited to 2gb file size | files larger than 2gb | files up to 2gb | maximum file size | file size below the configured limit,false,,0,2,2,1,462659d19025;050f67e402d9,462659d19025;050f67e402d9,462659d19025,12127,4240,272,4512,0,3,3,"Yes, but only under certain conditions. Altinn Broker is restricted to files up to 2GB by default because of the virus scan limitation, but you can send files larger than 2GB if the resource has disabled virus scan and that has been pre-approved. [1]
+
+There are two relevant size statements in the sources:
+
+- **Default limit / upload endpoint limit:** the `POST /broker/api/v1/filetransfer/upload` endpoint is limited to **2GB** file size. [2]
+- **Theoretical maximum size:** the documentation says the **theoretical maximum size is 1.6TB**, though it is only regularly benchmarked up to **100GB**. [1]
+
+So, if you mean the normal documented limit, it is **2GB**; if virus scan is disabled and approved, larger files are possible, with a stated theoretical maximum of **1.6TB**. [1][2]",
+e0a2e9bf-8042-4ac8-a9ab-eb2f99a705b7,2026-06-02T16:11:25.138851Z,off,ue-broker-05-filstorrelse-grenser-multi,0,public-docs,new,"compound,altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.5,0.5,0.5,0.5,true,9,true,9,true,"d479e27df943e R9.9 P2.6 h2.0 or1.5 L2440 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get","d375dd431865e R20.7 P2.6 h2.0 or1.3 L1034 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Send files ;; d5f614bcedc12 R12.3 P2.5 h2.0 or0.2 L597 9/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Creating dialogs ;; df76ce6bfe672 R11.1 P1.4 h1.0 or0.2 L5804 4/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Migrating from v3 ;; d5f614bcedc12 R11.1 P1.4 h1.0 or0.0 L352 8/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Creating dialogs ;; d6139eb8c966c R10.9 P1.4 h1.0 or0.0 L647 15/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | V4 ;; d2bf0e8df239a R10.8 P2.6 h2.0 or1.7 L2760 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | News ;; daff83fa04f71 R10.1 P1.4 h1.0 or0.2 L2621 2/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Testing ;; d2ed7e4f5c088 R10.0 P2.5 h2.0 or0.2 L712 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Timepicker",2,filstørrelsesgrensene i altinn broker med og uten virusskanning hvorfor er standardgrensen 2 gb og hva må til for å sende større filer | 2 gb med virusskanning | begrenset til 2gb filstørrelse | limited to 2gb file size | virus scanning up to 2 gb | overføring av filer større enn 2 gb,false,true,0,8,2,2,0648048072bd;050f67e402d9;c5abb06660fa;0127378417da;40450a7ba0a4;65f294cac473;f2c87d24c5be;967ae193620b,c5abb06660fa;0127378417da,0127378417da;462659d19025,15463,6695,531,7226,0,3,3,"Altinn Broker er **i utgangspunktet begrenset til filer opp til 2 GB**, og denne grensen skyldes **begrensninger med viruskanningen**. [1]
+
+Samtidig sier dokumentasjonen at systemet kan håndtere **opptil 1600 GB uten virusskanning**. [2] Det står også at den **teoretiske maksimale størrelsen er 1,6 TB**, men at det bare testes regelmessig opp til **100 GB**. [1]
+
+For å sende **større filer enn 2 GB** må **tjenesteressursen ha deaktivert viruskanning**. [1] Slike ressurser som deaktiverer viruskanning må også være **forhåndsgodkjent** på grunn av potensielle juridiske risikoer. [1]
+
+Kort oppsummert:
+- **Med virusskanning:** opptil **2 GB**. [1], [2]
+- **Uten virusskanning:** opptil **1600 GB / 1,6 TB** ifølge dokumentasjonen, men med forbehold om at dette er en teoretisk maksimalgrense og a…",
+85b8ac60-4825-4213-9c55-f8e109c7d16c,2026-06-02T16:11:40.773325Z,window-2000,ue-broker-05-filstorrelse-grenser-multi,0,public-docs,new,"compound,altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.5,0.5,0.5,0.5,true,11,true,11,true,"d479e27df943e R15.0 P1.4 h1.0 or0.7 L2440 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get","d986fa1bb0934 R19.3 P2.4 h2.0 or0.1 L2447 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get ;; dd56b73485fd6 R18.0 P2.5 h2.0 or0.4 L2169 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | Basic concepts ;; d03c40ed8658c R17.0 P2.6 h2.0 or1.0 L2595 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Technical overview ;; ddfd56d7cdad9 R16.5 P2.5 h2.0 or0.5 L1514 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Status lifecycle ;; d03c40ed8658c R16.2 P1.4 h1.0 or0.3 L395 1/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Technical overview ;; d206533e990ad R15.8 P2.5 h2.0 or1.0 L1833 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pre published ;; d0fd4df1a9003 R15.7 P3.7 h3.0 or0.8 L2833 1/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | News ;; d3d582b915703 R15.6 P2.3 h2.0 or0.1 L1408 1/? ty:metadata+phrase b[0.0,0.0,0.0,0.1,0.1,0.0] | Attachments",1,altinn broker filstørrelsesgrense virusskanning 2 gb større filer standardgrense | altinn 2 broker file storage | altinn 2 broker storage | altinn 2 broker files | virusskanning utføres på vedlegg | virusskanning av vedlegg,false,,0,4,2,2,0127378417da;01fdec6b497d;9fb411afc088;967ae193620b,0127378417da;01fdec6b497d,0127378417da;462659d19025,15632,4791,480,5271,0,3,3,"Altinn Broker støtter filoverføringer på opptil **1600 GB uten virusskanning** og **opptil 2 GB med virusskanning** [1].  
+
+Det som gjør at **2 GB er standardgrensen i praksis når virusskanning brukes**, er at virusskanning er den begrensende faktoren i denne funksjonen; kilden oppgir ikke en egen teknisk begrunnelse utover at dette er grensen “with virus scanning” [1].  
+
+Hvis du vil sende **større filer enn 2 GB**, må du altså bruke **overføring uten virusskanning**, der grensen er **1600 GB** [1].  
+
+Hvis spørsmålet ditt gjelder **Altinn 2/Altinn 3-overgangsløsningen**, er det også verdt å merke seg at filer i Altinn 3 **ikke kan være større enn 1 GB** i den løsningen, fordi Altinn 2s maksimale filstørrelse er 1 GB [2].",
+193c049f-c45e-4c92-94d3-99190f68f1f7,2026-06-02T16:11:58.089424Z,off,ue-broker-05-filstorrelse-grenser-multi,1,public-docs,new,"compound,altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,3,true,3,false,"d479e27df943e R14.4 P2.5 h2.0 or1.0 L2440 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get","dd56b73485fd6 R16.5 P2.6 h2.0 or1.6 L2169 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Basic concepts ;; d03c40ed8658c R15.9 P2.6 h2.0 or1.6 L2595 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Technical overview",2,altinn broker filstørrelsesgrense virusskanning 2 gb større filer standardgrense hvorfor 2 gb hva må til sende større filer | overføring av filer større enn 2 gb | begrenset til 2gb filstørrelse | 2 gb med virusskanning | sende store filer til en eller flere mottakere | sende filer ved hjelp av altinn formidling | Altinn Broker strømme-endepunkt store filer 100 GB 1.6 TB virusskanning deaktivert forhåndsgodkjent | MaxFileSize broker large files virus scanning disabled approved | streaming endpoint broker large files,false,false,0,5,0,2,c5abb06660fa;989cc83e5afc;0648048072bd;14c59c83a93f;c48747e2b5eb,,0127378417da;462659d19025,17313,17473,921,18394,7936,5,3,"I Altinn Broker er filstørrelsesgrensen som standard **2 GB**. Dokumentasjonen sier at dette **skyldes begrensninger i virusskanningen**.
+
+Kort oppsummert:
+
+- **Med virusskanning:** opptil **2 GB**
+- **Uten virusskanning:** du kan sende **større filer**
+- **For å sende større filer:** tjenesteressursen må ha **deaktivert virusskanning**, og denne typen ressurs må være **forhåndsgodkjent av Altinn** på grunn av potensielle juridiske risikoer
+
+Det står også at:
+
+- Den **teoretiske maksimale størrelsen** er **1,6 TB**
+- Altinn gjennomfører **regelmessig testing opp til 100 GB**
+- De kan gjøre endringer for å håndtere filer større enn 1,6 TB hvis det blir nødvendig
+
+I tillegg finnes det et eget opplastingsendepunkt som er **begrenset til 2 GB** og som har **dårligere ytelse** enn å bruke den t…",
+b08b50ed-18ba-42c5-a784-eeeaaf9cd35a,2026-06-02T16:12:13.557675Z,window-2000,ue-broker-05-filstorrelse-grenser-multi,1,public-docs,new,"compound,altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.5,0.5,0.5,true,4,true,4,true,"d479e27df943e R26.2 P2.4 h2.0 or0.1 L2440 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get","db55635ab8974 R27.7 P3.7 h3.0 or1.4 L1198 1/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | About ;; d32b33dd7d78f R27.0 P1.5 h1.0 or0.5 L1578 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Broker ;; db55635ab8974 R26.6 P3.7 h3.0 or1.3 L1424 2/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | About",2,altinn broker | altinn broker managed file transfer | sende store filer til en eller flere mottakere | sende og motta store filer | ytelseskrav lagring og overføring av store filer | hva er filstørrelsesgrensene i altinn broker med og uten virusskanning hvorfor er standardgrensen 2 gb og hva må til for å sende større filer,false,true,0,7,1,2,71edc1fa4e22;f2c87d24c5be;989cc83e5afc;218bee00be34;9fb411afc088;9221b1f02039;0127378417da,0127378417da,0127378417da;462659d19025,15467,6339,536,6875,1152,3,3,"Altinn Broker støtter filoverføringer på opptil **1600 GB uten virusskanning**, og **opptil 2 GB med virusskanning** [1].
+
+Kilden sier **hva** grensen er, men **ikke hvorfor** standardgrensen er 2 GB [1]. Det er altså en **uklarhet i kildene**: de oppgir en grense, men forklarer ikke begrunnelsen for akkurat denne standarden.
+
+For å sende **større filer enn 2 GB med virusskanning**, må du derfor enten:
+- **sende uten virusskanning** for å kunne bruke grensen på opptil 1600 GB, eller
+- bruke en løsning/konfigurasjon der virusskanning ikke er en del av overføringen [1].
+
+Hvis du vil, kan jeg også formulere dette som et kort svar til bruk i dokumentasjon eller support.",
+9a70abdb-6138-4b8a-9fda-7b875352c078,2026-06-02T16:12:54.159383Z,off,ue-broker-05-filstorrelse-grenser-multi,2,public-docs,new,"compound,altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.5,0.5,0.5,0.0,true,1,true,1,true,"df9c39f17a534 R23.1 P1.3 h1.0 or0.1 L693 0/? ty:phrase b[0.1,0.0,0.0,0.1,0.1,0.0] | Very large files",,4,"altinn broker filstørrelsesgrense virusskanning 2 gb standardgrense større filer krav | 2 gb med virusskanning | overføring av filer større enn 2 gb | virusskanning utføres på vedlegg | virusskanning av vedlegg | virus-skanning | ""Very large files"" Altinn Broker 2 GB | ""større enn 2 GB"" Altinn Formidling | ""2 GB"" ""Altinn Formidling"" virusskanning | ""MaxFileSize"" Altinn Broker | ""virus scanning"" ""2 GB"" broker | ""without virus scanning"" broker file size",true,true,0,12,4,2,462659d19025;d9c56a64cc5a;3b77f705718d;54b20c98ec3b;5e79fdbd6efc;355f4b3ff745;989cc83e5afc;c5abb06660fa;c48747e2b5eb;218bee00be34;fc5d498edb61;65f294cac473,989cc83e5afc;fc5d498edb61;65f294cac473;c48747e2b5eb,0127378417da;462659d19025,40599,76345,1510,77855,58624,9,3,"I Altinn Broker er standardgrensen **2 GB**. Grunnen er at **virusskanningen** setter en praktisk begrensning.
+
+Kort oppsummert:
+
+- **Med virusskanning:** opptil **2 GB**
+- **Uten virusskanning:** du kan sende **større filer enn 2 GB**
+- **Standardgrensen er 2 GB** fordi viruskontrollen har denne begrensningen
+- **For å sende større filer** må **tjenesteressursen ha deaktivert virusskanning**
+- Ressurser som slår av virusskanning må **forhåndsgodkjennes av Altinn** på grunn av mulige juridiske risikoer
+
+Dokumentasjonen sier også at:
+
+- den **teoretiske maksimale størrelsen** er **1,6 TB**
+- Altinn tester regelmessig bare opp til **100 GB**
+- de kan gjøre endringer for å støtte filer større enn **1,6 TB** ved behov
+
+Hvis du vil, kan jeg også gi deg dette som en kort formulering du kan bruke…",
+826d37a8-2f51-4015-89d8-7cd7247a374c,2026-06-02T16:13:58.912224Z,window-2000,ue-broker-05-filstorrelse-grenser-multi,2,public-docs,new,"compound,altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.5,0.5,0.5,0.0,true,1,true,1,true,"d479e27df943e R19.0 P2.6 h2.0 or1.6 L2440 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get",,3,"altinn broker filstørrelsesgrense virusskanning 2 gb større filer standardgrense | altinn broker 2 gb med virusskanning | vedleggsopplasting med virusskanning | virusskanning av vedlegg | virusskanning utføres på vedlegg | konfigurere virus-skanning | site:broker file size limit virus scan 2 GB Altinn Broker | Altinn Broker file size limit virus scanning 2 GB | Altinn Broker virus scan attachment size limit | Altinn Broker larger files virus scan | ""2 GB"" virus scan Altinn Broker reason | ""1600 GB"" Altinn Broker virus scan | ""max filesize"" Altinn Broker resource configure | ""virusskanning"" ""2 GB"" ""Altinn Formidling""",false,false,0,11,0,2,462659d19025;9b5b6b227ea8;01fdec6b497d;63c3d3e28820;b555599db80f;5d9c89c1afec;c48747e2b5eb;7c0cab211f48;218bee00be34;86a2c4a99e3b;967ae193620b,,0127378417da;462659d19025,64751,36817,1287,38104,21376,6,3,"I Altinn Broker/Altinn Formidling er filstørrelsesgrensene slik:
+
+- **Med virusskanning:** opptil **2 GB**
+- **Uten virusskanning:** opptil **1600 GB** (1,6 TB)
+
+**Hvorfor er standardgrensen 2 GB?**  
+Dokumentasjonen sier at Broker er begrenset til 2 GB som standard **på grunn av begrensningen i virusskanningen**. Med andre ord er det viruskontrollen som setter standardtaket.
+
+**Hva må til for å sende større filer?**  
+For å sende filer **større enn 2 GB** må ressursen/tjenesten ha **deaktivert virusskanning**. Dokumentasjonen sier også at slike ressurser må **forhåndsgodkjennes** av Altinn på grunn av mulig juridisk risiko.
+
+I tillegg står det at:
+- den **teoretiske maksgrensen** er **1,6 TB**
+- løsningen er bare **regelmessig benchmarket opp til 100 GB**
+- det kan gjøres endringer for å …",
+b8d8c697-5780-4ee6-9996-54242b9144c5,2026-06-02T16:14:13.934630Z,off,ue-broker-05-filstorrelse-grenser-multi,3,public-docs,new,"compound,altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,16,true,16,false,"d479e27df943e R13.5 P2.5 h2.0 or1.0 L2440 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get","d0b365451ece4 R19.2 P2.5 h2.0 or0.4 L763 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Very large files ;; dd62d69eb54f8 R17.8 P2.6 h2.0 or1.0 L1053 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Send files ;; d03c40ed8658c R17.6 P2.6 h2.0 or1.1 L2595 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Technical overview ;; d986fa1bb0934 R17.6 P2.5 h2.0 or1.0 L2447 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get ;; d8ef3bcbb74d5 R17.0 P1.4 h1.0 or0.5 L2006 3/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | System interfaces ;; dd5abfb62e36f R16.8 P2.4 h2.0 or0.1 L1043 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Multi app solution ;; d03c40ed8658c R15.8 P1.4 h1.0 or0.3 L395 1/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Technical overview ;; da684f3f3f2ab R15.1 P1.4 h1.0 or0.2 L1619 2/? ty:content b[0.0,0.0,0.0,0.4,0.1,0.0] | Getting started",2,altinn broker filstørrelsesgrense virusskanning 2 gb større filer standardgrense hvorfor 2 gb | 2 gb med virusskanning | begrenset til 2gb filstørrelse | overføring av filer større enn 2 gb | transfer of files larger than 2 gb | altinn 2 broker file storage,false,true,0,7,1,2,c5abb06660fa;0648048072bd;355f4b3ff745;3b77f705718d;01fdec6b497d;b555599db80f;f9ee273be3a9,c5abb06660fa,0127378417da;462659d19025,15019,6479,502,6981,0,3,3,"I Altinn Broker er standardgrensen **2 GB** for filer, fordi dette skyldes **begrensninger med viruskanningen**. [1]
+
+Hvis **tjenesteressursen har deaktivert viruskanning**, kan du sende større filer. [1] For å gjøre det må ressursen som deaktiverer viruskanning **forhåndsgodkjennes** av Altinn på grunn av potensielle juridiske risikoer. [1]
+
+Det finnes også en **teoretisk maksimal størrelse på 1,6 TB**, men det er bare testet regelmessig opp til **100 GB**. [1] Dokumentasjonen sier også at de kan gjøre endringer hvis det blir nødvendig for filer større enn 1,6 TB. [1]
+
+Kort oppsummert:
+- **Med virusskanning:** opptil **2 GB**. [1]
+- **Uten virusskanning:** større filer er mulig. [1]
+- **Standardgrensen er 2 GB** fordi virusskanning setter begrensningen. [1]
+- **For større filer:** deaktiv…",
+69dbf45e-2f17-4135-b60e-712f0afcf0de,2026-06-02T16:14:29.536732Z,window-2000,ue-broker-05-filstorrelse-grenser-multi,3,public-docs,new,"compound,altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,23,false,,false,"d479e27df943e R14.2 P2.5 h2.0 or0.7 L2440 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get","da684f3f3f2ab R19.9 P1.4 h1.0 or0.1 L1619 2/? ty:content b[0.0,0.0,0.0,0.4,0.1,0.0] | Getting started ;; d986fa1bb0934 R19.8 P2.5 h2.0 or0.9 L2447 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get ;; d66fc9e336d8d R19.0 P2.6 h2.0 or0.6 L1613 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Broker ;; d03c40ed8658c R18.9 P2.6 h2.0 or1.1 L2595 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Technical overview ;; dda315c0bf7a6 R18.3 P1.4 h1.0 or0.3 L2850 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Events ;; db35ba60edb88 R18.2 P3.7 h3.0 or0.5 L981 1/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | About ;; d2bf0e8df239a R17.8 P2.6 h2.0 or1.2 L2760 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | News ;; dd56b73485fd6 R17.6 P1.4 h1.0 or0.3 L2169 3/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Basic concepts",2,altinn broker filstørrelsesgrense virusskanning 2 gb større filer standardgrense hvorfor 2 gb hva må til sende større filer | overføring av filer større enn 2 gb | 2 gb med virusskanning | begrenset til 2gb filstørrelse | sende store filer til en eller flere mottakere | sende filer ved hjelp av altinn formidling,false,true,0,3,2,2,c5abb06660fa;0648048072bd;14c59c83a93f,c5abb06660fa;0648048072bd,0127378417da;462659d19025,15599,6497,486,6983,0,3,3,"I Altinn Broker er standardgrensen **2 GB** for filer, fordi dette skyldes **begrensninger med viruskanningen** [1].  
+
+Hvis **tjenesteressursen har deaktivert viruskanning**, kan du likevel sende større filer [1]. For å gjøre dette må ressursen som deaktiverer viruskanning være **forhåndsgodkjent av Altinn**, fordi det kan innebære **potensielle juridiske risikoer** [1].  
+
+Det finnes også en **teoretisk maksimal størrelse på 1,6 TB**, men det er bare testet regelmessig opp til **100 GB** [1]. For opplastingsoperasjonen `POST /broker/api/v1/filetransfer/upload` er det eksplisitt oppgitt at den er **begrenset til 2 GB** og at ytelsen er dårligere enn å bruke strømme-endepunktet i to operasjoner [2].",
+7b5cc652-3cbf-42bc-981b-679397a8317e,2026-06-02T16:14:44.215560Z,off,ue-broker-05-filstorrelse-grenser-multi,4,public-docs,new,"compound,altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,17,true,17,false,"d479e27df943e R13.5 P2.5 h2.0 or1.0 L2440 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get","d0b365451ece4 R19.2 P2.5 h2.0 or0.4 L763 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Very large files ;; d66fc9e336d8d R18.6 P2.5 h2.0 or0.3 L1613 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Broker ;; dd62d69eb54f8 R17.8 P2.6 h2.0 or1.0 L1053 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | Send files ;; d03c40ed8658c R17.6 P2.6 h2.0 or1.1 L2595 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Technical overview ;; d986fa1bb0934 R17.6 P2.5 h2.0 or1.0 L2447 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get ;; db35ba60edb88 R17.2 P2.6 h2.0 or0.5 L981 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | About ;; dd56b73485fd6 R17.1 P2.5 h2.0 or0.3 L2169 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | Basic concepts ;; d29d0b5359f2a R16.9 P2.5 h2.0 or0.9 L962 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get",1,altinn broker filstørrelsesgrense virusskanning 2 gb større filer standardgrense hvorfor 2 gb | 2 gb med virusskanning | begrenset til 2gb filstørrelse | overføring av filer større enn 2 gb | transfer of files larger than 2 gb | virusskanning av vedlegg,false,,0,3,2,2,c5abb06660fa;0648048072bd;989cc83e5afc,c5abb06660fa;0648048072bd,0127378417da;462659d19025,14677,4750,508,5258,0,3,3,"I Altinn Broker er standardgrensen **2 GB** for filer, og dette gjelder fordi løsningen er **begrenset av virusskanning** [1]. Den konkrete operasjonen **“Initialiser og last opp filoverføring”** via `POST /broker/api/v1/filetransfer/upload` er også eksplisitt begrenset til **2 GB filstørrelse** [2].
+
+Hvis **virusskanning er deaktivert** på tjenesteressursen, kan du sende større filer [1]. For å gjøre dette må ressursen som deaktiverer virusskanning være **forhåndsgodkjent av Altinn** på grunn av potensielle juridiske risikoer [1].
+
+Når det gjelder større filer, oppgir dokumentasjonen at den **teoretiske maksimale størrelsen er 1,6 TB**, men at det bare testes regelmessig opp til **100 GB** [1]. Det betyr at større filer enn 2 GB er mulig i prinsippet, men bare under de nevnte forutsetning…",
+07d6c156-bddf-4eba-8106-4d1a00bcf50c,2026-06-02T16:14:59.163346Z,window-2000,ue-broker-05-filstorrelse-grenser-multi,4,public-docs,new,"compound,altinn-broker,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,17,true,17,false,"d479e27df943e R14.2 P2.5 h2.0 or0.7 L2440 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get","d986fa1bb0934 R19.8 P2.5 h2.0 or0.9 L2447 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get ;; d66fc9e336d8d R19.0 P2.6 h2.0 or0.6 L1613 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Broker ;; d03c40ed8658c R18.9 P2.6 h2.0 or1.1 L2595 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Technical overview ;; db35ba60edb88 R18.2 P3.7 h3.0 or0.5 L981 1/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | About ;; d2bf0e8df239a R17.8 P2.6 h2.0 or1.2 L2760 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | News ;; dd56b73485fd6 R17.6 P2.5 h2.0 or0.3 L2169 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | Basic concepts ;; db35ba60edb88 R17.5 P1.4 h1.0 or0.1 L1423 2/? ty:content b[0.0,0.0,0.0,0.4,0.1,0.0] | About ;; d8ef3bcbb74d5 R17.5 P1.4 h1.0 or0.5 L2006 3/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | System interfaces",1,altinn broker filstørrelsesgrense virusskanning 2 gb større filer standardgrense hvorfor 2 gb hva må til sende større filer | altinn 2 broker service | overføring av filer større enn 2 gb | 2 gb med virusskanning | altinn 2 broker file storage | altinn 2 broker storage,false,,0,5,2,2,967ae193620b;989cc83e5afc;c48747e2b5eb;14c59c83a93f;65f294cac473,967ae193620b;c48747e2b5eb,0127378417da;462659d19025,14945,4781,522,5303,0,3,3,"I Altinn Formidling er grensen **opptil 1600 GB uten virusskanning**, mens den er **inntil 2 GB med virusskanning**. [1]
+
+Det som gjør at **2 GB** fremstår som standardgrensen i kildene, er at løsningen beskrives som støttende for store filer **“inntil 2 GB med virusskanning”**, mens større filer kan håndteres **uten virusskanning**. [1]
+
+For å sende **større filer enn 2 GB** må du altså bruke overføring **uten virusskanning**; da støttes filer opptil **1600 GB**. [1]
+
+Det finnes også en annen, mer spesifikk begrensning i overgangsløsningen mellom Altinn 2 og Altinn 3: der kan filer i Altinn 3 **ikke være større enn 1 GB**, fordi dette er maksimal filstørrelse i Altinn 2, og tjenesten i Altinn 3 skal konfigureres med denne **MaxFileSize**-begrensningen. [2] Dette er en egen overgangsløsnin…",
+ecf55c4f-5738-4e9b-8e39-90ea87058312,2026-06-02T16:15:16.163256Z,off,ue-events-02-publisere-cloudevents,0,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"d771a2f1ad237 R22.4 P2.6 h2.0 or0.5 L1776 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events","db66bdced0835 R23.3 P2.6 h2.0 or0.1 L1769 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events",2,hvordan publiserer jeg en egendefinert hendelse til altinn events og hvilket maskinporten-scope og format trengs | altinn events | hvordan publisere hendelser | maskinporten-scopet altinn events publish | 403 forbidden ikke autorisert til å publisere hendelser | altinn events referanse,false,true,0,7,6,1,5ea03a5c4cbb;03f0f1c41d4c;0a559cd885b9;c1ef5ee35ec8;dc1ebd66d4e7;c07bb4053f5d;7bf2e91e7cb6,5ea03a5c4cbb;03f0f1c41d4c;0a559cd885b9;c1ef5ee35ec8;dc1ebd66d4e7;7bf2e91e7cb6,5ea03a5c4cbb,16997,6153,521,6674,0,3,3,"For å publisere en egendefinert hendelse til Altinn Events, bruker du **Events API-et** for publisering av generiske hendelser, altså `POST /events`. Dette endepunktet er ment for hendelser som ikke er strengt tatt Altinn Studio App-hendelser, men som publiseres av en hendelsesprodusent med nødvendige tilgangsscopene. [1]
+
+Request body skal sendes som `application/cloudevents+json`, og innholdet skal være en **Cloud Event serialisert som en JSON-streng**. [1] Minstekravene som er beskrevet er blant annet:
+- `id` for Cloud Event
+- `type` for Cloud Event
+- `source` for Cloud Event
+- `resource` som peker på ressursen hendelsen gjelder
+- `resourceinstance`
+- `alternativesubject` hvis du vil ha en alternativ, mer kjent identifikator for abonnenter [1][3]
+
+Ressursen må være registrert i **Altinn…",
+1ac61467-4d64-455a-aafe-9963de0a7792,2026-06-02T16:15:30.876894Z,window-2000,ue-events-02-publisere-cloudevents,0,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,6,true,6,true,"d771a2f1ad237 R20.5 P1.2 h1.0 or0.1 L1776 1/? ty:phrase b[0.1,0.0,0.0,0.1,0.1,0.0] | Publish events","db66bdced0835 R23.6 P2.7 h2.0 or1.4 L1769 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events ;; d23a9d95b4a7b R21.7 P1.4 h1.0 or0.4 L1326 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Setup subscription ;; def28a8b441dc R21.1 P2.6 h2.0 or0.7 L3398 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Query events ;; de08de51d14d0 R20.8 P1.4 h1.0 or0.2 L690 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Api access ;; d4c4c16f0bedc R20.7 P1.4 h1.0 or0.2 L726 2/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Maskinporten",2,altinn events publish custom event maskinporten scope format | maskinporten scope altinn events publish | how to publish altinn app events | define custom events in your altinn app | altinn events custom webhook | altinn events cloud events format,false,true,0,6,2,1,aa953fcdd337;5ea03a5c4cbb;03f0f1c41d4c;57604105825c;88aba1ea5b4d;c1ef5ee35ec8,aa953fcdd337;5ea03a5c4cbb,5ea03a5c4cbb,14711,6054,392,6446,0,3,3,"Du publiserer en egendefinert/generisk hendelse ved å bruke **`POST /events`** med innholdstypen **`application/cloudevents+json`**. Request body skal inneholde Cloud Event serialisert som en JSON-streng, og må minst ha feltene **id**, **type**, **source** og **resource**; i tillegg kan du sende andre CloudEvents v1.0.2-felter og egendefinerte extension-attributter. Ressursen må være registrert i Altinn Resource Registry før hendelsen publiseres, og `resource`-verdien skal ha formatet **`urn:altinn:resource:[prop1].[prop2]`**. [1][2]
+
+For autentisering kreves Maskinporten-scopet **`altinn:events.publish`**. [1][2]
+
+Hvis hendelsen gjelder Altinn-relaterte data, anbefales det også å bruke en alternativ `subject`, for eksempel **`/person/16069412345`** eller **`/organisation/987564321`**. [1]…",
+d9b198db-538a-4d88-be45-af1483d609c9,2026-06-02T16:15:46.929908Z,off,ue-events-02-publisere-cloudevents,1,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,2,true,2,false,"d771a2f1ad237 R19.8 P2.6 h2.0 or0.5 L1776 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events","d289753b2d062 R20.1 P2.5 h2.0 or0.1 L935 6/? ty:content+metadata b[0.0,0.0,0.0,0.4,0.1,0.0] | Events",2,hvordan publiserer jeg en egendefinert hendelse til altinn events og hvilket maskinporten-scope og format trengs | maskinporten-scopet altinn events publish | altinn events referanse | hvordan publisere hendelser | altinn events arkitektur | 403 forbidden ikke autorisert til å publisere hendelser,false,true,0,5,4,1,c07bb4053f5d;dc1ebd66d4e7;6bb3bf9c0bd6;e58150ad083a;00e5bcad5f27,c07bb4053f5d;6bb3bf9c0bd6;e58150ad083a;00e5bcad5f27,5ea03a5c4cbb,16051,6357,481,6838,0,3,3,"For å publisere en egendefinert hendelse til Altinn Events bruker du **Events API** for publisering av hendelser; dokumentasjonen sier at denne delen dekker de spesifikke API-kravene for publisering av hendelser, mens den generelle API-dokumentasjonen brukes hvis du trenger en innføring i hvordan API-et brukes. [1]
+
+Hvis du mener en **ikke-app / generisk hendelse**, kan den publiseres av et **applikasjonseier-system**, og det hendelsesproduserende systemet må være registrert som en **ressurs i ressursregisteret**. [3]
+
+For tilgang via Maskinporten/Altinn er det viktig å skille mellom to ting i kildene:  
+- For å **abonnere** på hendelser må autorisasjonspolicyen gi tilgang til handlingen **""subscribe""**. [2]  
+- Kildene du har gitt sier **ikke eksplisitt hvilket Maskinporten-scope som krev…",
+4781db3f-80d7-4d5a-89f7-903357926a7a,2026-06-02T16:16:02.868274Z,window-2000,ue-events-02-publisere-cloudevents,1,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,5,true,5,true,"d771a2f1ad237 R20.5 P2.6 h2.0 or0.4 L1776 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events","db66bdced0835 R23.6 P2.7 h2.0 or1.6 L1769 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events ;; d23a9d95b4a7b R21.7 P1.4 h1.0 or0.5 L1326 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Setup subscription ;; def28a8b441dc R21.1 P2.6 h2.0 or0.9 L3398 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Query events ;; d4c4c16f0bedc R20.7 P1.5 h1.0 or0.3 L726 2/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Maskinporten",2,altinn events publish custom event maskinporten scope format | maskinporten scope altinn events publish | altinn events egendefinerte hendelser | hvordan publisere hendelser maskinporten scope | hvordan publisere altinn app-hendelser | altinn events api maskinporten scope,false,true,0,6,2,1,aa953fcdd337;5ea03a5c4cbb;0a559cd885b9;008e8e3de50f;c07bb4053f5d;dc1ebd66d4e7,aa953fcdd337;5ea03a5c4cbb,5ea03a5c4cbb,15935,6282,485,6767,0,3,3,"For å publisere en **egendefinert/generisk hendelse** til **Altinn Events** bruker du **`POST /events`** med innholdstypen **`application/cloudevents+json`**. Request body skal være en **CloudEvent serialisert som en JSON-streng**. [1][2]
+
+API-et krever autentisering og Maskinporten-scopet **`altinn:events.publish`**. [1][2]
+
+CloudEvent-en må minst inneholde disse feltene:  
+- **`id`**: ID for Cloud Event, type `string`  
+- **`type`**: hendelsestype, type `string`  
+- **`source`**: hendelseskilde, type `URI`  
+- **`resource`**: ID for ressursen hendelsen gjelder, type `string` [1][2]
+
+Ressursen må være registrert i **Altinn Resource Registry** før hendelsen publiseres, og formatet på `resource`-feltet skal være **`urn:altinn:resource:[prop1].[prop2]`**. [1][2]
+
+I tillegg kan du sende andre…",
+d20893ad-3671-4b6d-b1dc-7a9e597e1f53,2026-06-02T16:16:28.176443Z,off,ue-events-02-publisere-cloudevents,2,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"d771a2f1ad237 R22.4 P2.6 h2.0 or0.7 L1776 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events","db66bdced0835 R23.3 P2.6 h2.0 or0.3 L1769 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events",2,hvordan publisere hendelser | publisering av hendelser til altinn | altinn events cloud events format | maskinporten-scopet altinn events publish | altinn events | hvordan publiserer jeg en egendefinert hendelse til altinn events og hvilket maskinporten-scope og format trengs,false,true,0,6,2,1,c07bb4053f5d;5ea03a5c4cbb;e58150ad083a;aa953fcdd337;0a559cd885b9;c1ef5ee35ec8,5ea03a5c4cbb;aa953fcdd337,5ea03a5c4cbb,25307,6349,486,6835,0,3,3,"For å publisere en **egendefinert/generisk hendelse** til Altinn Events bruker du endepunktet **`POST /events`** med innholdstypen **`application/cloudevents+json`**. Request body skal inneholde en **CloudEvent serialisert som en JSON-streng**. [1][2]
+
+Dette API-et krever autentisering og Maskinporten-scopet **`altinn:events.publish`**. [1][2]
+
+Hendelsen må blant annet ha disse feltene:
+- **id** for Cloud Event
+- **type** for hendelsen
+- **source** som URI
+- **resource** som refererer til en ressurs registrert i Altinn Ressursregister før publisering, med format **`urn:altinn:resource:[prop1].[prop2]`** [1][2]
+
+I tillegg kan du bruke:
+- **resourceinstance**
+- **alternativesubject**  
+  Alternativt subject anbefales hvis `subject` er en intern ID, og for Altinn-relaterte hendelser er format…",
+ecafc1f4-aeb7-435a-9f5a-0835ba2bd94c,2026-06-02T16:16:42.086851Z,window-2000,ue-events-02-publisere-cloudevents,2,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,9,true,9,true,"d771a2f1ad237 R19.0 P2.7 h2.0 or1.3 L1776 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events","d771a2f1ad237 R24.4 P2.7 h2.0 or1.7 L515 0/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events ;; d93530cba0f9e R24.0 P2.7 h2.0 or1.2 L749 0/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish app events ;; ddabe88fb244e R23.7 P2.6 h2.0 or1.0 L5909 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events ;; d0a2f096ac4bf R22.8 P2.5 h2.0 or0.9 L533 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Developer guides ;; d289753b2d062 R21.3 P3.7 h3.0 or1.4 L935 6/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Events ;; dfa9ffa9a1707 R20.5 P2.5 h2.0 or1.2 L971 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Subject authorization ;; dc90b2e25cfc0 R19.7 P1.5 h1.0 or0.7 L450 5/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Authenticating ;; dd0b9e024b331 R19.5 P2.5 h2.0 or0.3 L871 5/? ty:content+metadata b[0.0,0.0,0.0,0.4,0.0,0.0] | Studio",1,hvordan publisere hendelser til altinn | publisering av hendelser til altinn | altinn events cloud events format | maskinporten-scopet altinn events publish,false,,0,5,1,1,c07bb4053f5d;5ea03a5c4cbb;dc1ebd66d4e7;50da0cfe12bd;e58150ad083a,5ea03a5c4cbb,5ea03a5c4cbb,13908,4552,443,4995,0,3,3,"For å publisere en egendefinert hendelse til Altinn Events bruker du endepunktet **`POST /events`** med innholdstypen **`application/cloudevents+json`**. Request body skal inneholde en **Cloud Event serialisert som en JSON-streng**. [1]
+
+API-et krever autentisering og Maskinporten-scopet **`altinn:events.publish`**. [1]
+
+Hendelsen må minst inneholde disse feltene:
+- **id** for Cloud Event, type `string`
+- **type** for hendelsestype, type `string`
+- **source** for hendelseskilde, type `URI`
+- **resource** for ID-en til ressursen hendelsen gjelder [1]
+
+Ressursen må være registrert i **Altinn Ressursregister** før hendelsen publiseres, og `resource`-verdien skal ha formatet **`urn:altinn:resource:[prop1].[prop2]`**. [1]
+
+I tillegg kan du sende andre felter fra **Cloud Event v1.0.2** samt egen…",
+f9de6c3b-204c-4041-a285-d63fd5bb3bba,2026-06-02T16:16:57.632364Z,off,ue-events-02-publisere-cloudevents,3,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,27,false,,false,"d771a2f1ad237 R20.0 P2.7 h2.0 or1.3 L1776 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events","d36ec26077176 R26.1 P2.7 h2.0 or1.7 L2456 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events ;; d88a046dc8cb8 R25.6 P2.6 h2.0 or1.0 L2038 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events ;; d67126610708c R25.1 P2.7 h2.0 or1.5 L2471 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events ;; d18ad58ac84c1 R24.1 P1.4 h1.0 or0.0 L449 1/? ty:content b[0.0,0.0,0.0,0.4,0.1,0.0] | Subject authorization ;; da730786b890e R23.5 P2.6 h2.0 or0.6 L921 0/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events ;; db66bdced0835 R23.2 P2.7 h2.0 or1.1 L1769 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events ;; d88a046dc8cb8 R23.2 P3.7 h3.0 or0.7 L919 6/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Events ;; d88a046dc8cb8 R23.2 P2.6 h2.0 or0.8 L732 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events",2,hvordan publiserer jeg en egendefinert hendelse til altinn events og hvilket maskinporten-scope og format trengs | hvordan publisere hendelser | publisering av hendelser til altinn | altinn events cloud events format | maskinporten-scopet altinn events publish | altinn events,false,true,0,6,3,1,aa953fcdd337;6054ce197d57;03f0f1c41d4c;0a559cd885b9;fe4925c278e6;88dee7203f14,aa953fcdd337;0a559cd885b9;88dee7203f14,5ea03a5c4cbb,15543,6212,526,6738,0,3,3,"For å publisere en **egendefinert hendelse** til Altinn Events bruker du **`POST /events`** med innholdstype **`application/cloudevents+json`**. Request body skal inneholde cloud eventet serialisert som en JSON-streng, og eventet må følge **CloudEvents v1.0.2** med Altinn-spesifikke felter som blant annet **`resource`** og eventuelt **`resourceinstance`** og **`alternativesubject`**. [1][2][3]
+
+Dette API-et krever autentisering og Maskinporten-scope **`altinn:events.publish`**. [1]
+
+Kort oppsummert:
+- **Endpoint:** `POST /events` [1]
+- **Content-Type:** `application/cloudevents+json` [1]
+- **Maskinporten-scope:** `altinn:events.publish` [1]
+- **Format:** CloudEvents JSON / `Cloud Event v1.0.2`, med Altinn-feltene `resource` (obligatorisk), `resourceinstance` og `alternativesubject` ved beh…",
+f357bfce-1046-42ce-b0fb-866e0415657f,2026-06-02T16:17:12.737281Z,window-2000,ue-events-02-publisere-cloudevents,3,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,4,true,4,true,"d771a2f1ad237 R21.8 P2.6 h2.0 or1.0 L1776 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Publish events","d289753b2d062 R24.5 P3.7 h3.0 or1.4 L935 6/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Events ;; d771a2f1ad237 R24.5 P2.7 h2.0 or1.7 L515 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Publish events ;; dfa9ffa9a1707 R22.4 P2.5 h2.0 or1.2 L971 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Subject authorization",2,hvordan publiserer jeg en egendefinert hendelse til altinn events og hvilket maskinporten-scope og format trengs | altinn events | hvordan publisere hendelser | publisering av hendelser til altinn | publishing events to altinn | altinn events cloud events format,false,true,0,5,1,1,c07bb4053f5d;5ea03a5c4cbb;e58150ad083a;dc1ebd66d4e7;4aa2b0740446,5ea03a5c4cbb,5ea03a5c4cbb,15103,6525,476,7001,0,3,3,"For å publisere en **egendefinert/generisk hendelse** til Altinn Events bruker du **`POST /events`** med innholdstypen **`application/cloudevents+json`**. Request body skal være en **CloudEvent serialisert som en JSON-streng**. [1]
+
+Dette API-et krever autentisering og Maskinporten-scopet **`altinn:events.publish`**. [1]
+
+Hendelsen må minst inneholde disse feltene i CloudEvent-en:  
+- **id** (string)  
+- **type** (string)  
+- **source** (URI)  
+- **resource** (ID for ressursen hendelsen gjelder) [1]
+
+I tillegg må **ressursen være registrert i Altinn Ressursregister før Cloud Events publiseres**, og `resource`-feltet skal ha formatet **`urn:altinn:resource:[prop1].[prop2]`**. [1]
+
+Hvis du vil, kan jeg også vise et konkret JSON-eksempel på en slik publisering.",
+756559f4-bbf6-4969-bc87-000d316ee714,2026-06-02T16:17:27.976136Z,off,ue-events-02-publisere-cloudevents,4,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,2,true,2,false,"d771a2f1ad237 R22.8 P1.2 h1.0 or0.1 L1776 1/? ty:phrase b[0.1,0.0,0.0,0.1,0.1,0.0] | Publish events","db66bdced0835 R24.9 P2.7 h2.0 or1.4 L1769 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events",2,hvordan publisere hendelser til altinn | publisering av hendelser til altinn | altinn events | altinn events integration | Maskinporten scope Altinn Events publish events | event format Altinn Events JSON CloudEvents | custom event Altinn Events scope,false,false,0,3,2,1,c07bb4053f5d;dc1ebd66d4e7;e58150ad083a,c07bb4053f5d;e58150ad083a,5ea03a5c4cbb,15237,4631,452,5083,0,3,3,"For å publisere en **egendefinert hendelse** til Altinn Events, må du bruke **Events API** for publisering av hendelser; denne delen av dokumentasjonen gjelder de spesifikke API-kravene for publisering av hendelser. [1]
+
+Det er imidlertid en viktig avgrensning: **publisering av _app_-hendelser** er bare for Altinn-apper opprettet og distribuert med **altinn.studio**, mens **generiske, eller ikke-app hendelser** kan publiseres av et **applikasjonseier-system**. [2] Hvis du mener en egendefinert hendelse utenfor en Altinn App, er det altså denne kategorien som er relevant. [2]
+
+For slike publiserende systemer må systemet være **registrert som en ressurs i ressursregisteret**. [2] Abonnement på hendelser er åpent tilgjengelig, men **abonnementer må autoriseres av utgiveren**, og **Altinns vil…",
+d83c3182-cfd7-4235-ae3c-ced38fa22df4,2026-06-02T16:17:46.250573Z,window-2000,ue-events-02-publisere-cloudevents,4,public-docs,new,"altinn-events,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,5,true,5,true,"d771a2f1ad237 R21.8 P2.7 h2.0 or0.8 L1776 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events","d289753b2d062 R24.5 P3.7 h3.0 or1.3 L935 6/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Events ;; d771a2f1ad237 R24.5 P2.7 h2.0 or1.7 L515 0/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Publish events ;; d93530cba0f9e R24.0 P1.2 h1.0 or0.2 L749 0/? ty:phrase b[0.1,0.0,0.0,0.1,0.1,0.0] | Publish app events ;; dfa9ffa9a1707 R22.4 P2.5 h2.0 or1.2 L971 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Subject authorization",2,hvordan publiserer jeg en egendefinert hendelse til altinn events og hvilket maskinporten-scope og format trengs | altinn events | hvordan publisere hendelser | publisering av hendelser til altinn | maskinporten-scopet altinn events publish | altinn events integration,false,true,0,5,1,1,c07bb4053f5d;5ea03a5c4cbb;dc1ebd66d4e7;e58150ad083a;b343326766cf,5ea03a5c4cbb,5ea03a5c4cbb,18273,6221,479,6700,0,3,3,"For å publisere en **egendefinert/generisk hendelse** til Altinn Events bruker du **POST /events** med innholdstypen **`application/cloudevents+json`**. Request body skal inneholde en **Cloud Event serialisert som en JSON-streng**. [1]
+
+Dette API-et krever autentisering og Maskinporten-scopet **`altinn:events.publish`**. [1]
+
+Det du må ha med i Cloud Event-en er blant annet:  
+- **id** for Cloud Event  
+- **type** for hendelsen  
+- **source** som en URI  
+- **resource** som peker til ressursen hendelsen gjelder  
+- **subject** eller alternativ identifikator, hvis relevant [1]
+
+Ressursen må være registrert i **Altinn Ressursregister** før hendelsen publiseres, og `resource`-feltet skal ha formatet **`urn:altinn:resource:[prop1].[prop2]`**. [1]
+
+Hvis du vil, kan jeg også vise et konkret ekse…",
+e133089f-f41f-4881-b0e1-e7bcca89bdd7,2026-06-02T16:18:01.266266Z,off,ue-studio-01-skjul-felt-uttrykk,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,2,altinn studio rule hide submit button age field empty under 18 visibility rules | dynamic rules show hide fields | dynamic expressions used to hide components | hide or show the question | show hide entire pages with expressions | dynamics to show or hide fields,false,true,0,5,3,1,ddd75a7ab3b7;121c6cd3f2b4;dbed56c98d89;6221dfa7179c;423a185e2e62,ddd75a7ab3b7;121c6cd3f2b4;6221dfa7179c,5579a6f92633,15013,6293,384,6677,0,3,3,"Du kan gjøre dette med en **dynamisk expression** på knappen, siden expressions kan brukes for blant annet `hidden`-tilstanden, og for gruppekomponenter også på `edit.saveButton` osv. [1][2]
+
+Slik setter du det opp i Altinn Studio:
+
+1. Legg inn komponenten for **alder** i layouten. [3]
+2. Gå til **Expressions**-panelet i Studio og legg en expression på **`hidden`** for komponenten som representerer **«Send inn»**-knappen. [1]
+3. Lag uttrykket slik at knappen skjules når alder er tom eller under 18.  
+   - Hvis aldersfeltet er tomt, skal uttrykket gi `true` for `hidden`.  
+   - Hvis alderen er under 18, skal uttrykket også gi `true` for `hidden`.  
+4. Lagre og test løsningen. [3]
+
+Viktig: I kildene er det ikke oppgitt et konkret expression-eksempel for akkurat dette scenariet, så du må selv…",
+255fb89f-a684-4dd0-9095-558fe581a578,2026-06-02T16:18:20.380942Z,window-2000,ue-studio-01-skjul-felt-uttrykk,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,55,false,,false,"d567750d54810 R— P1.2 h1.0 or0.1 L4025 3/? ty:phrase b[0.0,0.0,0.0,0.1,0.1,0.0] | Dynamics","db6696fced712 R21.2 P3.7 h3.0 or0.9 L2682 4/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Dynamic ;; d59b28eada0b9 R21.1 P1.4 h1.0 or0.8 L10172 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Eformidling ;; d720ea141e12c R21.0 P1.4 h1.0 or0.8 L2846 3/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Deployment ;; db6696fced712 R20.8 P3.6 h3.0 or0.6 L2187 6/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Dynamic ;; dd5abfb62e36f R20.8 P2.2 h2.0 or0.0 L592 4/? ty:metadata+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] | Multi app solution ;; dfec75743093f R20.5 P1.4 h1.0 or0.9 L22286 1/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Payment ;; d6ad5e1644b22 R20.4 P1.4 h1.0 or0.8 L2418 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Insight ;; dd6129d645653 R20.4 P2.2 h2.0 or0.2 L11406 1/? ty:metadata+phrase b[0.0,0.0,0.0,0.1,0.0,0.0] | Table",2,hvordan setter jeg opp en regel i altinn studio som skjuler send inn -knappen når aldersfeltet er tomt eller under 18 | skjule send inn -knappen | dynamikk for å vise eller skjule felter | Altinn Studio regler skjule knapp alder 18 | Altinn Studio expressions hide button age field | show hide button rule altinn studio,false,false,0,6,3,1,7c459c76633e;c8a35f2b6f9d;1b01da8e1300;59fc6201428d;81cb9c87b529;107a5ee1ff4b,1b01da8e1300;81cb9c87b529;107a5ee1ff4b,5579a6f92633,19113,6370,527,6897,0,3,3,"Du setter dette opp som en **dynamikkregel for vis/skjul** i Altinn Studio, og regelen bør knyttes til **«Send inn»-knappen** slik at den skjules når aldersfeltet er tomt eller under 18 [1][3].
+
+Siden oppgaven sier at innsending bare skal være mulig når feltet **«Alder»** er fylt ut og verdien er **større enn eller lik 18**, er den naturlige regelen å vise knappen bare når alderen er minst 18, og skjule den i alle andre tilfeller [3]. Dette er samme type klient-side dynamikk som brukes for **vis/skjul felter** [1].
+
+I praksis gjør du dette ved å:
+1. Åpne **Dynamikk**-seksjonen for komponenten i Altinn Studio [3].
+2. Lage en regel som sjekker aldersfeltet.
+3. Knytte regelen til **«Send inn»-knappen** som et felt som skal skjules når betingelsen ikke er oppfylt [1][3].
+
+Hvis du gjør dette i …",
+dccab5bb-21bc-4bab-b3eb-2ea690aea61e,2026-06-02T16:18:35.644409Z,off,ue-studio-01-skjul-felt-uttrykk,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,1,altinn studio rule hide submit button age field empty under 18 conditional visibility rules | dynamic rules show hide fields | conditional rendering rules | altinn studio logic rule | expressions in altinn studio | build expressions in altinn studio,false,,0,7,6,1,ddd75a7ab3b7;3a829e0e9b1c;56c322502a25;50945c100532;bcf5f1f5310f;86f79bf953a1;dc15f59b3dec,ddd75a7ab3b7;3a829e0e9b1c;56c322502a25;50945c100532;bcf5f1f5310f;86f79bf953a1,5579a6f92633,15262,4354,391,4745,0,3,3,"Du kan gjøre dette med en **expression** på komponentens boolean-felt, typisk `hidden`, siden Studio støtter uttrykk for `hidden`, `required` og `readOnly` [1]. For å skjule en knapp som «Send inn», må du derfor knytte en expression til `hidden` på den aktuelle komponenten, hvis knappen er eksponert som en komponent med et slikt felt [1][3].
+
+Siden du vil skjule knappen når aldersfeltet er **tomt eller under 18**, trenger du en logikk som sjekker to ting: at verdien mangler, eller at verdien er mindre enn 18. Studio kan bygge slike uttrykk, og det er også mulig å skrive dem direkte i freestyle hvis du trenger noe mer avansert enn det toolen kan tolke [2][4].
+
+Et typisk oppsett vil være noe i denne retningen:
+
+```json
+""hidden"": [""or"",
+  [""equals"", [""dataModel"", ""aldersfelt""], null],
+  [""les…",
+07f224b7-e28a-4503-a360-64bde4a3b60a,2026-06-02T16:18:51.701685Z,window-2000,ue-studio-01-skjul-felt-uttrykk,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,2,altinn studio rule hide submit button age field empty under 18 visibility rules | hide or show the question | dynamics to show or hide fields | dynamic rules show hide fields | form field shown or hidden | show hide entire pages with expressions,false,true,0,4,3,1,121c6cd3f2b4;50945c100532;86f79bf953a1;6221dfa7179c,121c6cd3f2b4;86f79bf953a1;6221dfa7179c,5579a6f92633,16056,6239,395,6634,0,3,3,"Du kan sette dette opp som en **regel for vis/skjul felt** i Altinn Studio, altså en regel i `conditionalRuleHandlerObject` / `conditionalRuleHandlerHelper` for å styre om komponenten skal vises eller skjules. [2][3]
+
+Siden du vil skjule **«Send inn»-knappen** når aldersfeltet er **tomt eller under 18**, må regelen returnere `false` når verdien mangler eller er mindre enn 18, og `true` ellers. Dette er i tråd med hvordan dynamiske uttrykk brukes for å vise/skjule komponenter. [1][2]
+
+Et eksempel på en slik regel kan være:
+
+```javascript
+var conditionalRuleHandlerObject = {
+  hideSubmitButtonIfUnder18: (obj) => {
+    if (obj.age == null || obj.age === """") return false;
+    return Number(obj.age) >= 18;
+  },
+};
+
+var conditionalRuleHandlerHelper = {
+  hideSubmitButtonIfUnder18: () => {
+    re…",
+2ec37adf-deb4-49ba-9dd5-5c71f6889848,2026-06-02T16:19:06.833997Z,off,ue-studio-01-skjul-felt-uttrykk,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,5,true,5,true,"d567750d54810 R15.6 P2.7 h2.0 or1.7 L4025 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | Dynamics","d567750d54810 R18.4 P2.7 h2.0 or1.4 L731 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | Dynamics ;; d8bd1ca5a2894 R15.8 P2.5 h2.0 or0.4 L2154 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Rule handler ;; db6696fced712 R15.8 P2.5 h2.0 or0.2 L2868 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Dynamic ;; d24940c1377a4 R15.7 P2.5 h2.0 or0.4 L2171 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Rule handler",1,altinn studio regel skjul send inn knapp aldersfelt tom under 18 visning regler | send inn-knappen er skjult | skjule send inn -knappen | skjul felt dersom | verdien i feltet alder er mindre enn 18 | verdien er større eller lik 18,false,,0,4,2,1,107a5ee1ff4b;5579a6f92633;eeb66ab1f210;6fe55c59f219,107a5ee1ff4b;5579a6f92633,5579a6f92633,15130,4786,422,5208,0,3,3,"Du setter opp en **logikkregel** på knappen **«Send inn»** og velger **«Skjul felt dersom»** som handling. I Altinn Studio gjøres dette fra **Dynamikk**-seksjonen i konfigurasjonspanelet for komponenten [1][2].
+
+Slik gjør du det:
+
+1. Klikk **«Lag en ny logikkregel»** og velg **«Skjul felt dersom»** for knappen [2].  
+2. Klikk **«Legg til underuttrykk»** og bygg første del av regelen slik at den sjekker om feltet **`alder`** er **mindre enn 18**:
+   - **Type**: **Datamodell**
+   - **Datamodellfelt**: `alder`
+   - **Operator**: **er mindre enn**
+   - **Andre operand**: **Tall** med verdi `18` [2]
+3. Legg til et nytt underuttrykk med **OG**-kobling, og sett det opp slik at det sjekker om **`alder`** er **tomt**:
+   - **Type**: **Datamodell**
+   - **Datamodellfelt**: `alder`
+   - **Operator**:…",
+45465430-e911-41c1-9637-d9cd188830bf,2026-06-02T16:19:26.171723Z,window-2000,ue-studio-01-skjul-felt-uttrykk,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d567750d54810 R22.5 P2.7 h2.0 or1.3 L4025 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | Dynamics",,2,sette opp en regel i altinn studio som skjuler send inn -knappen når aldersfeltet er tomt eller under 18 | skjule send inn -knappen | verdien i feltet alder er mindre enn 18 | Altinn Studio rules hide button when field is empty or less than 18 | visibility rule button age less than 18 Altinn | Send inn button rule Altinn Studio,false,false,0,4,2,1,5579a6f92633;107a5ee1ff4b;4ee08d566f29;c5bd9cda2f82,5579a6f92633;107a5ee1ff4b,5579a6f92633,19336,6463,525,6988,0,3,3,"Du setter opp en **logikkregel** som skjuler komponenten **«Send inn»** når aldersfeltet er **tomt** eller **mindre enn 18** [1][2].
+
+Slik gjør du det i Altinn Studio [1][2]:
+
+1. Gå til **Dynamikk** for komponenten **«Send inn»** og klikk **«Lag en ny logikkregel»** [1][2].  
+2. Velg handlingen **«Skjul felt dersom»** [1].  
+3. Klikk **«Legg til underuttrykk»** og lag første uttrykk slik at det sjekker om feltet **Alder** er **mindre enn 18** [1].  
+   - **Første operand**: velg **Datamodell** → feltet **alder** [1]  
+   - **Operator**: velg **er mindre enn** [1]  
+   - **Andre operand**: velg **Tall** og skriv **18** [1]  
+4. Klikk **«Lagre og lukk»** [1].  
+5. Legg til et nytt **underuttrykk** og koble det med **OG** til det første uttrykket, slik at begge må være oppfylt [1].  
+6. Sett …",
+c052567c-6204-4220-a026-361f12b3539b,2026-06-02T16:19:41.878252Z,off,ue-studio-01-skjul-felt-uttrykk,3,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,47,false,,false,"d567750d54810 R— P1.2 h1.0 or0.0 L4025 3/? ty:phrase b[0.0,0.0,0.0,0.1,0.1,0.0] | Dynamics","dcab432c85c40 R25.9 P3.8 h3.0 or1.9 L624 2/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Expressions ;; dcab432c85c40 R25.7 P2.6 h2.0 or1.2 L1364 4/? ty:content+metadata b[0.0,0.0,0.0,0.4,0.1,0.0] | Expressions ;; da979511a6b1b R25.0 P2.5 h2.0 or1.1 L1011 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Expressions ;; dcab432c85c40 R23.7 P3.7 h3.0 or0.8 L3012 3/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Expressions ;; dcab432c85c40 R22.5 P1.4 h1.0 or0.8 L1624 1/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Expressions ;; da979511a6b1b R22.2 P1.4 h1.0 or0.5 L4585 1/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Expressions ;; dc09076a46827 R20.2 P2.5 h2.0 or0.6 L3136 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Flowcontrol ;; da979511a6b1b R19.2 P2.5 h2.0 or0.3 L7550 10/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Expressions",2,altinn studio rule hide send inn button when age field is empty or under 18 visibility rule expression | altinn studio logic rule | altinn studio expressions | expression tool in altinn studio | send inn button | hideontask,false,true,0,5,5,1,ddd75a7ab3b7;3a829e0e9b1c;55885dbe10b6;50945c100532;121c6cd3f2b4,ddd75a7ab3b7;3a829e0e9b1c;55885dbe10b6;50945c100532;121c6cd3f2b4,5579a6f92633,15704,6378,387,6765,0,3,3,"Du kan sette dette opp som en **expression** på komponentfeltet for **`hidden`** i Altinn Studio [1][5].
+
+Siden du vil skjule **«Send inn»**-knappen når aldersfeltet er **tomt eller under 18**, må regelen være en kombinasjon av to vilkår med **`or`**:  
+1. aldersfeltet er tomt, eller  
+2. aldersfeltet er mindre enn 18 [3][4].
+
+Altinn Studio støtter at du bygger slike uttrykk i Expressions-panelet, og du kan legge til flere sub expressions og kombinere dem med **`and`** eller **`or`** [3]. Studio er også begrenset til å koble expressions til boolske komponentfelt, og mer komplekse uttrykk kan skrives direkte i freestyle hvis nødvendig [4][2].
+
+Et typisk oppsett blir derfor:
+
+- Velg komponenten for **«Send inn»**
+- Sett expression på **`hidden`**
+- Legg inn første vilkår for at aldersfeltet …",
+1a4a4e2e-2453-4863-83a6-8ea6c82608b7,2026-06-02T16:19:58.245284Z,window-2000,ue-studio-01-skjul-felt-uttrykk,3,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,2,altinn studio rule hide submit button when age field is empty or under 18 visibility rules | dynamic rules show hide fields | show hide entire pages with expressions | Altinn Studio hide component with expression button visibility | button visibility expression altinn studio | component hidden expression submit button altinn,false,false,0,3,2,1,121c6cd3f2b4;dbed56c98d89;86f79bf953a1,dbed56c98d89;86f79bf953a1,5579a6f92633,16363,4552,411,4963,0,3,3,"Du kan gjøre dette med en **conditional rule** i `RuleHandler.js`, altså en funksjon i `conditionalRuleHandlerObject` som returnerer `true` når knappen skal skjules. Slike regler brukes til å vise/skjule felt basert på formverdier, og de defineres i `conditionalRuleHandlerObject` med tilhørende input i `conditionalRuleHandlerHelper`.[1][2]
+
+Siden du vil skjule **«Send inn»-knappen** når **aldersfeltet er tomt eller under 18**, kan regelen se slik ut:
+
+```javascript
+var conditionalRuleHandlerObject = {
+  hideSubmitButtonWhenAgeIsMissingOrUnder18: (obj) => {
+    if (obj.age == null || obj.age === """") return true;
+    return Number(obj.age) < 18;
+  },
+};
+
+var conditionalRuleHandlerHelper = {
+  hideSubmitButtonWhenAgeIsMissingOrUnder18: () => {
+    return {
+      age: ""Alder"",
+    };
+  },
+};
+`…",
+921ba839-0e56-4c30-a030-8c245d7e37cd,2026-06-02T16:20:15.483707Z,off,ue-studio-01-skjul-felt-uttrykk,4,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,3,true,3,true,"d567750d54810 R16.4 P2.6 h2.0 or1.2 L4025 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | Dynamics","d567750d54810 R19.9 P2.6 h2.0 or1.0 L731 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | Dynamics ;; daff114645e89 R16.5 P1.4 h1.0 or0.2 L669 1/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Signing",2,altinn studio regel skjule send inn-knappen når aldersfeltet er tomt eller under 18 | skjule send inn -knappen | send inn-knappen er skjult | send inn-knappen blir borte | send inn-knappen dukker opp | skjule eller vise felter,false,true,0,5,2,1,107a5ee1ff4b;5579a6f92633;eeb66ab1f210;ab90ac4da926;59fc6201428d,107a5ee1ff4b;5579a6f92633,5579a6f92633,17237,6511,475,6986,0,3,3,"Sett opp en **dynamikkregel** på komponenten **«Send inn»-knappen** slik at den **skjules dersom** uttrykket er sant. I veiledningen er målet nettopp å skjule knappen når **«Alder»** er tomt eller under 18. [1][2]
+
+Slik gjør du det: [2]
+
+1. Klikk **«Lag en ny logikkregel»** og velg **«Skjul felt dersom»**.  
+2. Velg **«Legg til underuttrykk»**.  
+3. Klikk **«Endre»** på underuttrykket.  
+4. Sett opp første del av uttrykket slik at det sjekker feltet **`alder`**:
+   - **Første operand**: velg **Datamodell** → feltet **`alder`**
+   - **Operator**: velg **«er mindre enn»**
+   - **Andre operand**: velg **Tall** og skriv **18**  
+5. Klikk **«Lagre og lukk»**.  
+6. Legg til et nytt **underuttrykk** med **OG**-kobling, og sett det opp slik at det sjekker om **`alder`** er tomt:
+   - **Operator**:…",
+cbe56c91-174f-471c-8eea-43f6cbe3da76,2026-06-02T16:20:30.573820Z,window-2000,ue-studio-01-skjul-felt-uttrykk,4,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d567750d54810 R17.4 P2.7 h2.0 or1.7 L4025 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | Dynamics",,1,altinn studio regel skjul send inn knapp aldersfelt tomt under 18 conditional rendering rules | skjul felt dersom verdien i feltet alder er mindre enn 18 | conditional rendering rules vis skjul send inn-knappen | skjule send inn -knappen dersom verdien i feltet alder er mindre enn 18 | send inn-knappen er skjult | vises skjules basert på samme regel,false,,0,3,1,1,5579a6f92633;4ee08d566f29;eeb66ab1f210,5579a6f92633,5579a6f92633,15088,4616,459,5075,0,3,3,"Du setter opp en **logikkregel** på knappe-komponenten slik at den blir skjult når betingelsen er oppfylt. I eksempelet i kilden er handlingen for knappen **«Skjul felt dersom»**. [1]
+
+Slik gjør du det: [1]
+
+1. Klikk på **«Lag en ny logikkregel»** og velg **«Skjul felt dersom»**. [1]  
+2. Klikk **«Legg til underuttrykk»** og deretter **«Endre»** for å redigere uttrykket. [1]  
+3. Lag første underuttrykk slik at **datamodellfeltet `alder`** er **mindre enn 18**:  
+   - **Første operand**: velg **Type = Datamodell** og **Datamodellfelt = alder**. [1]  
+   - **Operator**: velg **«er mindre enn»**. [1]  
+   - **Andre operand**: velg **Type = Tall** og skriv inn **18**. [1]  
+4. Lag et nytt underuttrykk med **OG-kobling** til det første uttrykket, og sett det opp slik at **`alder` er tomt**:  
+…",
+ea507d42-82fb-4007-882f-e5a37c74ee86,2026-06-02T16:20:43.176323Z,off,ue-studio-02-pdf-service-task,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,1,altinn studio add process step generate pdf app process pdf generation process step | altinn studio process | pdf generation | altinn studio process editor | basic process in altinn studio | generate pdf,false,,0,7,5,1,55763b148355;8bafb85eb013;9ac73c063b20;7b95678c470c;82a2ed1d0943;eb1acd66f695;0cf5d64aba63,55763b148355;8bafb85eb013;7b95678c470c;82a2ed1d0943;eb1acd66f695,673de6e9a85d,12601,4371,341,4712,0,3,3,"To add a PDF-generating step in your app’s process, use the **standard service task** for **Generate PDF** and add it as a step in the process definition. [1][3][4]
+
+A few important points:
+
+- This PDF generation is now meant to run **as a service task** in the process, not outside the process flow. If your app was set up before version 8.9, you should disable the old behavior by turning off **`enablePdfGeneration`** on all data types. [1]
+- Service tasks require at least **Altinn NuGet packages version 8.9.0**. [1][3][5]
+- In the process, the app will generate the PDF automatically when it reaches that service task, and then continue to the next step, such as the receipt. [2]
+
+If you want, I can also show the exact process configuration pattern for adding the **Generate PDF** service task…",
+0f1063b3-ef9d-4cae-9e8c-634fcfceb68c,2026-06-02T16:20:57.439455Z,window-2000,ue-studio-02-pdf-service-task,0,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,2,true,2,false,"deacad0b6a864 R23.0 P2.5 h2.0 or0.4 L22651 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf","deacad0b6a864 R23.2 P2.6 h2.0 or1.0 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf",2,altinn studio add step generates pdf in process process task pdf generation documentation | pdf is only generated at the end of a process task | pdf generation as a standard service task | altinn studio process | basic process in altinn studio | altinn studio process editor,false,true,0,5,4,1,55763b148355;8bafb85eb013;eb1acd66f695;7b95678c470c;695bdc197f5b,55763b148355;8bafb85eb013;eb1acd66f695;7b95678c470c,673de6e9a85d,14261,6131,329,6460,0,3,3,"To add a step that generates a PDF in your app’s process, you add a **service task** to the process and use the standard **PDF generation** service task [1][3][4]. A service task is a process task that runs automatically on the server, and PDF generation is one of the standard examples [3][4].
+
+In practice, the PDF is generated when the process reaches that service task, and then the app automatically continues to the next step in the process [2].
+
+A few important notes:
+- This requires at least **Altinn NuGet packages version 8.9.0** [1][3][4].
+- If your app was set up before version 8.9, you should disable the old PDF functionality by turning off **`enablePdfGeneration`** on all data types [1].
+- If you want to configure the PDF filename, you can use **`<altinn:filenameTextResourceKey>`*…",
+3c443944-3965-4cc2-8e6c-765ef584771d,2026-06-02T16:21:09.249650Z,off,ue-studio-02-pdf-service-task,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,1,true,1,false,"deacad0b6a864 R23.8 P2.5 h2.0 or0.4 L22651 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf",,1,altinn studio add step generates pdf in process how to add pdf generation step process | set up pdf generation as a service task | pdf generation as a standard service task | altinn studio process editor | altinn studio business process | altinn studio process,false,,0,5,3,1,55763b148355;8bafb85eb013;7b95678c470c;eb1acd66f695;695bdc197f5b,55763b148355;8bafb85eb013;7b95678c470c,673de6e9a85d,11809,4291,316,4607,0,3,3,"Add a **service task** to your process and use the standard **PDF** service task in Altinn Studio [1][3].
+
+In practice, the app can generate PDFs as a standard service task that you add as a step in the process [1]. Service tasks are process tasks that run automatically on the server, and **PDF generation** is one of the standard examples [3].
+
+A few important details:
+- Service tasks require at least **Altinn NuGet packages version 8.9.0** [1][3].
+- If your app was set up before version 8.9, you should disable the old PDF generation outside the process definition by turning off **`enablePdfGeneration`** on all data types [1].
+- If you want to configure the PDF filename, you can optionally use **`<altinn:filenameTextResourceKey>`**; if you omit it, the PDF uses the application name as the …",
+f8e63b5d-b5a5-4d78-b2a0-999db0cbb605,2026-06-02T16:21:23.387672Z,window-2000,ue-studio-02-pdf-service-task,1,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,2,true,2,false,"deacad0b6a864 R22.9 P2.5 h2.0 or0.2 L22651 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf","deacad0b6a864 R23.8 P2.6 h2.0 or0.8 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf",2,altinn studio add step generates pdf in process app process pdf generation process step | pdf is only generated at the end of a process task | pdf generation as a standard service task | set up pdf generation as a service task | first process step defined for the app | add them as steps in the app s process,false,true,0,6,2,1,55763b148355;7b95678c470c;eb1acd66f695;695bdc197f5b;8136ebf36f55;78752be7dc13,55763b148355;7b95678c470c,673de6e9a85d,14136,6463,358,6821,0,3,3,"To add PDF generation to your app’s process in Altinn Studio, add it as a **service task** in the process definition. A service task is a process task that runs automatically on the server, and **PDF generation** is one of the standard service tasks you can use. [1][2]
+
+A few important points:
+
+- **Service tasks require at least version 8.9.0 of the Altinn NuGet packages.** [1][2]
+- If your app was set up **before version 8.9**, you should **turn off `enablePdfGeneration` on all data types** so the old PDF generation logic outside the process definition is disabled. [1]
+- You add the PDF generation step as part of the process, like any other service task step. [1][2]
+
+If you want, I can also explain the exact steps in the process editor for adding the PDF service task.",
+47d8159f-ac8e-427f-9e72-d6b356ba8492,2026-06-02T16:21:37.439096Z,off,ue-studio-02-pdf-service-task,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,2,true,2,false,"deacad0b6a864 R22.8 P2.5 h2.0 or0.5 L22651 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf","deacad0b6a864 R23.5 P2.6 h2.0 or1.3 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf",2,altinn studio add step generates pdf in process process step pdf generation | pdf generation as a standard service task | set up pdf generation as a service task | altinn studio process | basic process in altinn studio | altinn studio process editor,false,true,0,5,2,1,55763b148355;8bafb85eb013;7b95678c470c;eb1acd66f695;695bdc197f5b,55763b148355;7b95678c470c,673de6e9a85d,14049,6138,320,6458,0,3,3,"Add a **service task** to your process and configure it as **PDF generation**. In Altinn Studio, PDF generation is now set up as a standard service task that you add as a step in the process [1][2].
+
+A few important points:
+- Service tasks run automatically on the server, and the process usually moves on to the next step when the task is finished [2].
+- PDF generation as a service task requires at least **Altinn NuGet packages version 8.9.0** [1][2].
+- If your app was set up before version 8.9, you should disable the old PDF functionality by turning off **`enablePdfGeneration`** on all data types [1].
+
+If you want, I can also describe the exact process configuration steps for adding the PDF service task.",
+6141c464-dee8-4c67-8618-7a6792be38d4,2026-06-02T16:21:50.752169Z,window-2000,ue-studio-02-pdf-service-task,2,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,2,true,2,false,"deacad0b6a864 R21.9 P2.6 h2.0 or0.6 L22651 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf","deacad0b6a864 R23.0 P2.6 h2.0 or1.4 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf",1,altinn studio add process step generate pdf app process pdf generation step documentation | pdf generation as a standard service task | generate pdf | set up pdf generation as a service task | add them as steps in the app s process | first process step defined for the app,false,,0,6,5,1,55763b148355;8bafb85eb013;7b95678c470c;82a2ed1d0943;eb1acd66f695;695bdc197f5b,55763b148355;8bafb85eb013;7b95678c470c;82a2ed1d0943;eb1acd66f695,673de6e9a85d,13311,4437,345,4782,0,3,3,"To add a PDF-generating step in your app’s process, use the standard **service task** for **Generate PDF** and add it as a step in the process flow in Altinn Studio [3][4].
+
+A service task is a process task that runs automatically on the server, and PDF generation is one of the included standard service tasks [3][4]. The PDF guide says the app can generate PDFs as a standard service task that you add as a step in the process [1].
+
+A few important notes:
+- This requires at least **Altinn NuGet packages version 8.9.0** [1][3][5].
+- If your app was set up before version 8.9, you should disable the old PDF functionality by turning off **`enablePdfGeneration`** on all data types [1].
+- If you want to configure the PDF filename, you can optionally use **`<altinn:filenameTextResourceKey>`**; if y…",
+031ec5cf-b12f-4118-a9f1-35ad323408a0,2026-06-02T16:22:03.651973Z,off,ue-studio-02-pdf-service-task,3,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,true,2,true,2,false,"deacad0b6a864 R22.5 P2.5 h2.0 or0.5 L22651 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf","deacad0b6a864 R23.2 P2.6 h2.0 or1.3 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf",1,altinn studio add step generates pdf in process process task pdf generation documentation | pdf is only generated at the end of a process task | set up pdf generation as a service task | pdf generation as a standard service task | extend the application process with an additional process task | add them as steps in the app s process,false,,0,5,3,1,55763b148355;8bafb85eb013;eb1acd66f695;7b95678c470c;695bdc197f5b,55763b148355;eb1acd66f695;7b95678c470c,673de6e9a85d,12898,4544,357,4901,0,3,3,"To add a PDF-generating step in your app’s process, use a **service task** and configure **PDF generation as a standard service task** in the process definition. The app can generate PDFs as a step in the process, and service tasks run automatically on the server. [1][2][3]
+
+In practice, this means:
+- Add a **service task** to the process. [2][3]
+- Configure that task for **PDF generation**. [1]
+- Make sure your app uses **Altinn NuGet packages version 8.9.0 or later**. [1][2][3]
+
+If you previously had PDF generation set up before version 8.9, you should **turn off `enablePdfGeneration` on all data types** so the old functionality does not run outside the process definition. [1]
+
+If you want, I can also show the exact Altinn Studio/process setup steps.",
+abeb5a1f-4cad-4113-a3f3-7d15cae7a6ae,2026-06-02T16:22:17.982185Z,window-2000,ue-studio-02-pdf-service-task,3,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,true,2,true,2,false,"deacad0b6a864 R23.4 P2.5 h2.0 or0.5 L22651 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf","deacad0b6a864 R23.6 P2.6 h2.0 or1.1 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf",2,altinn studio add step generates pdf in process process step pdf generation | altinn studio process editor pdf generation | pdf generation as a standard service task | set up pdf generation as a service task | pdf generation service task | generate pdf,false,true,0,6,4,1,55763b148355;8bafb85eb013;7b95678c470c;82a2ed1d0943;eb1acd66f695;695bdc197f5b,55763b148355;7b95678c470c;82a2ed1d0943;eb1acd66f695,673de6e9a85d,14328,6182,332,6514,0,3,3,"To add a step that generates a PDF in your app’s process, use a **service task** and add the standard **Generate PDF** task as a step in the process flow. [2][3]
+
+In Altinn Studio, PDF generation is described as a standard service task that you add as a step in the process. [1] Service tasks run automatically on the server, and standard examples include **PDF generation** and **eFormidling**. [2][3]
+
+A few important notes:
+- Service tasks require at least **Altinn NuGet packages version 8.9.0**. [1][2][4]
+- If your app was set up before version 8.9, you should disable the old PDF functionality by turning off **`enablePdfGeneration`** on all data types. [1]
+
+If you want, I can also show how this looks in the process definition.",
+39a15b17-8db4-470d-89fe-a1013ae1d74c,2026-06-02T16:22:31.131475Z,off,ue-studio-02-pdf-service-task,4,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,true,3,true,3,false,"deacad0b6a864 R22.0 P2.5 h2.0 or0.5 L22651 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf","deacad0b6a864 R23.9 P2.6 h2.0 or1.3 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pdf ;; dd2b549498e65 R22.4 P2.6 h2.0 or0.6 L957 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Service tasks",1,altinn studio add process step generate pdf process step pdf generation app process | set up pdf generation as a service task | pdf generation as a standard service task | altinn studio process editor | altinn studio business process | altinn studio process,false,,0,5,3,1,55763b148355;7b95678c470c;eb1acd66f695;695bdc197f5b;d738ada53303,55763b148355;7b95678c470c;eb1acd66f695,673de6e9a85d,13148,4370,335,4705,0,3,3,"To add a PDF-generating step in your app’s process, use a **service task** in the process definition. The PDF functionality is described as a standard service task that you add as a step in the process [1]. Service tasks run automatically on the server, and PDF generation is one of the standard examples [2][3].
+
+If you are setting this up in an app created before version 8.9, you should also **turn off `enablePdfGeneration` on all data types** so the old non-service-task PDF generation does not run outside the process definition [1]. This setup requires at least **Altinn NuGet packages version 8.9.0** [1][2][3].
+
+If you want, I can also explain the exact Altinn Studio/process configuration steps, but the provided sources only state the concept, not the detailed click-by-click setup.",
+7f41c751-032a-4757-8922-d381cafe5cc4,2026-06-02T16:22:44.951974Z,window-2000,ue-studio-02-pdf-service-task,4,public-docs,new,"altinn-studio,hard",complete,0,false,chunks+answer,false,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,1,altinn studio add step generates pdf in process how to add pdf generation step process | pdf generation | generate pdf | generated pdf in the confirm view | need for an extra task to be able to retrieve the pdf,false,,0,7,4,1,8bafb85eb013;55763b148355;a3f1c6ae509b;9ac73c063b20;7b95678c470c;eb1acd66f695;82a2ed1d0943,55763b148355;7b95678c470c;eb1acd66f695;82a2ed1d0943,673de6e9a85d,13819,4445,371,4816,0,3,3,"To add a PDF-generating step in your app’s process, use a **service task** and choose the standard service task **Generate PDF** in the process flow. Altinn Studio supports PDF generation as a service task, and service tasks are process tasks that run automatically on the server [1][2][4].
+
+A few important details:
+
+- **Service tasks require at least version 8.9.0** of the Altinn NuGet packages [1][2][3].
+- In the process, PDF generation is added as a **service task step** [1][2][3].
+- If your app was set up before version 8.9, you should **disable the old PDF generation outside the process definition** by turning off `enablePdfGeneration` on all data types [1].
+
+So, the closest source term is: **add a service task step for “Generate PDF” in the process** [4].",
+005a885a-2cc4-4485-8783-34d6f66978d0,2026-06-02T16:23:00.293633Z,off,ue-corr-01-events-webhook-subscription,0,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,2,hvordan setter jeg opp et webhook-abonnement for å motta hendelser fra altinn correspondence og hvilke filtre må jeg bruke som mottaker | altinn correspondence apis | getting started with altinn correspondence | motta hendelser fra altinn events | spørre etter hendelser eller sette opp abonnement | hvordan sette opp et abonnement,false,true,0,2,2,1,50da0cfe12bd;97269952693c,50da0cfe12bd;97269952693c,f8eabe6d3ce3,15340,6212,456,6668,0,3,3,"For å sette opp et webhook-abonnement for å motta hendelser fra Altinn Correspondence, må du først opprette et **hendelsesabonnement** i Altinn Events og konfigurere endepunktet/webhooken der hendelsene skal leveres. Dette abonnementet brukes til å styre hvor hendelsene fra megleren havner. [1][2]
+
+Som **mottaker** må du bruke disse filtrene: [1]
+
+- **resourceFilter**: `""urn:altinn:resource:"" + Ressurs-IDen for meldingstjenesten` [1]
+- **subjectFilter**: `""urn:altinn:organization:identifier-no:{{recipient_orgnumber}}""` [1]
+
+I tillegg kan du bruke **typeFilter** hvis du bare vil motta bestemte hendelsestyper. Hvis du ikke spesifiserer et **typeFilter**, vil du motta alle hendelser du har tilgang til. [1]
+
+Kort sagt: for mottakere er minimumsoppsettet **resourceFilter + subjectFilter**. [1]
+…",
+005982a9-dbbc-4bea-8be9-49158fee5fe7,2026-06-02T16:23:16.129421Z,window-2000,ue-corr-01-events-webhook-subscription,0,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,27,false,,false,"d7a010952d7b4 R7.6 P1.2 h1.0 or0.6 L6240 0/? ty:phrase b[0.0,0.0,0.0,0.1,0.0,0.0] | Events","d48ed2b895c61 R23.8 P2.6 h2.0 or1.7 L352 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Grant subscriber access ;; dae894f1e7b46 R20.4 P1.2 h1.0 or0.0 L673 2/? ty:phrase b[0.0,0.0,0.0,0.1,0.0,0.0] | Query events ;; d6e11f2bdef93 R20.2 P2.6 h2.0 or0.5 L813 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Query events ;; d99b415acaa9e R20.0 P1.2 h1.0 or0.1 L1317 0/? ty:phrase b[0.0,0.0,0.0,0.1,0.0,0.0] | Setup subscription ;; d289753b2d062 R19.8 P1.2 h1.0 or0.0 L2113 3/? ty:phrase b[0.0,0.0,0.0,0.1,0.0,0.0] | Events ;; ddabe88fb244e R19.0 P1.5 h1.0 or0.6 L5909 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Events ;; d289753b2d062 R18.7 P2.3 h2.0 or0.2 L935 6/? ty:metadata+phrase b[0.0,0.0,0.0,0.1,0.1,0.0] | Events ;; dda315c0bf7a6 R18.5 P2.6 h2.0 or0.7 L2850 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events",2,hvordan setter jeg opp et webhook-abonnement for å motta hendelser fra altinn correspondence og hvilke filtre må jeg bruke som mottaker | altinn correspondence apis | getting started with altinn correspondence | spørre etter hendelser eller sette opp abonnement | motta hendelser fra altinn events | webhook subscription altinn correspondence,false,true,0,3,3,1,50da0cfe12bd;54a01225a6af;97269952693c,50da0cfe12bd;54a01225a6af;97269952693c,f8eabe6d3ce3,15834,6233,440,6673,0,3,3,"For å sette opp et webhook-abonnement må du opprette et **hendelsesabonnement** i Altinn Events ved å bruke `POST /subscriptions`, og registrere ditt eget endepunkt/webhook som skal motta hendelsene asynkront. Dette er den anbefalte måten å motta hendelser på. [2][3]
+
+Som mottaker av **Altinn Correspondence** må du bruke disse filtrene: [1]
+
+- `resourceFilter`: `""urn:altinn:resource:"" + Ressurs-IDen for meldingstjenesten` [1]
+- `subjectFilter`: `""urn:altinn:organization:identifier-no:{{recipient_orgnumber}}""` [1]
+
+`subjectFilter` brukes for å begrense hendelsene til bare den autoriserte mottakeren for den spesifikke hendelsen, slik at innholdet beskyttes og synligheten reduseres. [1]
+
+Hvis du også vil begrense hvilke hendelsestyper du mottar, kan du i tillegg bruke `typeFilter`. Hvis du ik…",
+d6d05b47-0292-47f8-a262-b0cc20546827,2026-06-02T16:23:30.850398Z,off,ue-corr-01-events-webhook-subscription,1,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,2,altinn correspondence apis | getting started with altinn correspondence | motta hendelser fra altinn events | hvordan sette opp et abonnement | spørre etter hendelser eller sette opp abonnement | hvordan setter jeg opp et webhook-abonnement for å motta hendelser fra altinn correspondence og hvilke filtre må jeg bruke som mottaker,false,true,0,2,2,1,54a01225a6af;50da0cfe12bd,54a01225a6af;50da0cfe12bd,f8eabe6d3ce3,14720,6194,446,6640,0,3,3,"For å sette opp et webhook-/hendelsesabonnement for Altinn Correspondence, må du opprette et abonnement med `POST /subscriptions` og bruke filteregenskaper for å spesifisere hvilke hendelser du vil motta. Dette abonnementet brukes til å konfigurere endepunktet der hendelsene leveres. [1][2]
+
+Som **mottaker** skal du bruke disse filtrene: [2]
+
+- `resourceFilter`  
+  - `""urn:altinn:resource:"" + Ressurs-IDen for meldingstjenesten`
+- `subjectFilter`  
+  - `""urn:altinn:organization:identifier-no:{{recipient_orgnumber}}""`
+
+`subjectFilter` brukes for å begrense hendelsene til den autoriserte mottakeren for den spesifikke hendelsen. [2]
+
+Du kan også legge til `typeFilter` hvis du bare vil motta bestemte hendelsestyper, men det er valgfritt. Hvis du ikke spesifiserer `typeFilter`, mottar du alle he…",
+387c3bc0-ef2f-4001-b25e-eca4974c44c2,2026-06-02T16:23:43.956274Z,window-2000,ue-corr-01-events-webhook-subscription,1,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,62,false,,false,"d7a010952d7b4 R— P1.4 h1.0 or0.2 L6240 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Events","d8ef3bcbb74d5 R21.3 P3.6 h3.0 or0.4 L3576 2/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.0,0.0] | System interfaces ;; ddabe88fb244e R20.9 P1.5 h1.0 or1.0 L5909 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Events ;; d20df5f0bec48 R19.3 P1.4 h1.0 or0.4 L4325 6/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Getting dialog details ;; d759ed27a9806 R19.2 P2.4 h2.0 or0.2 L968 10/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Solution architecture ;; d759ed27a9806 R19.1 P2.5 h2.0 or1.1 L709 9/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Solution architecture ;; d99b415acaa9e R18.7 P1.4 h1.0 or0.6 L1317 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Setup subscription ;; dd56b73485fd6 R18.6 P2.5 h2.0 or0.2 L1760 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Basic concepts ;; d759ed27a9806 R18.4 P2.5 h2.0 or0.5 L615 8/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Solution architecture",1,altinn correspondence webhook abonnement mottaker filtre hendelser dokumentasjon | altinn correspondence abonnement via webhook | notifikasjon gjennom webhooks,false,,0,3,2,1,50da0cfe12bd;b02654551ce4;54a01225a6af,50da0cfe12bd;54a01225a6af,f8eabe6d3ce3,13104,4443,338,4781,0,3,3,"For å sette opp et webhook-abonnement for hendelser fra **Altinn Correspondence**, må du opprette et abonnement på **POST /subscriptions** og bruke filtere for å spesifisere hvilke hendelser du vil motta. Hendelser fra Correspondence krever scopet **`altinn:events.subscribe`**; hvis du abonnerer som **tjenesteeier**, trenger du også **`altinn:serviceowner`**. [2]
+
+Som **mottaker** må du bruke disse filtrene: [1]
+
+- **`resourceFilter`**: `""urn:altinn:resource:"" + Ressurs-IDen for meldingstjenesten` [1]
+- **`subjectFilter`**: `""urn:altinn:organization:identifier-no:{{recipient_orgnumber}}""` [1]
+
+`subjectFilter` brukes for å begrense hendelsene til den autoriserte mottakeren for den aktuelle hendelsen, slik at innholdet beskyttes og synligheten reduseres. [1]
+
+Du kan også legge til **`typeFil…",
+59b5dd2b-0a04-48f9-af90-bd9d02d516af,2026-06-02T16:23:57.220145Z,off,ue-corr-01-events-webhook-subscription,2,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,4,true,4,true,"d7a010952d7b4 R— P2.7 h2.0 or1.7 L6240 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events","da960f8906327 R— P3.6 h3.0 or0.9 L1516 2/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.0,0.0] | Notifications ;; dceb922e09bb8 R— P3.6 h3.0 or0.3 L705 4/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Informationmodel ;; d6438c090daa0 R— P3.6 h3.0 or0.2 L705 4/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Informationmodel",1,altinn correspondence webhook subscription receiver filters events subscription setup recipient filters correspondence webhook abonnement mottaker filtre | events webhook subscription | event subscription resourcefilter | partyuuid for the recipient | filter by recipient | default correspondence recipient,false,,0,6,2,1,f8eabe6d3ce3;bfdaedc30147;f741a6b4c048;380a9be077bd;0bf8236799cc;06705dd6f823,f8eabe6d3ce3;380a9be077bd,f8eabe6d3ce3,13262,4279,392,4671,0,3,3,"For å sette opp et webhook-abonnement for Altinn Correspondence må du først opprette en **Event Subscription** i Altinn Events, og bruke den til å konfigurere endepunktet der hendelsene skal leveres. [1][2]
+
+Som **mottaker** må du bruke disse filtrene: [1]
+
+- **resourceFilter**  
+  - `""urn:altinn:resource:"" + Resource Id for Correspondence Resource` [1]
+- **subjectFilter**  
+  - `""urn:altinn:organization:identifier-no:{{recipient_orgnumber}}""` [1]
+
+`subjectFilter` brukes for å begrense hendelser til den autoriserte mottakeren for den aktuelle hendelsen, og dette er viktig for sikkerhet og redusert synlighet. [1]
+
+Du kan også legge til en **Type Filter** hvis du bare vil motta bestemte hendelsestyper; hvis du ikke spesifiserer det, får du alle hendelser du har tilgang til. [1]
+
+Kort sagt:  …",
+e98bc796-9e6e-41a0-827f-5e21d66d8736,2026-06-02T16:24:11.598327Z,window-2000,ue-corr-01-events-webhook-subscription,2,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,31,false,,false,"d7a010952d7b4 R— P1.4 h1.0 or0.7 L6240 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Events","d99b415acaa9e R— P2.7 h2.0 or1.7 L1317 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Setup subscription ;; d99b415acaa9e R— P2.6 h2.0 or0.7 L6345 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Setup subscription ;; ddabe88fb244e R— P2.5 h2.0 or1.1 L5909 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events ;; df5047e477203 R— P2.5 h2.0 or0.6 L490 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Process app events ;; d80777fb563b1 R— P2.5 h2.0 or1.0 L1621 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get ;; dceb02a02b9d7 R— P2.5 h2.0 or1.0 L11663 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Serviceowner ;; dd42c77ed5fe8 R— P2.5 h2.0 or1.0 L803 8/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Access management ;; d9430b63d8fc5 R— P2.5 h2.0 or0.9 L3235 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemprovider",1,altinn correspondence webhook abonnement mottaker filtre hendelser subscription recipient filters | altinn correspondence abonnement via webhook | filteregenskapene for å spesifisere hvilke hendelser | partyuuid for mottaker,false,,0,3,1,1,54a01225a6af;a7d7ed7a67e4;137951ad1a40,54a01225a6af,f8eabe6d3ce3,14377,4351,371,4722,0,3,3,"For å sette opp et webhook-abonnement bruker du `POST /subscriptions` og sender inn en abonnementsforespørsel med en webhook-URL som Altinn Events kan poste hendelser til. Webhook-endepunktet ditt må svare med en HTTP-status i `2xx`-området, og det må også akseptere valideringshendelsen `platform.events.validatesubscription` som Altinn Events sender ved oppsett av abonnementet. HTTPS-endepunkter må bruke offentlig gyldige TLS-sertifikater; selvsignerte sertifikater støttes ikke. [1]
+
+For å motta hendelser fra **Altinn Correspondence** må du bruke filtere som matcher hendelsene du vil abonnere på. Det viktigste er: [1]
+
+- `resourceFilter` er påkrevd og må matche ressursen på hendelsene eksakt. For hendelser fra andre kilder enn app-hendelser er dette ressursfeltet det som identifiserer kild…",
+9c1204df-75eb-45c7-9d32-1ebea71c9c1a,2026-06-02T16:24:40.783807Z,off,ue-corr-01-events-webhook-subscription,3,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,4,true,4,false,"d7a010952d7b4 R— P2.7 h2.0 or1.7 L6240 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events","dadb879dfbcac R— P3.7 h3.0 or1.6 L528 5/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.0,0.0] | Receivingdata ;; d07c5300e222a R— P3.6 h3.0 or0.5 L400 1/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Detecting changes ;; d23a9d95b4a7b R— P2.7 h2.0 or1.1 L6302 1/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Setup subscription",1,altinn correspondence webhook subscription receiver filters events setup recipient filters | filter by recipient | webhook subscribers | events webhook subscription | requirements for the webhook to receive events | partyuuid for the recipient,true,,0,8,5,1,4aa2b0740446;419ac7c7afc5;fb897d22bdf4;0f655506e33b;025dfba543d5;6cf768b5a4ac;6fcb16e12b0e;c4464cc8c17e,4aa2b0740446;419ac7c7afc5;fb897d22bdf4;6fcb16e12b0e;c4464cc8c17e,f8eabe6d3ce3,29184,22184,1036,23220,14208,6,3,"For å sette opp et **webhook-abonnement** for hendelser fra **Altinn Correspondence**, registrerer du et eget endpoint/webhook og oppretter et abonnement via **POST /subscriptions**. Altinn Events sender da hendelser asynkront til webhooken din, og webhooken må svare med en **2xx-statuskode** for at mottaket skal regnes som vellykket. [3][4][5]
+
+### Krav til webhooken
+- Den må være tilgjengelig på en **HTTPS-endepunkt** med offentlig betrodd TLS-sertifikat; **self-signed certificates støttes ikke**. [1][5]
+- Den må kunne ta imot både **valideringshendelsen** og vanlige hendelser. Altinn sender en egen validation event før forwarding aktiveres. [1][5]
+- Hvis webhooken ikke svarer med **HTTP 200**, blir leveringen forsøkt på nytt opptil **12 ganger** etter en fast retry-plan. [2]
+
+### Hvilke…",
+2007c8d9-f4d4-4c0b-9c75-3f49ce1f78f2,2026-06-02T16:24:55.623195Z,window-2000,ue-corr-01-events-webhook-subscription,3,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,3,true,3,false,"d7a010952d7b4 R19.3 P2.5 h2.0 or0.3 L6240 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events","d8ef3bcbb74d5 R21.5 P2.5 h2.0 or0.2 L3576 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System interfaces ;; d99b415acaa9e R19.9 P2.5 h2.0 or0.5 L1317 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Setup subscription",1,altinn correspondence webhook abonnement mottaker filtre hendelser subscribe recipient filters | altinn correspondence abonnement via webhook | altinn correspondence notifications webhook | subscribe to events altinn correspondence | api for oppsett av hendelsesabonnementer via altinn hendelser | webhooks altinn correspondence,false,,0,6,3,1,4aa2b0740446;fb897d22bdf4;7aa2784b37f6;54a01225a6af;e00057498d4d;5feebb206964,4aa2b0740446;fb897d22bdf4;54a01225a6af,f8eabe6d3ce3,14837,4426,414,4840,0,3,3,"For å sette opp et webhook-abonnement i Altinn Events bruker du `POST /subscriptions` og registrerer et eget endepunkt/webhook som kan motta HTTP `POST`-forespørsler fra Altinn Events. Webhooken må svare med en HTTP-status i `2xx`-området for at forespørselen skal regnes som vellykket, og den må også akseptere valideringshendelsen `platform.events.validatesubscription` i tillegg til vanlige hendelser. [1][2]
+
+Som mottaker må du bruke filtre for å begrense hvilke hendelser du vil ha:  
+- `resourceFilter` er påkrevd og må matche ressursen som er satt på hendelsene, for eksempel `urn:altinn:resource:app_digdir_demoapp`. [1]  
+- `subjectFilter` er som hovedregel også påkrevd, med mindre du er en **Service owner**; da kan du abonnere på alle hendelser på tvers av parter/subjects. [1][3]  
+- For…",
+2bba2e35-3f7b-4f38-a887-68cf26ee6584,2026-06-02T16:25:11.240158Z,off,ue-corr-01-events-webhook-subscription,4,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,2,hvordan setter jeg opp et webhook-abonnement for å motta hendelser fra altinn correspondence og hvilke filtre må jeg bruke som mottaker | altinn correspondence motta via webhooks | spørre etter hendelser eller sette opp abonnement | hvordan sette opp et abonnement | motta hendelser fra altinn events | altinn correspondence apis webhook mottakerens eget api,false,true,0,3,2,1,54a01225a6af;50da0cfe12bd;939545886fa9,54a01225a6af;50da0cfe12bd,f8eabe6d3ce3,15615,6444,449,6893,0,3,3,"For å sette opp et webhook-/hendelsesabonnement for Altinn Correspondence, må du opprette et abonnement via **`POST /subscriptions`** og bruke **filteregenskaper** for å spesifisere hvilke hendelser du vil motta. Dette endepunktet brukes når du vil legge til et abonnement på hendelser fra en spesifikk ressurs, og det krever tilgang til dataene du ber om. [1]
+
+Som **mottaker** skal du bruke disse filtrene: [2]
+
+- **`resourceFilter`**  
+  - verdi: `""urn:altinn:resource:"" + Ressurs-IDen for meldingstjenesten` [2]
+- **`subjectFilter`**  
+  - verdi: `""urn:altinn:organization:identifier-no:{{recipient_orgnumber}}""` [2]
+
+`subjectFilter` brukes for å begrense hendelsene til bare den autoriserte mottakeren for den spesifikke hendelsen. [2]
+
+Du kan også legge til **`typeFilter`** hvis du bare vil mo…",
+904bc59a-6bb7-4379-ab79-be38b03a11e2,2026-06-02T16:25:26.950820Z,window-2000,ue-corr-01-events-webhook-subscription,4,public-docs,new,"altinn-correspondence,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,11,true,11,false,"d7a010952d7b4 R14.0 P1.4 h1.0 or0.5 L6240 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Events","ddeb3d3229868 R21.2 P2.6 h2.0 or1.2 L697 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Subscribe to events ;; ddabe88fb244e R20.7 P1.5 h1.0 or1.0 L5909 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Events ;; d99b415acaa9e R18.5 P2.5 h2.0 or0.5 L6345 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Setup subscription ;; dda315c0bf7a6 R17.2 P2.5 h2.0 or0.5 L2850 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Events ;; d233db9c21941 R17.1 P1.4 h1.0 or1.0 L10147 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Notifications ;; d986fa1bb0934 R16.9 P1.4 h1.0 or0.5 L2447 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | What do you get ;; df89a93cc84be R16.8 P1.4 h1.0 or0.5 L11626 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Serviceowner ;; d347f28d009d3 R14.8 P1.2 h1.0 or0.1 L1868 2/? ty:phrase b[0.0,0.0,0.0,0.1,0.1,0.0] | About",2,hvordan setter jeg opp et webhook-abonnement for å motta hendelser fra altinn correspondence og hvilke filtre må jeg bruke som mottaker | altinn correspondence spørre etter hendelser eller sette opp abonnement | hvordan sette opp et abonnement altinn correspondence | motta hendelser fra altinn correspondence | altinn correspondence apis spørre etter hendelser eller sette opp abonnement | altinn 3 correspondence resource abonnement,false,true,0,2,2,1,50da0cfe12bd;97269952693c,50da0cfe12bd;97269952693c,f8eabe6d3ce3,15708,6254,470,6724,0,3,3,"For å sette opp et webhook-abonnement for å motta hendelser fra Altinn Correspondence, må du først opprette et **hendelsesabonnement** i Altinn Events og konfigurere endepunktet/webhooken der hendelsene skal leveres. Dette er den anbefalte måten å motta hendelser på, og leveringen skjer asynkront til ditt eget endepunkt. [2]
+
+Som **mottaker** må du bruke disse filtrene: [1]
+
+- **resourceFilter**: `""urn:altinn:resource:"" + Ressurs-IDen for meldingstjenesten` [1]
+- **subjectFilter**: `""urn:altinn:organization:identifier-no:{{recipient_orgnumber}}""` [1]
+
+Hvis du også vil begrense hvilke hendelser du mottar, kan du i tillegg bruke **typeFilter**. Hvis du ikke spesifiserer et `typeFilter`, vil du motta alle hendelsestyper du har tilgang til. [1]
+
+Kort sagt: [1][2]
+1. Registrer webhook-endepunkt…",
+0a014560-0797-4f61-9b40-02f8c0bd3e3b,2026-06-02T16:25:39.383402Z,off,ue-authz-01-delegere-tilgangspakke-api,0,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,1,access management api delegate access package to a person endpoint parameters | delegate access packages | delegate access package | access management api | access management api for altinn apps | delegate access through api,false,,0,4,1,1,ad357cccd904;58f33d771b59;46b6bd396689;a3da246776c5,ad357cccd904,6d1c5124b842,12431,4461,347,4808,0,3,3,"For å **delegere en tilgangspakke til en person** bruker du **API: Delegate access package** [1].
+
+- **Test-endepunkt:** `POST https://platform.tt02.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]
+- **Produksjon-endepunkt:** `POST https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]
+
+### Parametere
+I dokumentasjonen er disse oppgitt som query parameters [1]:
+
+- `party` (**UUID**, påkrevd) – `partyUuid` for partyet [1]
+- `to` (**UUID**, valgfri) – `partyUuid` for mottakeren (alternativ til body) [1]
+- `packageId` (**UUID**, valgfri) – ID-en til access package [1]
+- `package` (**string**, valgfri) – URN-en til access package [1]
+
+### Body
+Det er også vist et eksempel på request body [1]:
+
+```json
+{
+  ""personIdentifier"": ""0103871…",
+855c4040-1e14-42de-a8f1-b05e89b10459,2026-06-02T16:25:53.085015Z,window-2000,ue-authz-01-delegere-tilgangspakke-api,0,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"dd42c77ed5fe8 R22.3 P3.7 h3.0 or1.7 L6997 10/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Access management",,1,delegere tilgangspakke til en person | api delegere tilgangspakke | delegere tilgangspakker | delegere tilgangspakker manuelt | sjekker om den innloggede brukeren kan delegere en gitt tilgangspakke | delegere til enkeltpersoner,false,,0,3,1,1,6d1c5124b842;efc25686ad97;979b5ebb032d,6d1c5124b842,6d1c5124b842,13700,4728,367,5095,0,3,3,"For å **delegere en tilgangspakke til en person** bruker du API-et **«Deleger tilgangspakke»** [1].
+
+### Endepunkt
+- **Test:** `POST https://platform.tt02.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]
+- **Produksjon:** `POST https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]
+
+### Parametere
+I dokumentasjonen er disse oppgitt som spørreparametere [1]:
+
+- `party` (**UUID**, obligatorisk) – `partyUuid` for parten [1]
+- `to` (**UUID**, valgfri) – `partyUuid` for mottakeren, alternativ til body [1]
+- `packageId` (**UUID**, valgfri) – ID for tilgangspakken [1]
+- `package` (**string**, valgfri) – URN for tilgangspakken [1]
+
+### Body
+Eksemplet viser at du også kan sende mottakerinformasjon i body, for eksempel [1]:
+
+```json
+{
+  ""p…",
+38d3768a-9c78-4d82-91ad-765cb520b7b9,2026-06-02T16:26:07.340436Z,off,ue-authz-01-delegere-tilgangspakke-api,1,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,22,false,,false,"dd42c77ed5fe8 R17.5 P3.7 h3.0 or1.7 L6997 10/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Access management","d6f78b586e79b R20.7 P2.5 h2.0 or0.8 L485 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Instancedelegation ;; dbf345fb14471 R20.7 P2.5 h2.0 or0.4 L686 11/? ty:content+metadata b[0.0,0.0,0.0,0.4,0.1,0.0] | Detailed ;; d0f46485b34aa R20.6 P2.5 h2.0 or0.5 L720 11/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Runtime delegated signing ;; dbf345fb14471 R20.3 P2.5 h2.0 or0.5 L1106 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Detailed ;; dbf345fb14471 R20.1 P3.6 h3.0 or0.8 L367 9/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.0,0.0] | Detailed ;; d4c48029f2c20 R19.9 P2.5 h2.0 or0.2 L420 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Signeelist ;; d5ab710528b66 R19.7 P2.5 h2.0 or0.7 L1068 9/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Setupguidance ;; d75d31d9853b7 R19.7 P2.5 h2.0 or0.4 L582 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Accessmanagement",1,delegere tilgangspakke til en person | delegere tilgangspakker | api delegere tilgangspakke | delegering av tilgangspakker | sjekker om den innloggede brukeren kan delegere en gitt tilgangspakke | delegere til enkeltpersoner,false,,0,9,2,1,579748d83ae8;979b5ebb032d;efc25686ad97;1e982e3e2bba;0120c0d0f9fe;7958c093a32e;16a8cb5de871;ca81dc2ddc3e;80aa24b232c2,ca81dc2ddc3e;80aa24b232c2,6d1c5124b842,14254,4684,408,5092,0,3,3,"For å delegere en **tilgangspakke** til en person via Access Management-API-et, bruker du endepunktet for **enduser connections accesspackages**. Kildene viser disse relevante endepunktene, men de dokumenterer **ikke selve POST-endepunktet for å opprette delegeringen** i utdraget du har gitt; de viser bare oppslag, sletting og sjekk av delegering [1].
+
+Det som er eksplisitt dokumentert er:
+
+- **Hente delegerte tilgangspakker mellom to parter**:  
+  `GET https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]
+- **Sjekke om innlogget bruker kan delegere en gitt tilgangspakke på vegne av parten**:  
+  `GET https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages/delegationcheck` [1]
+- **Slette en tilkobling mellom to parter**:  
+…",
+b59605d5-ef05-421d-8933-71751b19a37a,2026-06-02T16:26:22.029433Z,window-2000,ue-authz-01-delegere-tilgangspakke-api,1,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"dd42c77ed5fe8 R22.8 P3.7 h3.0 or1.2 L6997 10/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Access management","d75d31d9853b7 R22.9 P2.5 h2.0 or0.8 L582 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Accessmanagement",2,api delegere tilgangspakke | delegere tilgangspakker | be om en tilgangspakke | delegere tilgang gjennom api | oppretter en ny tilkobling delegering til en person | access package delegate person api,false,true,0,4,1,1,6d1c5124b842;b9917d56522a;5f5be8031fb0;579748d83ae8,6d1c5124b842,6d1c5124b842,14688,6571,475,7046,0,3,3,"For å **delegere en tilgangspakke til en person** bruker du API-et **“Deleger tilgangspakke”** [1].
+
+- **Test:** `POST https://platform.tt02.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]
+- **Produksjon:** `POST https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]
+
+### Spørreparametere
+- `party` (**UUID**, obligatorisk): `partyUuid` for parten [1]
+- `to` (**UUID**, valgfri): `partyUuid` for mottaker (alternativ til body) [1]
+- `packageId` (**UUID**, valgfri): ID for tilgangspakken [1]
+- `package` (**string**, valgfri): URN for tilgangspakken [1]
+
+### Body
+Eksemplet i kilden viser at body kan inneholde:
+```json
+{
+  ""personIdentifier"": ""01038712345"",
+  ""lastName"": ""Salt""
+}
+```
+[1]
+
+Hvis du vil, kan jeg også vise et komplett eks…",
+fda525f6-0491-46cc-9ba7-f32f2364c0e6,2026-06-02T16:26:36.327516Z,off,ue-authz-01-delegere-tilgangspakke-api,2,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,5,true,5,true,"dd42c77ed5fe8 R21.3 P3.7 h3.0 or1.2 L6997 10/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Access management","d75d31d9853b7 R22.9 P2.6 h2.0 or1.7 L582 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Accessmanagement ;; dd42c77ed5fe8 R22.3 P2.5 h2.0 or0.6 L539 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Access management ;; dcad3cb2604b3 R22.2 P2.4 h2.0 or0.1 L663 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Delegate scopes ;; d75d31d9853b7 R22.1 P2.4 h2.0 or0.2 L891 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Accessmanagement",2,hvilket api-endepunkt og hvilke parametere bruker jeg for å delegere en tilgangspakke til en person via access management-api-et | api for tilgangspakker | kall mot altinns access management-api-er | api delegere tilgangspakke | delegere tilgangspakker | delegere tilgang gjennom api,false,true,0,3,1,1,6d1c5124b842;80aa24b232c2;579748d83ae8,6d1c5124b842,6d1c5124b842,14296,6558,412,6970,0,3,3,"For å **delegere en tilgangspakke til en person** bruker du API-et **“Delegere tilgangspakke”** med endepunktet:
+
+- **Test:** `POST https://platform.tt02.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages`
+- **Produksjon:** `POST https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]
+
+### Parametere
+I kallet kan du bruke disse spørreparametrene: [1]
+
+- `party` (**UUID**, obligatorisk) – `partyUuid` for parten
+- `to` (**UUID**, valgfri) – `partyUuid` for mottakeren (alternativ til body)
+- `packageId` (**UUID**, valgfri) – ID for tilgangspakken
+- `package` (**string**, valgfri) – URN for tilgangspakken
+
+### Body
+Eksemplet i kilden viser at du også kan sende body med mottakerinformasjon, for eksempel: [1]
+
+```json
+{
+  ""personIdentifier"": ""…",
+44acfa4c-f101-4e85-be4e-5ba35c7b694c,2026-06-02T16:26:48.966131Z,window-2000,ue-authz-01-delegere-tilgangspakke-api,2,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,1,access package delegate person Access Management API endpoint parameters | delegate access package to a person API | access package assignment request delegate person endpoint | Access Management API access package person delegation,false,,0,3,1,1,ad357cccd904;1c4db8e7a258;46b6bd396689,ad357cccd904,6d1c5124b842,12637,3519,373,3892,0,2,3,"For å delegere en **tilgangspakke** til en person bruker du API-et **Delegate access package**:  
+
+- **Test:** `POST https://platform.tt02.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]  
+- **Produksjon:** `POST https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]
+
+### Parametere
+**Query parameters**:  
+- `party` (**UUID**, påkrevd) – `partyUuid` for partyen du opptrer på vegne av [1]  
+- `to` (**UUID**, valgfri) – `partyUuid` for mottakeren [1]  
+- `packageId` (**UUID**, valgfri) – ID-en til access package [1]  
+- `package` (**string**, valgfri) – URN-en til access package [1]
+
+**Body** kan også brukes, og eksemplet viser:  
+```json
+{
+  ""personIdentifier"": ""01038712345"",
+  ""lastName"": ""Salt""
+}
+```  
+[1]
+
+### Kort svar
+Det ri…",
+46be182f-c58c-4fa6-9b08-904992b5216e,2026-06-02T16:27:02.489650Z,off,ue-authz-01-delegere-tilgangspakke-api,3,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,4,true,4,true,"dd42c77ed5fe8 R21.3 P2.7 h2.0 or1.0 L6997 10/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Access management","d75d31d9853b7 R22.9 P2.6 h2.0 or1.4 L582 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Accessmanagement ;; dd42c77ed5fe8 R22.3 P2.6 h2.0 or0.0 L539 0/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Access management ;; dcad3cb2604b3 R22.2 P2.4 h2.0 or0.1 L663 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Delegate scopes",2,hvilket api-endepunkt og hvilke parametere bruker jeg for å delegere en tilgangspakke til en person via access management-api-et | delegere tilgangspakker | access management api | api delegere tilgangspakke | kall mot altinns access management-api-er | delegere tilgang gjennom api,false,true,0,2,1,1,6d1c5124b842;140eada0d517,6d1c5124b842,6d1c5124b842,13522,6472,455,6927,0,3,3,"For å **delegere en tilgangspakke til en person** bruker du API-et **“Dele­gere tilgangspakke”** i Access Management-API-et. Endepunktet er: **POST `https://platform.tt02.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages`** i test, og **POST `https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages`** i produksjon. [1]
+
+De relevante spørreparametrene er: [1]
+
+- `party` (**UUID**, obligatorisk) – `partyUuid` for parten
+- `to` (**UUID**, valgfri) – `partyUuid` for mottakeren
+- `packageId` (**UUID**, valgfri) – ID for tilgangspakken
+- `package` (**string**, valgfri) – URN for tilgangspakken
+
+Det finnes også et eksempel på body i dokumentasjonen, men selve tabellen for dette API-et beskriver spørreparametrene over. [1]
+
+Hvis du vil, kan jeg også …",
+64ca8858-3198-4364-a0b5-265423c3cb58,2026-06-02T16:27:14.331661Z,window-2000,ue-authz-01-delegere-tilgangspakke-api,3,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,false,,false,,false,,,1,Access Management API delegate access package person endpoint parameters | delegate access package to a person Access Management API | access package delegation API person parameters,false,,0,3,1,1,ad357cccd904;1c4db8e7a258;58f33d771b59,ad357cccd904,6d1c5124b842,11840,3505,390,3895,0,2,3,"For å **delegere en tilgangspakke til en person** bruker du API-et **Delegate access package**:  
+
+- **Test:** `POST https://platform.tt02.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]  
+- **Produksjon:** `POST https://platform.altinn.no/accessmanagement/api/v1/enduser/connections/accesspackages` [1]
+
+### Parametere
+I konteksten er disse oppgitt som query parameters:  
+- `party` (**UUID**, påkrevd) – `partyUuid` for partyet [1]  
+- `to` (**UUID**, valgfri) – `partyUuid` for mottakeren (alternativ til body) [1]  
+- `packageId` (**UUID**, valgfri) – ID for access package [1]  
+- `package` (**string**, valgfri) – URN for access package [1]
+
+### Body
+Det er også vist et eksempel på request body med personopplysninger:  
+```json
+{
+  ""personIdentifier"": ""01038712345"",…",
+7ec950f3-12c6-4a17-8077-a1d377e9c5f3,2026-06-02T16:27:31.425025Z,off,ue-authz-01-delegere-tilgangspakke-api,4,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,35,false,,false,"dd42c77ed5fe8 R16.2 P3.8 h3.0 or0.9 L6997 10/? ty:content+metadata+phrase b[0.1,0.0,0.0,0.5,0.2,0.0] | Access management","dd42c77ed5fe8 R21.0 P2.7 h2.0 or0.5 L661 2/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | Access management ;; d3ec63e860edb R20.5 P1.4 h1.0 or0.8 L763 2/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | System user ;; d46a8b451042e R20.5 P2.5 h2.0 or1.0 L1398 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Create resource ;; d9ab63f6e3efa R20.3 P2.5 h2.0 or1.0 L868 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Digitalportal ;; d61eae0f46c7c R20.3 P2.5 h2.0 or0.4 L1915 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Client delegation ;; d75d31d9853b7 R20.1 P2.5 h2.0 or0.9 L582 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Accessmanagement ;; d46a8b451042e R20.0 P1.4 h1.0 or0.8 L1741 3/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Create resource ;; d71d6c7529780 R20.0 P1.4 h1.0 or0.9 L2043 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemuser",1,hvilket api-endepunkt og hvilke parametere bruker jeg for å delegere en tilgangspakke til en person via access management-api-et | delegere tilgangspakker | api delegere tilgangspakke | kall mot altinns access management-api-er | api for tilgangspakker | delegere tilgang gjennom api,false,,0,5,0,1,80aa24b232c2;7958c093a32e;140eada0d517;c61c1f46fe63;23a4cf26e313,,6d1c5124b842,17091,16813,1056,17869,8448,5,3,"Jeg har nok evidens til å svare, men for å være trygg på formuleringen om “til en person” vil jeg bruke den allerede innhentede teksten: dokumentet sier at du kan delegere tilgangspakker via tilgangsstyrings-API-et, og at request body bruker `accessPackages` med `urn`. Jeg svarer derfor med det konkrete endepunktet fra dokumentasjonen for opprettelse av systembruker, siden det er den delen som eksplisitt viser tilgangspakker i API-kallet.
+For å delegere en tilgangspakke via Altinns API bruker du **POST**-kallet til:
+
+`https://platform.{env}.altinn.no/authentication/api/v1/systemuser/request/vendor`
+
+Eksempler fra dokumentasjonen:
+- Test: `https://platform.tt02.altinn.no/authentication/api/v1/systemuser/request/vendor`
+- Produksjon: `https://platform.altinn.no/authentication/api/v1/systemus…",
+cf943b60-6bc3-4812-b61e-6a4796c8474f,2026-06-02T16:27:49.612745Z,window-2000,ue-authz-01-delegere-tilgangspakke-api,4,public-docs,new,"altinn-authorization,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,7,true,7,false,"dd42c77ed5fe8 R21.7 P3.7 h3.0 or1.2 L6997 10/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Access management","d6f78b586e79b R23.3 P2.4 h2.0 or0.0 L485 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Instancedelegation ;; d75d31d9853b7 R22.6 P2.6 h2.0 or1.7 L582 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Accessmanagement ;; d75d31d9853b7 R22.5 P2.4 h2.0 or0.2 L891 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Accessmanagement ;; deadedaf3b783 R22.1 P1.4 h1.0 or0.5 L371 11/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Client admin ;; d5ab710528b66 R21.9 P2.5 h2.0 or0.6 L1068 9/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Setupguidance ;; dd42c77ed5fe8 R21.7 P2.5 h2.0 or0.6 L539 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Access management",2,delegere tilgangspakker | api delegere tilgangspakke | delegere tilgang gjennom api | access management api | kall mot altinns access management-api-er | hvilket api-endepunkt og hvilke parametere bruker jeg for å delegere en tilgangspakke til en person via access management-api-et,false,true,0,7,4,1,a3da246776c5;809b3f19898e;b095c25ab578;579748d83ae8;16a8cb5de871;e86a94847ee8;33c85fc05357,b095c25ab578;16a8cb5de871;e86a94847ee8;33c85fc05357,6d1c5124b842,18186,6425,510,6935,0,3,3,"For å **delegere en tilgangspakke til en person** via Access Management-API-et, er den relevante funksjonaliteten beskrevet som å **delegere og tilbakekalle tilgangspakker** i Tilgangsstyring/Access Management. [2][3]
+
+Det konkrete enduser-API-et som brukes for å administrere slike forbindelser er **`/accessmanagement/api/v1/enduser/connections`**. Dokumentasjonen sier at dette endepunktet brukes til å hente alle connections (relasjoner) for en gitt party, og at det viser hvem som har tilgang til hva, inkludert **roles, access packages and resources**. [1]
+
+### Relevante parametere
+For dette endepunktet er disse query-parametrene oppgitt: [1]
+
+- `party` (**UUID**, påkrevd) – `partyUuid` for personen eller organisasjonen du er access manager for. [1]
+- `from` (**UUID**, valgfri) – filter på…",
+a78f38c7-1049-4e8d-a33d-17eadae91e61,2026-06-02T16:28:05.544471Z,off,ue-sys-02-systembrukertoken-pdp-autorisasjon,0,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,35,false,,false,"d41f903b4aa3e R15.9 P2.6 h2.0 or1.2 L4600 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System user","d71d6c7529780 R21.9 P2.5 h2.0 or0.2 L1008 5/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemuser ;; d59b5bb939bf6 R21.5 P2.5 h2.0 or0.4 L776 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Referenceimplementations ;; ddbb1f51cd367 R21.0 P2.5 h2.0 or0.2 L897 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Integrating link service ;; d71d6c7529780 R20.6 P3.6 h3.0 or0.4 L992 3/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Systemuser ;; d516f1b421108 R20.5 P2.6 h2.0 or0.9 L965 8/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Userscenarios ;; d71d6c7529780 R20.3 P1.4 h1.0 or0.2 L1659 1/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemuser ;; d21d74f87ff8c R19.7 P2.5 h2.0 or0.4 L805 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.1,0.0] | Guardianship ;; d3353495029d0 R19.5 P2.5 h2.0 or0.2 L904 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Pip",1,hvilken verdi i systembrukertokenet trenger jeg for å autorisere tilgang mot altinn pdp og hvordan ser pdp-kallet ut | altinn pdp autorisasjon | tilgang verifiseres av altinn pdp api | pdp tjenesten for å autorisere brukere og systemer | systembrukertoken for riktig systembruker | bruke systembrukertoken for å kalle offentlige api-er,false,,0,7,4,1,a5b9967be9a7;943d6bd024e4;d741c823dd40;174fc774d7dd;b9a97d4daca2;75a0997dd647;81a4d7e44e18,a5b9967be9a7;943d6bd024e4;d741c823dd40;75a0997dd647,63528e131071,15930,4711,492,5203,0,3,3,"For å autorisere tilgang mot **Altinn PDP** trenger du først og fremst informasjonen om **systembrukeren** fra systembrukertokenet, altså verdiene under `authorization_details` for `type: ""urn:altinn:systemuser""`: spesielt `systemuser_id` og `systemuser_org`, og i tillegg `system_id` hvis tjenesten din bruker den i autorisasjonsoppslaget [1][3][4].  
+
+Det er også viktig å merke seg at **Maskinporten-tokenet brukes som Bearer-token i API-kallene**, og tjenesteeier bruker dette tokenet mot Altinn Autorisasjon (PDP) for å avgjøre hvilke operasjoner systemet er autorisert til å utføre [1][2][4].  
+
+### Hvordan PDP-kallet ser ut
+Kildene sier at tjenesteeier skal gjøre et oppslag mot Altinn Autorisasjon (PDP) med **systembrukerinformasjonen som finnes i Maskinporten-tokenet** [3][4]. De viser ik…",
+b0c74c16-d1f4-4434-a837-5b46153d81de,2026-06-02T16:28:22.401508Z,window-2000,ue-sys-02-systembrukertoken-pdp-autorisasjon,0,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d41f903b4aa3e R21.6 P2.6 h2.0 or1.5 L4600 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System user",,2,altinn pdp systembrukertoken verdi autorisere tilgang pdp-kall eksempel | altinn pdp | altinn pdp autorisasjon | tilgang verifiseres av altinn pdp api | systembrukertoken | systembruker-token hentes fra maskinporten,false,true,0,5,2,1,a5b9967be9a7;63528e131071;d741c823dd40;81a4d7e44e18;b9a97d4daca2,a5b9967be9a7;63528e131071,63528e131071,16855,6319,357,6676,0,3,3,"Du trenger først og fremst verdien **`authorization_details.systemuser_id`** i systembrukertokenet for å autorisere tilgang mot Altinn PDP. Det er denne unike systembruker-ID-en Altinn bruker for å sjekke hvilke tilganger som er delegert til systembrukeren. [1][2]
+
+De andre relevante feltene i tokenet er:
+- **`authorization_details.systemuser_org:id`**: organisasjonen som har opprettet systembrukeren. [2]
+- **`authorization_details.system_id`**: referanse til systemet systembrukeren peker på. [2]
+- **`consumer.ID`**: organisasjonsnummeret til systemleverandøren som autentiserte seg mot Maskinporten. [2]
+
+### Hvordan PDP-kallet ser ut
+Tjenesteeier sender et XACML JSON-kall til Altinn PDP med:
+- **`AccessSubject`** satt til `urn:altinn:systemuser:uuid` med verdien fra **`authorization_detail…",
+84bffd2b-a73f-4936-ac49-611ab7db52ab,2026-06-02T16:28:36.658427Z,off,ue-sys-02-systembrukertoken-pdp-autorisasjon,1,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,15,true,15,true,"d41f903b4aa3e R19.0 P2.6 h2.0 or1.5 L4600 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System user","d59b5bb939bf6 R22.5 P2.5 h2.0 or1.1 L776 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Referenceimplementations ;; d95ce6e6957f9 R21.5 P2.5 h2.0 or0.8 L1635 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Usetoken ;; d516f1b421108 R21.1 P2.6 h2.0 or0.9 L764 5/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Userscenarios ;; d71d6c7529780 R20.6 P2.5 h2.0 or0.4 L992 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemuser ;; dd42c77ed5fe8 R20.2 P2.5 h2.0 or0.2 L1377 6/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Access management ;; d516f1b421108 R20.0 P3.7 h3.0 or1.2 L919 12/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Userscenarios ;; d516f1b421108 R20.0 P2.6 h2.0 or1.0 L965 8/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Userscenarios ;; d71d6c7529780 R19.9 P2.5 h2.0 or0.2 L1008 5/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemuser",1,altinn pdp systembrukertoken verdi autorisere tilgang pdp-kall systembrukertoken claim audience scope token format | altinn pdp systembrukertoken | systembrukertoken jwt grant | hente systembrukertoken | be om systembrukertoken | systembrukertoken for riktig systembruker,false,,0,7,1,1,a5b9967be9a7;174fc774d7dd;b9a97d4daca2;943d6bd024e4;63528e131071;a0c6d9c8a58f;1b58f6b1890e,63528e131071,63528e131071,14255,4576,462,5038,0,3,3,"Du trenger først og fremst **`authorization_details:systemuser_id`** i systembrukertokenet for å autorisere tilgang mot Altinn PDP. Det er denne verdien som er den **unike id-en for systembrukeren**, og som Altinn trenger for å kunne autorisere tilgang. [1]
+
+De andre relevante feltene i tokenet er:
+- **`authorization_details:systemuser_org:id`** – organisasjonen som har opprettet systembrukeren. [1]
+- **`authorization_details:system_id`** – referanse til systemet systembrukeren peker på. [1]
+- **`consumer:ID`** – organisasjonsnummeret til systemleverandøren som har autentisert seg mot Maskinporten. [1]
+
+### Hvordan PDP-kallet ser ut
+Tjenesteeier må sende et XACML-basert kall til Altinn PDP med:
+- **`AccessSubject`** satt til **`urn:altinn:systemuser:uuid`** med verdien fra **`authorization…",
+2b075131-12ba-416e-8dbd-d0684f1c850f,2026-06-02T16:28:52.901897Z,window-2000,ue-sys-02-systembrukertoken-pdp-autorisasjon,1,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d41f903b4aa3e R23.0 P2.6 h2.0 or1.6 L4600 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System user",,1,hvilken verdi i systembrukertokenet trenger jeg for å autorisere tilgang mot altinn pdp og hvordan ser pdp-kallet ut | altinn pdp | systembrukertoken | altinn autorisasjon pdp | systembruker api | systembrukertoken for riktig systembruker,false,,0,4,1,1,d741c823dd40;a5b9967be9a7;520a1c11b580;63528e131071,63528e131071,63528e131071,16241,4907,491,5398,0,3,3,"Du trenger verdien **`authorization_details:systemuser_id`** for å autorisere tilgang mot Altinn PDP. Det er den **unike id-en for systembrukeren**, og det er denne Altinn trenger for å kunne autorisere tilgang. [1]
+
+Det er også verdt å merke seg at kallet til PDP bruker denne verdien i feltet **`AccessSubject`** med attributtet **`urn:altinn:systemuser:uuid`**. [1]
+
+Eksempel på PDP-kall: [1]
+
+```json
+{
+  ""Request"": {
+    ""ReturnPolicyIdList"": true,
+    ""AccessSubject"": [
+      {
+        ""Attribute"": [
+          {
+            ""AttributeId"": ""urn:altinn:systemuser:uuid"",
+            ""Value"": ""a545ca29-7fb8-4810-a2f2-0be171cb2a26""
+          }
+        ]
+      }
+    ],
+    ""Action"": [
+      {
+        ""Attribute"": [
+          {
+            ""AttributeId"": ""urn:oasis:names:tc:xacml:1.0:action:act…",
+e53d688f-f94e-4a50-8651-dbda7e7c149e,2026-06-02T16:29:09.827451Z,off,ue-sys-02-systembrukertoken-pdp-autorisasjon,2,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,1.0,1.0,1.0,true,19,true,19,true,"d41f903b4aa3e R16.1 P2.5 h2.0 or0.8 L4600 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System user","d21d74f87ff8c R22.5 P2.5 h2.0 or0.2 L805 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Guardianship ;; d71d6c7529780 R22.1 P3.6 h3.0 or0.3 L992 3/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Systemuser ;; d53d2b6db4d98 R20.8 P1.4 h1.0 or0.3 L1132 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemuserapi ;; d516f1b421108 R20.8 P2.6 h2.0 or1.4 L764 5/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Userscenarios ;; ddbb1f51cd367 R19.9 P2.5 h2.0 or0.7 L897 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Integrating link service ;; d59b5bb939bf6 R19.5 P2.5 h2.0 or0.7 L776 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Referenceimplementations ;; d41f903b4aa3e R19.3 P1.4 h1.0 or0.3 L481 1/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | System user ;; dd56ec6824db4 R19.3 P1.4 h1.0 or0.7 L1184 2/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Maskinportenclient",2,hvilken verdi i systembrukertokenet trenger jeg for å autorisere tilgang mot altinn pdp og hvordan ser pdp-kallet ut | systembrukertoken | altinn pdp | altinn autorisasjon pdp | systembrukertoken for riktig systembruker | tilgang verifiseres av altinn pdp api,false,true,0,7,1,1,b9a97d4daca2;a5b9967be9a7;d741c823dd40;174fc774d7dd;943d6bd024e4;81a4d7e44e18;63528e131071,63528e131071,63528e131071,16924,6493,482,6975,0,3,3,"Du trenger verdien **`authorization_details:systemuser_id`** i systembrukertokenet for å autorisere tilgang mot Altinn PDP. Det er den unike ID-en for systembrukeren, og det er denne Altinn trenger for å kunne autorisere tilgang. [1]
+
+PDP-kallet bygges opp med:
+- **`AccessSubject`** satt til systembrukerens UUID via `urn:altinn:systemuser:uuid` [1]
+- **`Action`** med ønsket operasjon, for eksempel `read` [1]
+- **`Resource`** med ressursnavn og organisasjonsnummer, for eksempel `urn:altinn:resource` og `urn:altinn:organization:identifier-no` [1]
+
+Eksempel på PDP-kall: [1]
+
+```json
+{
+  ""Request"": {
+    ""ReturnPolicyIdList"": true,
+    ""AccessSubject"": [
+      {
+        ""Attribute"": [
+          {
+            ""AttributeId"": ""urn:altinn:systemuser:uuid"",
+            ""Value"": ""a545ca29-7fb8-4810-…",
+964e3458-1975-41fd-a987-b3dc0d2b3f63,2026-06-02T16:29:26.065416Z,window-2000,ue-sys-02-systembrukertoken-pdp-autorisasjon,2,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d41f903b4aa3e R23.0 P2.6 h2.0 or1.5 L4600 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System user",,1,hvilken verdi i systembrukertokenet trenger jeg for å autorisere tilgang mot altinn pdp og hvordan ser pdp-kallet ut | altinn pdp systembrukertoken | tilgang verifiseres av altinn pdp api | altinn autorisasjon pdp | systembrukertoken for riktig systembruker | be om systembrukertoken,false,,0,7,1,1,63528e131071;a5b9967be9a7;d741c823dd40;174fc774d7dd;fcbd3e1be839;b9a97d4daca2;81a4d7e44e18,63528e131071,63528e131071,16236,4653,447,5100,0,3,3,"Du trenger verdien **`authorization_details:systemuser_id`** i systembrukertokenet for å autorisere tilgang mot Altinn PDP. Det er denne som er den unike id-en for systembrukeren, og det er den Altinn trenger for å kunne autorisere tilgang. [1]
+
+PDP-kallet bygges opp med minst disse delene: **AccessSubject** med `urn:altinn:systemuser:uuid` satt til systembrukerens id, **Action** med ønsket handling, og **Resource** med ressursnavn og organisasjonsnummer. [1]
+
+Eksempel på PDP-kall for en `read`-operasjon: [1]
+
+```json
+{
+  ""Request"": {
+    ""ReturnPolicyIdList"": true,
+    ""AccessSubject"": [
+      {
+        ""Attribute"": [
+          {
+            ""AttributeId"": ""urn:altinn:systemuser:uuid"",
+            ""Value"": ""a545ca29-7fb8-4810-a2f2-0be171cb2a26""
+          }
+        ]
+      }
+    ],
+    ""Ac…",
+e123e37c-8f9c-49cf-b535-356d2fd021a8,2026-06-02T16:29:42.280218Z,off,ue-sys-02-systembrukertoken-pdp-autorisasjon,3,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,1.0,1.0,1.0,true,16,true,16,true,"d41f903b4aa3e R16.1 P2.5 h2.0 or1.0 L4600 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System user","d21d74f87ff8c R22.5 P2.5 h2.0 or0.7 L805 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Guardianship ;; d71d6c7529780 R22.1 P3.7 h3.0 or0.9 L992 3/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Systemuser ;; d53d2b6db4d98 R20.8 P1.4 h1.0 or0.7 L1132 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemuserapi ;; d516f1b421108 R20.8 P2.6 h2.0 or1.4 L764 5/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Userscenarios ;; d3353495029d0 R20.6 P1.4 h1.0 or0.7 L904 0/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Pip ;; d59b5bb939bf6 R19.5 P2.5 h2.0 or0.4 L776 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Referenceimplementations ;; dd56ec6824db4 R19.3 P1.4 h1.0 or0.7 L1184 2/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Maskinportenclient ;; d2b263fe0e709 R18.8 P1.4 h1.0 or0.7 L1637 2/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Architecture",2,hvilken verdi i systembrukertokenet trenger jeg for å autorisere tilgang mot altinn pdp og hvordan ser pdp-kallet ut | systembrukertoken | altinn pdp | altinn autorisasjon pdp | systembruker-token | systembrukertoken for riktig systembruker,false,true,0,7,1,1,a5b9967be9a7;174fc774d7dd;b9a97d4daca2;943d6bd024e4;d741c823dd40;63528e131071;140eada0d517,63528e131071,63528e131071,16212,6502,476,6978,0,3,3,"Du trenger **`authorization_details:systemuser_id`** i systembrukertokenet for å autorisere tilgang mot Altinn PDP. Det er denne verdien som er den **unike id-en for systembrukeren**, og som Altinn trenger for å kunne autorisere tilgang. [1]
+
+PDP-kallet bygges som en XACML JSON-forespørsel der du sender:
+
+- **`AccessSubject`** med `urn:altinn:systemuser:uuid` satt til `systemuser_id` [1]
+- **`Action`** med ønsket handling, for eksempel `read` [1]
+- **`Resource`** med ressursen og organisasjonsnummeret det gjelder [1]
+
+Eksempel fra kilden: [1]
+
+```json
+{
+  ""Request"": {
+    ""ReturnPolicyIdList"": true,
+    ""AccessSubject"": [
+      {
+        ""Attribute"": [
+          {
+            ""AttributeId"": ""urn:altinn:systemuser:uuid"",
+            ""Value"": ""a545ca29-7fb8-4810-a2f2-0be171cb2a26""
+          …",
+00d541b2-c24b-44b9-a7f8-b70c8c0b320a,2026-06-02T16:29:56.808276Z,window-2000,ue-sys-02-systembrukertoken-pdp-autorisasjon,3,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d41f903b4aa3e R23.0 P2.6 h2.0 or1.6 L4600 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System user",,1,hvilken verdi i systembrukertokenet trenger jeg for å autorisere tilgang mot altinn pdp og hvordan ser pdp-kallet ut | altinn pdp | systembrukertoken | altinn pdp autorisasjon | systembruker api | systembrukertoken for riktig systembruker,false,,0,6,1,1,63528e131071;a5b9967be9a7;d741c823dd40;520a1c11b580;174fc774d7dd;81a4d7e44e18,63528e131071,63528e131071,14527,4640,433,5073,0,3,3,"For å autorisere tilgang mot Altinn PDP er den viktigste verdien **`authorization_details.systemuser_id`** — dette er den unike id-en for systembrukeren, og det er denne Altinn trenger for å autorisere tilgang. [1]
+
+I tillegg er disse verdiene også relevante for tjenesteeier i systembrukertokenet: **`authorization_details.systemuser_org:id`**, **`authorization_details.system_id`** og **`consumer:id`**. [1]  
+Hvis spørsmålet ditt er spesifikt om hva som brukes i PDP-kallet, er det altså **`systemuser_id`** som er nøkkelverdien. [1]
+
+### Slik ser PDP-kallet ut
+Tjenesteeier må sende et XACML JSON-kall til Altinn PDP med:
+- **`AccessSubject`** satt til `urn:altinn:systemuser:uuid` med verdien fra `systemuser_id`
+- **`Action`** satt til ønsket handling, for eksempel `read`
+- **`Resource`** satt…",
+b432547c-2455-4d9d-9db8-fcb3937d7b77,2026-06-02T16:30:11.509628Z,off,ue-sys-02-systembrukertoken-pdp-autorisasjon,4,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,19,true,19,false,"d41f903b4aa3e R20.2 P2.5 h2.0 or0.7 L4600 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System user","d71d6c7529780 R23.3 P2.5 h2.0 or0.7 L589 4/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemuser ;; d71d6c7529780 R22.7 P2.5 h2.0 or1.0 L1008 5/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemuser ;; dbe0f1d5d7244 R22.7 P2.6 h2.0 or1.7 L707 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Smartcloud ;; dd42c77ed5fe8 R22.5 P3.7 h3.0 or0.9 L522 5/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Access management ;; d95ce6e6957f9 R22.2 P2.5 h2.0 or0.8 L1635 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Usetoken ;; deadedaf3b783 R21.9 P2.5 h2.0 or0.7 L559 4/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Client admin ;; d3ec63e860edb R21.7 P2.5 h2.0 or0.4 L3319 5/? ty:content+metadata b[0.0,0.0,0.0,0.4,0.1,0.0] | System user ;; dbe0f1d5d7244 R21.4 P2.5 h2.0 or0.6 L571 2/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Smartcloud",1,systembrukertoken | altinn pdp | systembruker api | systembrukertoken for riktig systembruker | bruke systembrukertoken for å kalle offentlige api-er,false,,0,7,4,1,a5b9967be9a7;fcbd3e1be839;943d6bd024e4;520a1c11b580;174fc774d7dd;a0c6d9c8a58f;fb89eaf0de84,a5b9967be9a7;fcbd3e1be839;943d6bd024e4;a0c6d9c8a58f,63528e131071,14700,4510,487,4997,0,3,3,"For å autorisere tilgang mot Altinn PDP er det **systembrukerens identifikator** i tokenet du trenger, altså verdien i feltet **`systemuser_id`**. Tokenet inneholder en liste med systembrukere, og denne identifikatoren brukes videre av tjenesten når den gjør autorisasjonssjekk mot Altinn Autorisasjon (PDP) [1][2][3].
+
+Det er litt viktig å skille mellom to ting her:
+
+- **`systemuser_id`**: brukes som systembrukerens identifikator i autorisasjonssjekken mot PDP [1][2][3].
+- **`client_id`**: identifiserer Maskinporten-klienten / leverandørens fagsystem, men er ikke selve verdien PDP bruker som systembruker-ID [1][2][3].
+
+### Hvordan ser PDP-kallet ut?
+I kildene beskrives PDP-kallet konseptuelt slik: tjenesten kaller Altinn Autorisasjon med **`Authorize(systemUserId, res, action, part)`** [2].…",
+07c64c2c-43a6-419e-88d6-c51a72ef352a,2026-06-02T16:30:26.608992Z,window-2000,ue-sys-02-systembrukertoken-pdp-autorisasjon,4,public-docs,new,"altinn-systemuser,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,20,true,20,false,"d41f903b4aa3e R18.6 P2.6 h2.0 or1.6 L4600 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System user","d95ce6e6957f9 R22.7 P2.5 h2.0 or0.7 L1635 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Usetoken ;; d59b5bb939bf6 R22.4 P2.5 h2.0 or1.1 L776 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Referenceimplementations ;; d53d2b6db4d98 R22.0 P2.5 h2.0 or0.7 L1132 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Systemuserapi ;; d516f1b421108 R21.0 P2.6 h2.0 or1.1 L764 5/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Userscenarios ;; d41f903b4aa3e R20.6 P2.5 h2.0 or0.6 L481 1/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | System user ;; d61eae0f46c7c R20.4 P2.5 h2.0 or0.9 L1915 3/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Client delegation ;; dd42c77ed5fe8 R20.2 P2.5 h2.0 or0.9 L1377 6/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Access management ;; d516f1b421108 R20.1 P3.8 h3.0 or1.1 L919 12/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.2,0.0] | Userscenarios",1,altinn pdp systembrukertoken verdi autorisere tilgang pdp-kall systembrukertokenet claim audience scope token example | systembrukertoken | altinn pdp | kallene som gjøres med systembruker-token | systembrukertoken for riktig systembruker | systembrukertoken jwt grant,false,,0,7,3,1,fcbd3e1be839;a5b9967be9a7;174fc774d7dd;d741c823dd40;140eada0d517;69273064acf5;943d6bd024e4,fcbd3e1be839;a5b9967be9a7;174fc774d7dd,63528e131071,15098,4585,434,5019,0,3,3,"For å autorisere tilgang mot Altinn PDP trenger du **systembrukerens identifikator** i tokenet, altså verdien som kalles **`systemuser_id`** / **`systemUserId`** i kildene. Systembrukertokenet inneholder en liste med systembrukere, og denne identifikatoren brukes videre når API-et kaller Altinn Autorisasjon (PDP). [2][1]
+
+Kildene viser ikke et fullstendig, konkret HTTP-eksempel på selve PDP-kallet, men de beskriver at API-et gjør et kall til Altinn Autorisasjon med denne formen: **`Authorize(systemUserId, res, action, part)`**. [1]  
+Det betyr at PDP-kallet må inneholde minst:
+- **`systemUserId`**: systembrukerens identifikator fra tokenet [1][2]
+- **`res`**: ressursen det skal autoriseres mot [1]
+- **`action`**: handlingen som skal utføres [1]
+- **`part`**: parten det gjelder [1]
+
+Hvis du…",
+2a0a42bb-03de-4bf8-bdd6-3804a25a605e,2026-06-02T16:30:40.063537Z,off,ue-api-04-instances-get-no-list,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,2,true,2,false,"d69ccc279de8b R21.0 P2.5 h2.0 or0.0 L1444 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Instances","ddf0c0d8b2ee1 R21.2 P1.4 h1.0 or0.0 L2418 1/? ty:content b[0.0,0.0,0.0,0.4,0.0,0.0] | Api",2,fetch metadata for a single app instance endpoint list all instances app instance metadata api | app instance reference | app instance metadata | instance metadata will provide a list of data elements | application metadata | app api endpoints,false,true,0,5,3,1,e6b23ae43ddd;6bbfb3935810;67635e01cc26;09a4ac575bed;efcddc858178,e6b23ae43ddd;67635e01cc26;efcddc858178,9bce844fa9ba,13453,6001,314,6315,0,3,3,"The provided sources do **not** document a specific endpoint for fetching the metadata of a **single app instance**. They only say that an instantiated application has a corresponding **instance object** containing metadata about that specific instance, and they point you to the technical API documentation for more details, but they do not give the actual instance-metadata GET endpoint here [3].
+
+There **is** documentation for app-level metadata, but that is for the **application metadata** document, not a single instance: `GET {basePath}/api/v1/applicationmetadata` [1].
+
+As for listing all instances, the sources you provided do **not** show an endpoint for that either. They only mention the general **Instances** API section in the navigation, without listing its endpoints in the excerpt […",
+44ca94b1-b57c-431c-ba1c-27193375e45f,2026-06-02T16:30:52.096920Z,window-2000,ue-api-04-instances-get-no-list,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d69ccc279de8b R20.8 P2.6 h2.0 or0.9 L1444 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Instances",,1,how do i fetch the metadata for a single app instance and is there an endpoint to list all instances | get instance endpoint | get instance | app metadata | api for app metadata | instance metadata document,false,,0,5,1,1,9bce844fa9ba;6bbfb3935810;70d7cc550746;4d5877dc6f24;4374d5975ae4,9bce844fa9ba,9bce844fa9ba,12032,4253,372,4625,0,3,3,"To fetch the metadata for a single app instance, use the **Get instance** endpoint: `GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}`. It returns the instance metadata document for that specific instance, and it is intended for cases where the instance is active and you already know the owner party id and instance guid. [1]
+
+There is **no endpoint in the app API for listing all instances**. The documentation explicitly says the app API does not have a listing endpoint, and that the **Storage API in the Platform** has a query endpoint that can be used for listing purposes instead. [1]",
+4e7f943c-b92a-4176-9fc4-c1b37f65f163,2026-06-02T16:31:04.949911Z,off,ue-api-04-instances-get-no-list,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,3,true,3,true,"d69ccc279de8b R18.7 P2.6 h2.0 or1.1 L1444 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Instances","d1a3339c8eafd R19.3 P3.6 h3.0 or0.6 L2840 3/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Process app events ;; d66ebf861ff22 R18.8 P2.6 h2.0 or0.4 L876 12/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | App metadata",1,how do i fetch the metadata for a single app instance and is there an endpoint to list all instances | get instance endpoint | instance metadata | download instance metadata | get one instance or put to update the instance | altinn apps active instances endpoint,false,,0,5,1,1,9bce844fa9ba;6bbfb3935810;fbe928df64a6;5d9d9ec2eb93;efcddc858178,9bce844fa9ba,9bce844fa9ba,12851,4338,381,4719,0,3,3,"To fetch the metadata for a single app instance, use the **Get instance** endpoint: `GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}` where `basePath` is `{org}/{appname}/instances` [1]. This endpoint returns the instance metadata document for that specific instance [1].
+
+There is **no endpoint for listing all instances** in the app API; the documentation explicitly says the app API does not have a listing endpoint, and that the **Storage API in the Platform** has a query endpoint you can use for that purpose [1].",
+9a4e4072-d2af-438c-8f13-e6a7137a4beb,2026-06-02T16:31:18.638157Z,window-2000,ue-api-04-instances-get-no-list,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d69ccc279de8b R20.8 P2.6 h2.0 or0.7 L1444 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Instances",,2,how do i fetch the metadata for a single app instance and is there an endpoint to list all instances | get instance endpoint | download instance metadata | instance metadata | get one instance or put to update the instance | altinn apps active instances endpoint,false,true,0,6,1,1,9bce844fa9ba;6bbfb3935810;70d7cc550746;fbe928df64a6;5d9d9ec2eb93;0f9822caf962,9bce844fa9ba,9bce844fa9ba,13686,5988,385,6373,0,3,3,"To fetch the metadata for a single app instance, use the **Get instance** endpoint: `GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}` where `basePath` is `{org}/{appname}/instances`. This endpoint returns the instance metadata document for that specific instance. [1]
+
+There is **no endpoint in the app API for listing all instances**. The documentation explicitly says the app API does not have a listing endpoint, and that the **Storage API in the Platform** has a query endpoint that can be used for listing instead. [1]
+
+If you want, I can also show the exact URL format with an example.",
+799e22ea-1344-4999-a781-01073e6e9f19,2026-06-02T16:31:31.445567Z,off,ue-api-04-instances-get-no-list,2,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"d69ccc279de8b R18.7 P2.6 h2.0 or0.8 L1444 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Instances","d66ebf861ff22 R18.8 P1.2 h1.0 or0.1 L876 12/? ty:phrase b[0.1,0.0,0.0,0.1,0.1,0.0] | App metadata",2,how do i fetch the metadata for a single app instance and is there an endpoint to list all instances | get instance endpoint | api for app metadata | app metadata | instance metadata document | download instance metadata,false,true,0,7,1,1,ded5a28cb06b;e6b23ae43ddd;09a4ac575bed;c739a1c5292a;9bce844fa9ba;b1040a899047;67635e01cc26,9bce844fa9ba,9bce844fa9ba,12805,5802,335,6137,0,3,3,"To fetch the metadata for a single app instance, use the **Get instance** endpoint, which downloads the **instance metadata document** for a specific instance [1].
+
+```http
+GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}
+```
+
+Here, `{basePath}` is:
+
+```http
+{org}/{appname}/instances
+```
+
+so the full pattern is:
+
+```http
+GET {org}/{appname}/instances/{instanceOwnerPartyId}/{instanceGuid}
+```
+
+[1]
+
+There is **no endpoint for listing instances** in the app API. The documentation explicitly says the app API does not have an endpoint for listing instances, and that the **Storage API** in the Platform has a query endpoint that can be used for that purpose [1].",
+71baed5c-d572-44ca-8fe9-e9ab45faaf82,2026-06-02T16:31:52.802185Z,window-2000,ue-api-04-instances-get-no-list,2,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d69ccc279de8b R20.8 P2.6 h2.0 or0.8 L1444 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Instances",,2,how do i fetch the metadata for a single app instance and is there an endpoint to list all instances | get instance endpoint | instance metadata | download instance metadata | get one instance or put to update the instance | altinn apps active instances endpoint,false,true,0,5,1,1,9bce844fa9ba;6bbfb3935810;70d7cc550746;e6b23ae43ddd;546281ad02f5,9bce844fa9ba,9bce844fa9ba,21355,6146,379,6525,0,3,3,"To fetch the metadata for a single app instance, use the **Get instance** endpoint: `GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}`. It returns the instance metadata document for that specific instance, and it is intended for cases where the instance is active and both the owner party id and instance guid are known [1].
+
+There is **no endpoint in the app API for listing all instances**. The documentation explicitly says the app API does not have an endpoint for listing instances; if you need that, the **Storage API in the Platform** has a query endpoint for listing purposes [1].",
+b2cc9fd1-7cea-4b27-8a2c-e2737cd77910,2026-06-02T16:32:04.691172Z,off,ue-api-04-instances-get-no-list,3,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,3,true,3,true,"d69ccc279de8b R18.7 P2.6 h2.0 or1.1 L1444 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Instances","d1a3339c8eafd R19.3 P3.6 h3.0 or0.6 L2840 3/? ty:content+metadata+phrase b[0.0,0.0,0.0,0.5,0.1,0.0] | Process app events ;; d66ebf861ff22 R18.8 P2.6 h2.0 or0.4 L876 12/? ty:content+phrase b[0.1,0.0,0.0,0.4,0.1,0.0] | App metadata",1,how do i fetch the metadata for a single app instance and is there an endpoint to list all instances | get instance endpoint | instance metadata | download instance metadata | get one instance or put to update the instance | altinn apps active instances endpoint,false,,0,5,1,1,9bce844fa9ba;6bbfb3935810;fbe928df64a6;5d9d9ec2eb93;4d5877dc6f24,9bce844fa9ba,9bce844fa9ba,11887,4155,295,4450,0,3,3,"To fetch the metadata for a single app instance, use the **Get instance** endpoint: `GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}` where `basePath` is `{org}/{appname}/instances`. This endpoint returns the instance metadata document for that specific instance [1].
+
+There is **no endpoint for listing instances** in the app API. The documentation explicitly says the app API does not have an endpoint for listing instances, and that the **Storage API** in the Platform has a query endpoint that can be used for listing instead [1].",
+171cf585-5a57-48fb-bcb7-b4f23442a507,2026-06-02T16:32:44.919460Z,window-2000,ue-api-04-instances-get-no-list,3,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d69ccc279de8b R20.8 P2.6 h2.0 or0.7 L1444 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Instances",,2,how do i fetch the metadata for a single app instance and is there an endpoint to list all instances | get instance endpoint | download instance metadata | instance metadata | app metadata instances data elements | new endpoint for app instances,false,true,0,6,2,1,9bce844fa9ba;70d7cc550746;6bbfb3935810;fbe928df64a6;5d9d9ec2eb93;efcddc858178,9bce844fa9ba;70d7cc550746,9bce844fa9ba,40227,6084,392,6476,0,3,3,"To fetch the metadata for a single app instance, use the **Get instance** endpoint: `GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}` where `basePath` is `{org}/{appname}/instances` [1]. This endpoint returns the instance metadata document for a specific instance [1].
+
+There is **no endpoint in the app API for listing all instances** [1]. The documentation explicitly says the app API does not have an endpoint for listing instances, and that the **Storage API in the Platform** has a query endpoint that can be used for listing purposes [1].
+
+If you mean **active instances for a specific instance owner**, there is a separate endpoint: `GET {basePath}/{instanceOwnerPartyId}/active` [2].",
+00cd5041-cc1a-4e7c-884a-bd03e08ef9d7,2026-06-02T16:33:27.273952Z,off,ue-api-04-instances-get-no-list,4,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d69ccc279de8b R18.7 P2.6 h2.0 or0.9 L1444 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Instances",,1,how do i fetch the metadata for a single app instance and is there an endpoint to list all instances | get instance endpoint | get instance | app api instances | altinn apps active instances endpoint | get basepath instanceownerpartyid active,false,,0,4,2,1,9bce844fa9ba;70d7cc550746;b1040a899047;950e8b20323a,9bce844fa9ba;70d7cc550746,9bce844fa9ba,42352,4468,323,4791,0,3,3,"To fetch the metadata for a single app instance, use the **Get instance** endpoint: `GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}`. It is meant for downloading the instance metadata document for a specific instance when the **instanceOwnerPartyId** and **instanceGuid** are known. [1]
+
+There is **no endpoint in the app API for listing all instances**. The documentation explicitly says the app API does not have an endpoint for listing instances, and points to the **Storage API in the Platform** as the place where a query endpoint can be used for that purpose. [1]
+
+If you only want the active instances for a specific instance owner, there is a separate endpoint: `GET {basePath}/{instanceOwnerPartyId}/active`. That returns a list of active instances, but it is not a full “list all inst…",
+d924600c-90c6-4f2d-a02d-22829817fa0a,2026-06-02T16:33:52.923680Z,window-2000,ue-api-04-instances-get-no-list,4,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"d69ccc279de8b R20.8 P2.6 h2.0 or0.7 L1444 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Instances",,2,how do i fetch the metadata for a single app instance and is there an endpoint to list all instances | get instance endpoint | download instance metadata | instance metadata | app api instances | get instance and party data for a given instance id,false,true,0,6,2,1,9bce844fa9ba;70d7cc550746;6bbfb3935810;fbe928df64a6;5d9d9ec2eb93;efcddc858178,9bce844fa9ba;70d7cc550746,9bce844fa9ba,25647,6112,398,6510,0,3,3,"To fetch the metadata for a single app instance, use the **Get instance** endpoint: `GET {basePath}/{instanceOwnerPartyId}/{instanceGuid}`. It returns the instance metadata document for that specific instance, and it is intended for cases where the instance is active and you already know the owner party ID and instance GUID [1].
+
+There is **no endpoint in the app API for listing all instances**. The documentation explicitly says the app API does not have an endpoint for listing instances; if you need a list, the **Storage API in the Platform** has a query endpoint for that purpose [1].  
+
+If you mean **active instances for a specific instance owner**, there is a separate endpoint: `GET {basePath}/{instanceOwnerPartyId}/active`, which returns a simplified list of active instances [2].",
+6759eba2-f374-4268-93ce-ad92da43f36b,2026-06-02T16:34:34.832318Z,off,ue-api-06-app-openapi-swagger-spec,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,2,true,2,false,"de2aa5b3e74ef R21.5 P2.5 h2.0 or0.3 L1107 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec","d9cffabf28133 R21.7 P2.7 h2.0 or1.7 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec",2,altinn 3 app-specific openapi spec datamodel schemas where to find | app-specific openapi specification app datamodels | app-specific openapi specification includes app datamodels | altinn 3 apps openapi specification app datamodels | openapi swagger for apps app datamodels | openapi specification app datamodels,false,true,0,5,1,1,5a9a7c6c6372;67635e01cc26;bb6cf12d65da;32e98b5446e8;da3019da51b8,5a9a7c6c6372,42186e0a3d24,41907,6161,400,6561,0,3,3,"You find the **app-specific OpenAPI specification** in the app’s browser Swagger page: **`{org}.apps.altinn.no/{org}/{app}/swagger`**. This is the specification that includes the **datamodel schemas** and content types needed for a specific Altinn 3 app [1].
+
+The context also notes that there are **two OpenAPI specifications** after NuGet package version 8.6.0:  
+- a **traditional auto-generated specification** with all APIs but **no information about different data types**, and  
+- an **app-specific specification** for the given app [1].
+
+So, if you need the spec for a particular app, use the app’s **`/swagger`** page on the app’s own domain [1].",
+1895d08a-29b3-4575-ac8d-22fe4adf6a38,2026-06-02T16:34:47.429483Z,window-2000,ue-api-06-app-openapi-swagger-spec,0,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,2,true,2,false,"de2aa5b3e74ef R22.4 P2.6 h2.0 or0.6 L1107 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec","d9cffabf28133 R23.4 P2.7 h2.0 or1.7 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec",2,altinn 3 app-specific openapi spec datamodel schemas | app-specific openapi specification | altinn 3 apps openapi specification | openapi specification | json schema datamodell | datamodell i json schema format,false,true,0,1,1,1,5a9a7c6c6372,5a9a7c6c6372,42186e0a3d24,12596,5760,269,6029,0,3,3,You find the app-specific OpenAPI specification in the browser at `{org}.apps.altinn.no/{org}/{app}/swagger`. This is the specification that includes the datamodel schemas and content types for the given Altinn 3 app [1].,
+5562e26a-ca05-452d-ab11-4f338f993bba,2026-06-02T16:35:00.606370Z,off,ue-api-06-app-openapi-swagger-spec,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,1,true,1,true,"de2aa5b3e74ef R22.3 P2.6 h2.0 or0.8 L1107 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec",,2,altinn 3 app-specific openapi spec datamodel schemas where to find endpoint app openapi datamodel schemas | altinn 3 apps openapi specification | openapi swagger for apps | app-specific api | altinn app apis | altinn app api data elements,false,true,0,6,2,1,5a9a7c6c6372;bb6cf12d65da;67635e01cc26;40d6a8169174;42186e0a3d24;32e98b5446e8,5a9a7c6c6372;42186e0a3d24,42186e0a3d24,13176,5937,369,6306,0,3,3,"The app-specific OpenAPI spec is available in the app’s Swagger page at `https://{org}.apps.altinn.no/{org}/{app}/swagger` in a browser [1][2].
+
+If you mean the **general** OpenAPI specification, that is the traditional auto-generated spec at `/swagger/altinn-app-v1.json` [1][2]. The source explicitly distinguishes this from the **app-specific specification** that includes the data type-related information such as datamodel schemas and content types [1][2].",
+2ed9030c-6b1d-43c5-bb6c-14dacd6910f1,2026-06-02T16:35:12.806731Z,window-2000,ue-api-06-app-openapi-swagger-spec,1,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,0.0,true,4,true,4,true,"de2aa5b3e74ef R21.5 P2.5 h2.0 or0.3 L1107 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec","d9cffabf28133 R25.4 P2.7 h2.0 or1.7 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec ;; d105fb6ae792c R23.3 P2.5 h2.0 or0.8 L1260 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Api ;; d39c9a65c4b99 R22.1 P2.5 h2.0 or0.3 L333 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Appsopenapi",1,app-specific openapi specification | altinn 3 apps openapi specification | openapi spec,false,,0,4,2,1,5a9a7c6c6372;fd1dd9b874ac;42186e0a3d24;0a70de74f82f,5a9a7c6c6372;fd1dd9b874ac,42186e0a3d24,12199,4308,331,4639,0,3,3,"You find the **app-specific OpenAPI specification** at:
+
+`https://<org>.apps.<env>.altinn.no/<org>/<app>/swagger` [2]
+
+That is the variant that includes the app-specific APIs, and it is the one you need when you want the **datamodel schemas** for a given Altinn 3 app [1][2].  
+
+There is a small ambiguity in the sources: they also mention a **generic app API** / **traditional auto-generated specification** at the same same URL, so the exact content you see there depends on which variant the app exposes [1][2].",
+db565b6e-4250-49fa-a88e-41a74acc06f3,2026-06-02T16:35:26.636824Z,off,ue-api-06-app-openapi-swagger-spec,2,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,3,true,3,false,"de2aa5b3e74ef R23.9 P2.6 h2.0 or1.1 L1107 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec","d905620228d56 R26.5 P2.7 h2.0 or1.7 L360 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Studio ;; d9cffabf28133 R25.7 P2.6 h2.0 or1.3 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec",2,where do i find the app-specific openapi spec that includes the datamodel schemas for a given altinn 3 app | app-specific openapi specification | altinn 3 apps openapi specification | openapi swagger specification for altinn studio | openapi spec | openapi swagger for apps,false,true,0,3,3,1,5a9a7c6c6372;67635e01cc26;fd1dd9b874ac,5a9a7c6c6372;67635e01cc26;fd1dd9b874ac,42186e0a3d24,13828,6017,379,6396,0,3,3,"You find the **app-specific OpenAPI specification** at:
+
+`https://{org}.apps.altinn.no/{org}/{app}/swagger` in production, or `https://{org}.apps.tt02.altinn.no/{org}/{app}/swagger` in TT02/test environment. [2][3]
+
+This is the **app-specific API** variant, which is the one that includes the data model schemas / content types needed for a given Altinn 3 app. [1][3]
+
+If you want the exact app-specific spec for a particular app, you can also open the app’s Swagger page in a browser at `{org}.apps.altinn.no/{org}/{app}/swagger`. [1][3]",
+d441acb7-9421-4cd0-8fcc-65c1879dc439,2026-06-02T16:35:48.480396Z,window-2000,ue-api-06-app-openapi-swagger-spec,2,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,0.0,true,2,true,2,true,"de2aa5b3e74ef R22.4 P2.6 h2.0 or0.6 L1107 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec","d9cffabf28133 R23.4 P2.7 h2.0 or1.7 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec",2,altinn 3 app-specific openapi spec datamodel schemas | app-specific openapi specification | altinn 3 apps openapi specification | openapi swagger for apps | schemas for data models and content types | json schema datamodell,false,true,0,3,1,1,5a9a7c6c6372;42186e0a3d24;32e98b5446e8,5a9a7c6c6372,42186e0a3d24,21841,5883,344,6227,0,3,3,"The app-specific OpenAPI spec is available in the app’s browser endpoint: `https://{org}.apps.altinn.no/{org}/{app}/swagger` [1].  
+
+That is the **app-specific specification** that includes the datamodel schemas and content types for attachment types, unlike the general auto-generated spec [1].",
+a4e16bd2-7b3b-4207-a5fa-c80605c6127e,2026-06-02T16:36:02.442575Z,off,ue-api-06-app-openapi-swagger-spec,3,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,0.0,0.0,0.0,0.0,true,8,true,8,false,"de2aa5b3e74ef R22.8 P2.5 h2.0 or0.6 L1107 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec","d905620228d56 R26.7 P2.7 h2.0 or1.7 L360 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Studio ;; d9cffabf28133 R25.3 P2.5 h2.0 or1.1 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec ;; d105fb6ae792c R24.9 P2.5 h2.0 or0.7 L1260 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Api ;; de13160494017 R24.7 P1.2 h1.0 or0.0 L345 0/? ty:phrase b[0.0,0.0,0.0,0.1,0.0,0.0] | Studio ;; d39c9a65c4b99 R23.3 P2.5 h2.0 or0.3 L333 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Appsopenapi ;; d4723f71d82f9 R23.0 P1.1 h1.0 or0.3 L3323 2/? ty:phrase b[0.0,0.0,0.0,0.1,0.0,0.0] | System interfaces ;; d4723f71d82f9 R23.0 P1.1 h1.0 or0.3 L591 1/? ty:phrase b[0.0,0.0,0.0,0.1,0.0,0.0] | System interfaces",2,where do i find the app-specific openapi spec that includes the datamodel schemas for a given altinn 3 app | app-specific openapi specification | altinn 3 apps openapi specification | openapi specification for altinn studio | openapi swagger specification for altinn studio | openapi swagger for apps,false,true,0,3,3,1,5a9a7c6c6372;67635e01cc26;fd1dd9b874ac,5a9a7c6c6372;67635e01cc26;fd1dd9b874ac,42186e0a3d24,13960,6156,392,6548,0,3,3,"You find the **app-specific OpenAPI specification** at the app’s swagger URL: `https://<org>.apps.<env>.altinn.no/<org>/<app>/swagger` [3].
+
+For a specific Altinn 3 app, the documentation says the app-specific spec is available in a browser at `https://{org}.apps.altinn.no/{org}/{app}/swagger` [1], and the same pattern is given for both TT02 and production base URLs [2]. This is the variant that includes the app-specific data type information, such as schemas for data models and content types for attachment types [1].",
+5fb8f7f5-d3f2-4564-8689-5d6636e7bd1e,2026-06-02T16:36:54.548095Z,window-2000,ue-api-06-app-openapi-swagger-spec,3,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,1.0,true,2,true,2,true,"de2aa5b3e74ef R22.4 P2.6 h2.0 or0.6 L1107 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec","d9cffabf28133 R23.4 P2.7 h2.0 or1.7 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec",2,altinn 3 app-specific openapi spec datamodel schemas | app-specific openapi specification | altinn 3 apps openapi specification | openapi specification | openapi swagger for apps | schemas for data models and content types,false,true,0,2,2,1,5a9a7c6c6372;42186e0a3d24,5a9a7c6c6372;42186e0a3d24,42186e0a3d24,52104,5719,266,5985,0,3,3,"You can find the app-specific OpenAPI spec at ``{org}.apps.altinn.no/{org}/{app}/swagger`` in a browser. This is the app-specific specification that includes the data model schemas and content types needed for a given Altinn 3 app [1][2].
+
+",
+e3c25195-959e-4685-85eb-f70d29e47e67,2026-06-02T16:37:07.204201Z,off,ue-api-06-app-openapi-swagger-spec,4,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,0.0,true,1,true,1,true,"de2aa5b3e74ef R22.6 P2.6 h2.0 or0.6 L1107 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec",,2,altinn 3 app-specific openapi spec datamodel schemas | app-specific openapi specification | altinn 3 apps openapi specification | openapi swagger for apps | schemas for data models and content types | app datamodels,false,true,0,5,1,1,5a9a7c6c6372;42186e0a3d24;32e98b5446e8;bb6cf12d65da;da3019da51b8,5a9a7c6c6372,42186e0a3d24,12653,5874,343,6217,0,3,3,"The app-specific OpenAPI spec is available in the app’s own Swagger page: visit `https://{org}.apps.altinn.no/{org}/{app}/swagger` in a browser. This is the spec that includes the app-specific data type information, such as datamodel schemas and content types for attachment types. [1]
+
+There is also a general auto-generated OpenAPI specification, but it does **not** include information about the different data types. [1]",
+ec8bfac8-c857-4ef2-a32c-aebab02b3bfc,2026-06-02T16:37:19.699793Z,window-2000,ue-api-06-app-openapi-swagger-spec,4,public-docs,new,"altinn-3-general,hard",complete,0,false,chunks+answer,true,,,,,,,1.0,1.0,1.0,0.0,true,2,true,2,true,"de2aa5b3e74ef R21.6 P2.6 h2.0 or1.2 L1107 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec","d9cffabf28133 R22.5 P2.7 h2.0 or1.7 L1153 0/? ty:content+phrase b[0.0,0.0,0.0,0.4,0.0,0.0] | Spec",1,altinn 3 app-specific openapi spec datamodel schemas where to find path app includes datamodel schemas | app-specific openapi specification schemas for data models and content types | openapi swagger for apps schemas for data models and content types | altinn 3 apps openapi specification schemas for data models and content types | openapi spec schemas for data models and content types | app-specific api schemas for data models and content types,false,,0,2,1,1,5a9a7c6c6372;42186e0a3d24,5a9a7c6c6372,42186e0a3d24,12494,4545,384,4929,0,3,3,"You find the app-specific OpenAPI spec in a browser at `{org}.apps.altinn.no/{org}/{app}/swagger` for the given Altinn 3 app. This is the app-specific specification that includes the datamodel schemas and content types, unlike the general auto-generated spec. [1]",

@@ -1,0 +1,106 @@
+# Local development stack.
+#
+# WHY THIS EXISTS. Before this file, a first query required SSH to a shared box
+# (`bb port-forward` -> root@<prod-ip>) — a credential a day-one contributor does
+# not have, with no self-service fallback. That made the documented first-run
+# path unreachable from outside the team. See issue #3.
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#
+# Typesense only, by default: the easy DB path is Datahike's file backend
+# (DATAHIKE_FILE_PATH), so Postgres is NOT needed for local dev and is kept
+# behind an opt-in profile rather than started for everyone.
+#
+#   docker compose -f docker-compose.dev.yml --profile postgres up -d
+#
+# After it is up, point the app's config at it (connection details live in the
+# config DB, not in env vars — see digdir.rag.typesense/resolve-tenant-ts-settings):
+#
+#   bb config-set services.typesense.api-host '"localhost:8108"' <tenant> platform default
+#   bb config-set services.typesense.api-tls false                <tenant> platform default
+#   bb config-set services.typesense.api-key-admin '"dev-typesense-key"' <tenant> platform default
+#
+# The API key below is a LOCAL DEV PLACEHOLDER. It is intentionally committed
+# and intentionally worthless — it guards an empty container on loopback. Never
+# reuse it anywhere that holds real data.
+
+name: digdir-rag-dev
+
+services:
+  typesense:
+    # Pinned deliberately: `latest` currently resolves to a 31.0 release
+    # candidate. 30.2 is the newest stable, and is verified against the
+    # typesense-clj 0.1.147 client this repo uses.
+    image: typesense/typesense:30.2
+    container_name: digdir-rag-typesense-dev
+    restart: unless-stopped
+    command: >
+      --data-dir /data
+      --api-key=dev-typesense-key
+      --enable-cors
+    volumes:
+      - typesense-data:/data
+    ports:
+      - "8108:8108"
+    healthcheck:
+      # The image ships no curl and no wget, and its `sh` has no /dev/tcp — but
+      # `bash` is present and does, so probe /health over a raw socket.
+      # (`typesense-server --version` is NOT a valid flag: it prints usage and
+      # exits non-zero, which silently marks the container unhealthy forever and
+      # would hang anything waiting on `service_healthy`.)
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/8108 && printf "GET /health HTTP/1.0\r\n\r\n" >&3 && grep -q ok <&3'
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  postgres:
+    # OPT-IN ONLY (`--profile postgres`). The supported easy path is
+    # DATAHIKE_FILE_PATH; this exists for parity with the Postgres-backed
+    # deployment when you specifically need to test that path.
+    profiles: ["postgres"]
+    image: postgres:16-alpine
+    container_name: digdir-rag-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: digdir
+      POSTGRES_PASSWORD: dev-postgres-password
+      POSTGRES_DB: digdir_rag_dev
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U digdir -d digdir_rag_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+# ---------------------------------------------------------------------------
+# Reusing this in CI (issue #8)
+#
+# GitHub Actions `services:` cannot pass a `command`, so the flags above must
+# become env vars — verified working against this same 30.2 image:
+#
+#   services:
+#     typesense:
+#       image: typesense/typesense:30.2
+#       ports: ["8108:8108"]
+#       env:
+#         TYPESENSE_API_KEY: dev-typesense-key
+#         TYPESENSE_DATA_DIR: /tmp     # NOT /data — see below
+#
+# TYPESENSE_DATA_DIR must point at a directory that ALREADY EXISTS in the
+# image. `/data` only works here because the named volume below creates it; a
+# bare service container with no volume exits immediately with
+# "Data directory /data does not exist". `/tmp` exists, needs no volume, and
+# CI wants a throwaway instance anyway.
+# ---------------------------------------------------------------------------
+
+volumes:
+  typesense-data:
+  postgres-data:

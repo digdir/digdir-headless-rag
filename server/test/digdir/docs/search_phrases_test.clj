@@ -1,11 +1,9 @@
 (ns digdir.docs.search-phrases-test
   "Tests for search phrase generation functionality.
    Uses mocked OpenAI API responses."
-  (:require [clojure.test :refer [deftest testing is are use-fixtures]]
+  (:require [clojure.test :refer [deftest testing is ]]
             [clojure.string :as str]
-            [clojure.java.io :as io]
-            [digdir.docs.website :as website]
-            [digdir.docs.test-fixtures :as fixtures]))
+            [digdir.docs.website :as website]))
 
 ;; ============================================================================
 ;; Test Data

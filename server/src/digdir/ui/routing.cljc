@@ -41,17 +41,27 @@
 (def route-config
   "Route definitions map tab identifiers to URL segments."
   {:main {:tabs [{:id :chat :segment "chat"}
+                 {:id :datasets :segment "datasets"}
                  {:id :config :segment "config"}
                  {:id :import :segment "import"}
-                 {:id :access-control :segment "access-control"}]
+                 {:id :sweeps :segment "sweeps"}]
           :default :chat}
 
    :config {:tabs [{:id :config :segment "config"}
+                   {:id :db-management :segment "db-management"}
                    {:id :audit :segment "audit"}
                    {:id :permissions :segment "permissions"}
                    {:id :api-keys :segment "api-keys"}
-                   {:id :pipelines :segment "pipelines"}
-                   {:id :skills :segment "skills"}]
+                   ;; `:id` and `:segment` agree, like every other tab here.
+                   ;; Not `modes`: that is the WIRE vocabulary for the
+                   ;; skill-graph grant (#122/#164), and this panel is broader —
+                   ;; SkillsUI holds Skill Graphs, Skills and Tools.
+                   ;; `:legacy-segments` keeps old bookmarks working; without it
+                   ;; `/config/skill-graphs` silently resolves to the group
+                   ;; default (Config) — a wrong tab rather than an error. #171.
+                   {:id :skills :segment "skills" :legacy-segments #{"skill-graphs"}}
+                   {:id :diagnostics :segment "diagnostics"}
+                   {:id :global :segment "global"}]
             :default :config}
 
    :import {:tabs [{:id :kudos :segment "kudos"}
@@ -108,7 +118,10 @@
       ;; Try to find matching segment
       (let [match (->> tabs
                        (map-indexed vector)
-                       (filter #(= segment (:segment (second %))))
+                       (filter (fn [[_ tab]]
+                                 (or (= segment (:segment tab))
+                                     ;; a renamed tab keeps its old URL working
+                                     (contains? (:legacy-segments tab) segment))))
                        first)]
         (if match
           (first match)

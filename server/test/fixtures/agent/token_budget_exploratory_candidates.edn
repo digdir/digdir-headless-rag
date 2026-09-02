@@ -1,0 +1,114 @@
+;; Exploratory live budget candidates.
+;;
+;; These cases are not suitable for hard gating yet, but they expose useful
+;; failure modes that should be revisited as retrieval, grounding, and budget
+;; handling improve.
+;;
+;; Observed modes on 2026-03-20:
+;; - current->relaxed boundary can appear, then disappear on rerun
+;; - relaxed runs can take a worse path than current runs
+;; - broad multi-table prompts can trigger unsupported inference instead of
+;;   grounded table extraction
+;; - anchored Digdir prompts can still drift into the wrong agency or omit a
+;;   year under tighter read-char constraints
+{:cases
+ [
+  ;; Volatile token-boundary candidate. Sometimes FAIL->PASS with a relaxed
+  ;; read-char budget, but not stable enough for gating.
+  {:id "digdir-arsverk-avtalte-utforte-2021-2023-exploratory"
+   :budget-dimension :read-chars
+   :query "Oppgi tal avtalte og utførte årsverk for Digdir i 2021, 2022 og 2023."
+   :expected-answer-pattern "(?is)(?=.*\\b2021\\b)(?=.*\\b2022\\b)(?=.*\\b2023\\b)(?=.*\\b338\\b)(?=.*\\b311\\b)(?=.*\\b356\\b)(?=.*\\b326\\b)(?=.*\\b363\\b)(?=.*\\b332\\b)"
+   :golden-chunk-ids ["b53d465f69b6" "15a66d5ec5c5" "6aefa3a05c7d"]
+   :current-budget {:max-search-passes 4
+                    :max-read-operations 6
+                    :max-read-content-length 12000}
+   :relaxed-budget {:max-search-passes 5
+                    :max-read-operations 7
+                    :max-read-content-length 16000}}
+
+  ;; Relaxed-path instability. Current can answer cleanly, while relaxed runs
+  ;; sometimes drift away from the same Digdir Hovudtal evidence.
+  {:id "digdir-arsverk-metrics-2021-2023-path-instability"
+   :budget-dimension :mixed
+   :query "Kva var tal tilsette, avtalte årsverk og utførte årsverk i Digdir i 2021, 2022 og 2023?"
+   :expected-answer-pattern "(?is)(?=.*\\b2021\\b)(?=.*\\b2022\\b)(?=.*\\b2023\\b)(?=.*\\b349\\b)(?=.*\\b367\\b)(?=.*\\b374\\b)(?=.*\\b338\\b)(?=.*\\b356\\b)(?=.*\\b363\\b)(?=.*\\b311\\b)(?=.*\\b326\\b)(?=.*\\b332\\b)"
+   :golden-chunk-ids ["b53d465f69b6" "15a66d5ec5c5" "6aefa3a05c7d"]
+   :current-budget {:max-search-passes 4
+                    :max-read-operations 6
+                    :max-read-content-length 12000}
+   :relaxed-budget {:max-search-passes 5
+                    :max-read-operations 7
+                    :max-read-content-length 16000}}
+
+  ;; Grounding/value-selection drift. Runs stay on relevant Digdir evidence,
+  ;; but the answer can still emit a wrong or missing 2023 value.
+  {:id "digdir-lonnsutgifter-per-arsverk-2021-2023-grounding"
+   :budget-dimension :mixed
+   :query "Kva var lønsutgifter per årsverk i Digdir i 2021, 2022 og 2023?"
+   :expected-answer-pattern "(?is)(?=.*\\b2021\\b)(?=.*\\b2022\\b)(?=.*\\b2023\\b)(?=.*\\b979491\\b)(?=.*\\b970798\\b)(?=.*\\b1031088\\b)"
+   :golden-chunk-ids ["b53d465f69b6" "15a66d5ec5c5" "6aefa3a05c7d"]
+   :current-budget {:max-search-passes 4
+                    :max-read-operations 6
+                    :max-read-content-length 12000}
+   :relaxed-budget {:max-search-passes 5
+                    :max-read-operations 7
+                    :max-read-content-length 16000}}
+
+  ;; Broad multi-table query. The agent drifts into unsupported inference and
+  ;; approximate calculations instead of grounded extraction across old/new
+  ;; Hovudtal tables.
+  {:id "digdir-utforte-lonnsutgifter-2018-2023-inference-drift"
+   :budget-dimension :mixed
+   :query "Oppgi tal utførte årsverk og lønsutgifter per årsverk for Digdir i 2018, 2019, 2020, 2021, 2022 og 2023."
+   :expected-answer-pattern "(?is)(?=.*\\b2018\\b)(?=.*\\b2019\\b)(?=.*\\b2020\\b)(?=.*\\b2021\\b)(?=.*\\b2022\\b)(?=.*\\b2023\\b)(?=.*\\b308\\b)(?=.*\\b306\\b)(?=.*\\b330\\b)(?=.*\\b311\\b)(?=.*\\b326\\b)(?=.*\\b332\\b)(?=.*\\b875983\\b)(?=.*\\b932805\\b)(?=.*\\b949142\\b)(?=.*\\b979491\\b)(?=.*\\b970798\\b)"
+   :golden-chunk-ids ["15a66d5ec5c5" "6aefa3a05c7d"]
+   :current-budget {:max-search-passes 4
+                    :max-read-operations 6
+                    :max-read-content-length 12000}
+   :relaxed-budget {:max-search-passes 5
+                    :max-read-operations 7
+                    :max-read-content-length 16000}}
+
+  ;; Anchored year-range extraction where relaxed reads can still make a worse
+  ;; summarization choice and drop endpoints that current captured correctly.
+  {:id "digdir-utforte-arsverk-2018-2023-path-instability"
+   :budget-dimension :read-chars
+   :query "Frå Hovudtal-tabellane i Digdirs årsrapportar for 2022 og 2023, oppgi tal utførte årsverk for 2018, 2019, 2020, 2021, 2022 og 2023."
+   :expected-answer-pattern "(?is)(?=.*\\b2018\\b)(?=.*\\b2019\\b)(?=.*\\b2020\\b)(?=.*\\b2021\\b)(?=.*\\b2022\\b)(?=.*\\b2023\\b)(?=.*\\b308\\b)(?=.*\\b306\\b)(?=.*\\b330\\b)(?=.*\\b311\\b)(?=.*\\b326\\b)(?=.*\\b332\\b)"
+   :golden-chunk-ids ["15a66d5ec5c5" "6aefa3a05c7d"]
+   :current-budget {:max-search-passes 4
+                    :max-read-operations 6
+                    :max-read-content-length 12000}
+   :relaxed-budget {:max-search-passes 5
+                    :max-read-operations 7
+                    :max-read-content-length 16000}}
+
+  ;; Coverage gap: both profiles stay on the right Digdir evidence, but the
+  ;; agent still omits or denies the 2018 value when asked for the full range.
+  {:id "digdir-lonnsutgifter-per-arsverk-2018-2023-coverage-gap"
+   :budget-dimension :mixed
+   :query "Frå Hovudtal-tabellane i Digdirs årsrapportar for 2022 og 2023, oppgi lønsutgifter per årsverk for 2018, 2019, 2020, 2021, 2022 og 2023."
+   :expected-answer-pattern "(?is)(?=.*\\b2018\\b)(?=.*\\b2019\\b)(?=.*\\b2020\\b)(?=.*\\b2021\\b)(?=.*\\b2022\\b)(?=.*\\b2023\\b)(?=.*875\\s*983)(?=.*932\\s*805)(?=.*949\\s*142)(?=.*979\\s*491)(?=.*970\\s*798)(?=.*1\\s*031\\s*088)"
+   :golden-chunk-ids ["15a66d5ec5c5" "6aefa3a05c7d"]
+   :current-budget {:max-search-passes 4
+                    :max-read-operations 6
+                    :max-read-content-length 12000}
+   :relaxed-budget {:max-search-passes 5
+                    :max-read-operations 7
+                    :max-read-content-length 16000}}
+
+  ;; Volatile source selection. One run failed at the current budget by reading
+  ;; UNE-style evidence, but a rerun passed at baseline, so this remains
+  ;; informative-only until the failure mode repeats.
+  {:id "digdir-tilsette-lonnsutgifter-2020-2023-source-selection"
+   :budget-dimension :mixed
+   :query "Frå Hovudtal-tabellane i Digdirs årsrapportar for 2022 og 2023, oppgi tal tilsette og lønsutgifter per årsverk for 2020, 2021, 2022 og 2023."
+   :expected-answer-pattern "(?is)(?=.*\\b2020\\b)(?=.*\\b2021\\b)(?=.*\\b2022\\b)(?=.*\\b2023\\b)(?=.*\\b371\\b)(?=.*\\b349\\b)(?=.*\\b367\\b)(?=.*\\b374\\b)(?=.*949\\s*142)(?=.*979\\s*491)(?=.*970\\s*798)(?=.*1\\s*031\\s*088)"
+   :golden-chunk-ids ["15a66d5ec5c5" "6aefa3a05c7d"]
+   :current-budget {:max-search-passes 4
+                    :max-read-operations 6
+                    :max-read-content-length 12000}
+   :relaxed-budget {:max-search-passes 5
+                    :max-read-operations 7
+                    :max-read-content-length 16000}}]}

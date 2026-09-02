@@ -1,0 +1,35 @@
+;; LEVER A P1 — query-aware passage windowing at rerank time.
+;;
+;; Replaces ColBERT's truncate-head-tail (keeps head+tail, DROPS THE MIDDLE where
+;; long goldens' answers live) with best-content-window: the ~budget-char span of
+;; the chunk with the highest query-term coverage. Implemented client-side in
+;; rag/rerank.clj behind :rerank-windowing; budget = rerank-max-chunk-length.
+;;
+;; ON arm uses windowing + max-chunk-length 2000 (matched to ColBERT's ~512-token
+;; effective capacity). We ALREADY proved a flat length raise (1000->4000, no
+;; windowing) is a wash (rerank-chunklen-p1), so any win here is attributable to
+;; WINDOWING, not the larger budget. judge? false — P1 signal is retrieval: does
+;; the long-golden rerank-score rise and the golden surface (pool-rank, recall@20)?
+;; Success = long goldens (broker-05, sys-02, studio-01, corr-01, authz-01) score
+;; up and pool top-20, with the <=1000 control (broker-03, api-06) unchanged.
+;; 2 × 10 × 5 = 100 runs, interleaved.
+{:configs
+ [{:id "off" :skill-graph-id :builtin/agent-rag-graph-bundled :skill-params {}}
+  {:id "window-2000" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:rerank-windowing true :rerank-max-chunk-length 2000}}}]
+ :repeats 5
+ :judge? false
+ :order :interleaved
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-events-02-publisere-cloudevents"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-broker-03-store-filer-virusskann"
+                          "ue-broker-05-filstorrelse-grenser-multi"
+                          "ue-corr-01-events-webhook-subscription"
+                          "ue-sys-02-systembrukertoken-pdp-autorisasjon"
+                          "ue-api-06-app-openapi-swagger-spec"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-studio-02-pdf-service-task"}}}

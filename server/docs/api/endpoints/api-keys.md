@@ -1,27 +1,18 @@
-# API Keys Endpoints
+# API Key Endpoints
 
-Manage API keys for accessing the RAG API. These endpoints require JWT authentication (admin login).
+Manage Public API keys through the JWT-authenticated Operator Console API.
 
 ## Authentication
 
-All endpoints require JWT authentication via the `auth-token` cookie, obtained by logging into the admin interface.
+All endpoints require the `auth-token` cookie.
 
----
+`POST`, `PUT`, and revoke operations also require `X-User-Email`.
 
 ## List API Keys
 
-`GET /api/keys`
+`GET /console-api/api-keys`
 
-List all API keys belonging to the authenticated user.
-
-### Example Request
-
-```bash
-curl -X GET https://admin.kunnskap.digdir.cloud/api/keys \
-  --cookie "auth-token=your_jwt_token"
-```
-
-### Success Response (200)
+### Success Response
 
 ```json
 {
@@ -29,137 +20,223 @@ curl -X GET https://admin.kunnskap.digdir.cloud/api/keys \
     {
       "id": "key_abc123",
       "name": "Production Integration",
-      "entity-id": "entity-123",
+      "dataset-scopes": [
+        {
+          "tenant": "digdir",
+          "dataset-config-key": "public-docs"
+        }
+      ],
+      "allowed-config-keys": [
+        {
+          "root": "dataset",
+          "tenant": "digdir",
+          "dataset-config-key": "public-docs"
+        }
+      ],
       "created": 1704067200,
       "last-used": 1704153600,
       "revoked": false
-    },
-    {
-      "id": "key_def456",
-      "name": "Development Testing",
-      "entity-id": "entity-123",
-      "created": 1703980800,
-      "last-used": 1704067200,
-      "revoked": false
-    },
-    {
-      "id": "key_old789",
-      "name": "Old Key",
-      "entity-id": "entity-123",
-      "created": 1701388800,
-      "last-used": 1702598400,
-      "revoked": true
     }
   ]
 }
 ```
 
-### Response Fields
+## Create API Key
+
+`POST /console-api/api-keys`
+
+### Required Body Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `api-keys` | array | List of API key objects |
-| `api-keys[].id` | string | Key identifier (not the actual key) |
-| `api-keys[].name` | string | Human-readable name |
-| `api-keys[].entity-id` | string | Entity the key is scoped to |
-| `api-keys[].created` | integer | Unix timestamp of creation |
-| `api-keys[].last-used` | integer | Unix timestamp of last use |
-| `api-keys[].revoked` | boolean | Whether the key has been revoked |
+| `name` | string | Human-readable key name |
 
----
+Also required: **one of `dataset-scopes` or `policy-id`**. A key with neither
+is rejected — it would grant access to nothing.
 
-## Create API Key
+### Optional Body Fields
 
-`POST /api/keys`
+| Field | Type | Description |
+|-------|------|-------------|
+| `dataset-scopes` | array | Dataset scopes in `{tenant, dataset-config-key}` form |
+| `policy-id` | string | Access policy to inherit grants from, instead of listing `dataset-scopes` |
+| `allowed-config-keys` | array | Root-scoped config access grants |
+| `agent-refs` | array | Explicit agent IDs. **Empty or omitted means UNRESTRICTED — every agent** (see below) |
+| `modes` | array | Namespaced mode ids the key may invoke, e.g. `builtin/agent-rag-graph-bundled` |
+| `client-id` | string | Optional caller/client identifier stored with the key |
 
-Create a new API key. The actual key value is only returned once in this response.
+### An empty grant list means UNRESTRICTED, not none
 
-### Body Parameters
+**`agent-refs`, `modes`/`skill-graphs`, `dataset-scopes` and
+`allowed-config-keys` all grant EVERYTHING when left empty.** A grant list
+narrows access; it does not confer it. A key created with no `agent-refs` can
+list and call **every** agent.
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `name` | string | Yes | Human-readable name for the key |
-| `entity-id` | string | Yes | Entity ID to scope the key to |
+This is deliberate (#349) and it is the rule the runtime has always applied on
+both `/api/mcp` and `/api/conversations` — but it is the opposite of what most
+readers assume from an authorization field, so it is stated here rather than
+left to be inferred. The admin console said "None" for such a key until #349;
+it now says *"Unrestricted — all agents"*.
+
+**To restrict a key, list what it may reach.** There is no value of
+`agent-refs` that means "nothing".
+
+Two field names are **rejected with a `400`** rather than ignored, because
+sending either used to return `201` with the request quietly half-applied:
+
+| Field | Why |
+|-------|-----|
+| `skill-graphs` | Renamed to `modes` (see the public-identifiers ADR). Send `modes`. |
+| `scopes` | Never settable on this endpoint. A new key gets the default `query` scope. |
 
 ### Example Request
 
 ```bash
-curl -X POST https://admin.kunnskap.digdir.cloud/api/keys \
+curl -X POST https://admin.kunnskap.digdir.cloud/console-api/api-keys \
   -H "Content-Type: application/json" \
+  -H "X-User-Email: user@example.com" \
   --cookie "auth-token=your_jwt_token" \
   -d '{
-    "name": "My New Integration Key",
-    "entity-id": "entity-123"
+    "name": "Public Docs Integration",
+    "dataset-scopes": [
+      {
+        "tenant": "digdir",
+        "dataset-config-key": "public-docs"
+      }
+    ],
+    "allowed-config-keys": [
+      {
+        "root": "dataset",
+        "tenant": "digdir",
+        "dataset-config-key": "public-docs"
+      },
+      {
+        "root": "runtime",
+        "tenant": "digdir",
+        "runtime-config-key": "default"
+      }
+    ]
   }'
 ```
 
-### Success Response (201)
+### Success Response
 
 ```json
 {
   "api-key-id": "key_new123",
   "api-key": "rag_a1b2c3d4e5f6789012345678901234567890123456789012345678901234",
-  "name": "My New Integration Key",
-  "entity-id": "entity-123",
+  "name": "Public Docs Integration",
+  "dataset-scopes": [
+    {
+      "tenant": "digdir",
+      "dataset-config-key": "public-docs"
+    }
+  ],
+  "allowed-config-keys": [
+    {
+      "root": "dataset",
+      "tenant": "digdir",
+      "dataset-config-key": "public-docs"
+    },
+    {
+      "root": "runtime",
+      "tenant": "digdir",
+      "runtime-config-key": "default"
+    }
+  ],
   "warning": "This is the only time the API key will be shown. Please store it securely."
 }
 ```
 
-### Response Fields
+### Common Errors
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `api-key-id` | string | Key identifier for management |
-| `api-key` | string | **The actual API key - store this securely!** |
-| `name` | string | The name you provided |
-| `entity-id` | string | Entity the key is scoped to |
-| `warning` | string | Reminder to store the key |
+Missing name:
 
-### Error Responses
-
-**400 Bad Request** - Missing required field
 ```json
 {
   "error": "Missing required field: name"
 }
 ```
 
-**400 Bad Request** - Missing entity-id
+Missing dataset scopes:
+
 ```json
 {
-  "error": "Missing required field: entity-id"
+  "error": "Missing required field: dataset-scopes"
 }
 ```
 
-**404 Not Found** - Invalid entity
+Invalid dataset scope:
+
 ```json
 {
-  "error": "Entity not found: invalid-entity"
+  "error": "Dataset not found for dataset-scope: {:tenant \"digdir\", :dataset-config-key \"missing\"}"
 }
 ```
 
----
+## Replace Allowed Config Keys
 
-## Revoke API Key
-
-`POST /api/keys/:key-id/revoke`
-
-Revoke an API key. This action is permanent and cannot be undone.
-
-### Path Parameters
-
-| Parameter | Description |
-|-----------|-------------|
-| `key-id` | API key identifier |
+`PUT /console-api/api-keys/:key-id/allowed-config-keys`
 
 ### Example Request
 
 ```bash
-curl -X POST https://admin.kunnskap.digdir.cloud/api/keys/key_abc123/revoke \
-  --cookie "auth-token=your_jwt_token"
+curl -X PUT https://admin.kunnskap.digdir.cloud/console-api/api-keys/key_abc123/allowed-config-keys \
+  -H "Content-Type: application/json" \
+  -H "X-User-Email: user@example.com" \
+  --cookie "auth-token=your_jwt_token" \
+  -d '{
+    "allowed-config-keys": [
+      {
+        "root": "platform",
+        "tenant": "digdir",
+        "platform-config-key": "default"
+      },
+      {
+        "root": "runtime",
+        "tenant": "digdir",
+        "runtime-config-key": "default"
+      },
+      {
+        "root": "dataset",
+        "tenant": "digdir",
+        "dataset-config-key": "public-docs"
+      }
+    ]
+  }'
 ```
 
-### Success Response (200)
+### Success Response
+
+```json
+{
+  "api-key-id": "key_abc123",
+  "name": "Production Integration",
+  "allowed-config-keys": [
+    {
+      "root": "platform",
+      "tenant": "digdir",
+      "platform-config-key": "default"
+    },
+    {
+      "root": "runtime",
+      "tenant": "digdir",
+      "runtime-config-key": "default"
+    },
+    {
+      "root": "dataset",
+      "tenant": "digdir",
+      "dataset-config-key": "public-docs"
+    }
+  ]
+}
+```
+
+## Revoke API Key
+
+`POST /console-api/api-keys/:key-id/revoke`
+
+### Success Response
 
 ```json
 {
@@ -167,78 +244,14 @@ curl -X POST https://admin.kunnskap.digdir.cloud/api/keys/key_abc123/revoke \
 }
 ```
 
-### Error Responses
-
-**403 Forbidden** - Not authorized
-```json
-{
-  "error": "Not authorized to revoke this API key"
-}
-```
-
-**404 Not Found** - Key not found
-```json
-{
-  "error": "API key not found"
-}
-```
-
----
-
-## API Key Format
-
-API keys follow this format:
-
-```
-rag_<64 hexadecimal characters>
-```
-
-- **Prefix**: `rag_` identifies the key type
-- **Body**: 64 hex characters (256-bit entropy)
-- **Example**: `rag_a1b2c3d4e5f6789012345678901234567890123456789012345678901234`
-
----
-
-## Best Practices
-
-### Security
-
-1. **Store keys securely** - Use environment variables or secret managers
-2. **Never commit keys** - Add API keys to `.gitignore`
-3. **Use separate keys** - Different keys for dev/staging/prod
-4. **Rotate regularly** - Create new keys and revoke old ones periodically
-
-### Naming Convention
-
-Use descriptive names that identify:
-- The application or service using the key
-- The environment (if applicable)
-- The purpose
-
-Examples:
-- `Production - Main Website`
-- `Staging - API Testing`
-- `CI/CD Pipeline`
-- `Developer - John's Local`
-
-### Monitoring
-
-Check the admin interface regularly for:
-- Unused keys (no `last-used` date)
-- Keys that haven't been used recently
-- Unexpected usage patterns
-
----
-
 ## Notes
 
-- API keys are scoped to a single entity (organization/project)
-- Revoked keys cannot be un-revoked - create a new key instead
-- The actual key value is only shown once at creation time
-- Keys remain in the system after revocation for audit purposes
-- Only the key owner can revoke their own keys
-
-## Related
-
-- [Authentication](../authentication.md) - How to use API keys
-- [Getting Started](../getting-started.md) - First steps with the API
+- API keys are scoped to dataset scopes, not pipelines.
+- Allowed config keys are root-specific and use `platform-config-key`, `runtime-config-key`, or `dataset-config-key`.
+- Revocation is permanent.
+- The plaintext API key is shown only once at creation time.
+- The database stores a SHA-256 digest of the 256-bit random credential, plus
+  its non-secret prefix and final four characters for identification. Existing
+  plaintext rows are migrated automatically at startup.
+- List and detail responses never contain either plaintext or the lookup
+  digest. They expose only `key-prefix` and `key-last-four`.

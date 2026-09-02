@@ -1,0 +1,72 @@
+run-id,timestamp,config-id,question-id,repeat,dataset,source,question-tags,status,clarification-rounds,terminal-clarification?,grounding-mode,answer-substring-hit?,recall-at-5,recall-at-10,recall-at-20,citation-recall,n-retrieved,n-cited,n-expected,retrieved-chunk-ids,cited-chunk-ids,expected-chunk-ids,elapsed-ms,prompt-tokens,completion-tokens,total-tokens,steps-executed,response,error
+c4e99e30-48dc-4384-9da7-97ff1a77da05,2026-05-22T15:10:18.831019Z,default,altinn-systemuser-api-model,0,public-docs,exploratory-rerank,"altinn-systemuser,exact-lookup,simple",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,9,3,1,74fc02526720;f33ae6ec350b;fd72a28afd94;c7ab72da02fb;3f117cd1f511;a79a59ed2586;e6f7545a1adc;6f4a1ef342c8;fffd1547fdeb,74fc02526720;e6f7545a1adc;fffd1547fdeb,6d8a6a851332,17836,,,,3,"Datamodellen for en **system user** i Altinn ser ut til å inneholde minst disse feltene, basert på modellen for “system user information” [1]:
+
+- **Unique identifier**: en unik identifikator generert av Altinn når system user opprettes [1].
+- **Name**: et brukervennlig navn som leverandøren oppgir ved opprettelse; hvis den opprettes via portalen, settes den som standard til systemnavnet [1].
+- **Organization number / unique identifier of the organization**: modellen viser også til den unike identifikatoren for organisasjonen knyttet til system user [1].
+
+Det er litt usikkerhet i utdraget fordi kilden er avkortet, så jeg kan ikke garantere at dette er hele datamodellen eller alle feltene [1]. Hvis du vil, kan jeg også prøve å oppsummere **hele flyten for opprettelse av system user** eller s…",
+2a669f84-11dd-409c-893e-6636ed0191ad,2026-05-22T15:10:35.280042Z,default,altinn-authorization-regler,0,public-docs,exploratory-rerank,"exact-lookup,altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,11,6,1,808e5f6f8202;4b909d757fe8;7c5e87028e37;4543ab64826c;e71360b09497;73a819db1dd9;e91fd8c828ab;ba3cbd8327ae;a17ce69bcbf1;0b72efa29c30;ddfbe673e229,4b909d757fe8;4543ab64826c;e91fd8c828ab;ba3cbd8327ae;a17ce69bcbf1;0b72efa29c30,86a29a595367,16447,,,,3,"I Altinn Authorization er **tilgangsregler** de autorisasjonsreglene/policyene som defineres i **PAP (Policy Administration Point)** og evalueres av **PDP (Policy Decision Point)** for å avgjøre om en bruker eller et system skal få tilgang til en ressurs eller et API-endepunkt [4][5][6].  
+
+I praksis er dette **ABAC-baserte** regler som bruker **XACML 3.0**-standarden, og de kan være gyldige for hele appen eller bare for et delsett av ressurser [3][6]. For Altinn Apps/Platform beskrives en rett som en tillatelse til å utføre en handling på en gitt ressurs, for eksempel read, write eller sign [1].  
+
+Hvis du mener **policy.xml** spesielt, er det den autogenererte **XACML policy file** i appen som utvikleren kan endre for å styre disse reglene [2].",
+ae886d01-5136-483d-a535-f27c0137e467,2026-05-22T15:10:53.822338Z,default,altinn-broker-rest-usage,0,public-docs,exploratory-rerank,"simple,navigational,altinn-broker",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,10,6,1,7cb98e5ee894;9fb411afc088;13326795eb74;ce1e8f486e38;611bf4648c1a;9269cd53c390;a83186a0b089;9221b1f02039;3caa21e5f977;ef73ed289c2a,7cb98e5ee894;9fb411afc088;611bf4648c1a;9269cd53c390;a83186a0b089;3caa21e5f977,0f3807200a65,18542,,,,3,"Du bruker Altinn Broker med REST-API ved å følge denne hovedflyten: autentiser deg, kall Broker-API-et med riktig token og subscription key, og håndter operasjonene asynkront via event subscriptions i stedet for polling [1][5].
+
+Kort oppsummert:
+
+1. **Sett opp tilgang først**  
+   Du må ha fullført stegene i **Getting started** for å sette opp tilgangsbehovene [4].
+
+2. **Autentiser deg**  
+   For alle operasjoner må du bruke en **Maskinporten Client** for å hente et **Altinn Token** fra Altinn Authentication [5].  
+   Deretter bruker du dette **Altinn Token** som **Bearer token** i alle Broker API-kall, sammen med **APIM subscription key** i headeren `Ocp-Apim-Subscription-Key` [5].
+
+3. **Bruk REST-API-et for Broker**  
+   Broker i Altinn 2 og Altinn 3 har ulike REST-mønstre. I Altinn 2 er…",
+7338f006-da06-4837-b03a-7a873bcfd0c4,2026-05-22T15:11:12.321033Z,metadata-heavy,altinn-systemuser-api-model,0,public-docs,exploratory-rerank,"altinn-systemuser,exact-lookup,simple",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,8,1,1,74fc02526720;9bc9b92a27cc;cb349d28b827;ccaa38f7f58e;63528e131071;7dddbc3051e8;ac59b367d616;7eff21983caf,74fc02526720,6d8a6a851332,18498,,,,3,"Datamodellen for en **system user** i Altinn ser ut til å bestå av disse feltene, basert på kildene:
+
+- **systemuser_id**: unik identifikator generert av Altinn når systembrukeren opprettes. [1]
+- **name**: brukervennlig navn gitt av leverandøren ved opprettelse av systembrukeren; hvis den opprettes via portalen, blir dette som standard systemnavnet. [1]
+- **system_id**: unik identifikator for systemet. [1]
+- **system_name**: brukervennlig navn for systemet. [1]
+- **system_orgno**: unik identifikator for systemet, generert av Altinn når systemet opprettes. [1]
+- **partyid**: party-id til organisasjonen som eier systembrukeren. [1]
+- **partyOrgNo**: organisasjonsnummeret til organisasjonen som eier systembrukeren. [1]
+- **created**: datoen systembrukeren ble opprettet. [1]
+- **deleted**: an…",
+01ddc538-f06c-41c6-a544-358b94218b25,2026-05-22T15:11:29.781275Z,metadata-heavy,altinn-authorization-regler,0,public-docs,exploratory-rerank,"exact-lookup,altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,9,4,1,ff69b65719f0;4543ab64826c;bb2b7266e447;e246b621f86c;73a819db1dd9;a17ce69bcbf1;0b72efa29c30;ddfbe673e229;7eddf219a393,ff69b65719f0;bb2b7266e447;0b72efa29c30;ddfbe673e229,86a29a595367,17460,,,,3,"Tilgangsregler i Altinn Authorization er **autorisasjonsregler** som definerer **hvem som har lov til å utføre hvilke handlinger** i en app eller tjeneste. De er basert på **ABAC** og uttrykkes i en **XACML policy file** (`policy.xml`) som applikasjonsutvikleren kan endre i app-repositoriet. [1][3][4]
+
+Mer konkret brukes reglene til å styre tilgang til bestemte steg i arbeidsflyten og til informasjon som vises, og de må settes opp slik at de passer med tjenesteeierens intensjon og riktig rollevalg. [1][2]
+
+Hvis du vil, kan jeg også forklare forskjellen mellom **policy**, **roles**, **PAP/PDP/PEP/PIP/PRP**, eller vise et enkelt eksempel på en tilgangsregel.",
+9f5b92a6-29e8-4a0b-8f21-3f5fd51f5c6f,2026-05-22T15:11:47.881499Z,metadata-heavy,altinn-broker-rest-usage,0,public-docs,exploratory-rerank,"simple,navigational,altinn-broker",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,13,8,1,7cb98e5ee894;9fb411afc088;c244cbf095ac;80eaeccc33d8;3b433ef02414;741cc0753fe0;ce1e8f486e38;611bf4648c1a;9269cd53c390;a83186a0b089;9221b1f02039;3caa21e5f977;ef73ed289c2a,7cb98e5ee894;9fb411afc088;c244cbf095ac;80eaeccc33d8;3b433ef02414;611bf4648c1a;9269cd53c390;a83186a0b089,0f3807200a65,18100,,,,3,"Altinn Broker brukes som en **Managed File Transfer (MFT)**-løsning for sikker overføring av store filer fra én avsender til én eller flere mottakere. Den er laget for å erstatte mer ad hoc filoverføring via FTP, HTTP eller SFTP. [2]
+
+For å bruke Altinn Broker med REST-API må du først ha gjort oppsettet i **Getting started** for å få på plass tilgangskravene. [7] Deretter må du autentisere deg med en **Maskinporten Client**, hente et **Altinn Token** fra Altinn Authentication, og bruke dette som **Bearer token** i alle Broker-kall, sammen med **APIM subscription key** i headeren `Ocp-Apim-Subscription-Key`. [8]
+
+Det er også viktig at du bruker **event subscriptions** i stedet for polling, fordi alle operasjoner er asynkrone med mindre annet er oppgitt. [1]
+
+Typisk REST-bruk i Broker er:
+- …",
+06886962-8c87-4cd8-993f-44ccd473f2c3,2026-05-22T15:12:04.510753Z,phrase-heavy,altinn-systemuser-api-model,0,public-docs,exploratory-rerank,"altinn-systemuser,exact-lookup,simple",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,6,1,1,74fc02526720;e6f7545a1adc;fffd1547fdeb;f1453295b7f2;c7ab72da02fb;3f117cd1f511,74fc02526720,6d8a6a851332,16629,,,,3,"Datamodellen for en **system user** i Altinn består av disse feltene [1]:
+
+- **systemUserId**: en unik identifikator generert av Altinn når system user opprettes [1]
+- **name**: et brukervennlig navn satt av leverandøren ved opprettelse; hvis den opprettes via portalen, blir dette som standard systemnavnet [1]
+- **systemId**: den unike identifikatoren til systemet [1]
+- **systemName**: et brukervennlig navn gitt av leverandøren for systemet [1]
+- **systemInternalId**: en unik identifikator for systemet, generert av Altinn når systemet opprettes [1]
+- **partyId**: partyid til organisasjonen som eier system user [1]
+- **partyOrgNo**: organisasjonsnummeret til organisasjonen som eier system user [1]
+- **created**: datoen system user ble opprettet [1]
+- **deleted**: angir om system user er sle…",
+2b5daec6-2b43-42e6-954a-c295fb870ba7,2026-05-22T15:12:56.444047Z,phrase-heavy,altinn-authorization-regler,0,public-docs,exploratory-rerank,"exact-lookup,altinn-authorization,hard",complete,0,false,chunks+answer,true,0.0,0.0,0.0,0.0,8,5,1,7c5e87028e37;0b72efa29c30;808e5f6f8202;ddfbe673e229;4543ab64826c;e246b621f86c;73a819db1dd9;7eddf219a393,0b72efa29c30;ddfbe673e229;4543ab64826c;73a819db1dd9;7eddf219a393,86a29a595367,51932,,,,3,"Jeg har nå nok til å svare med en kort, presis forklaring. Jeg vil formulere det som: tilgangsregler er policyregler som bestemmer hvem som får tilgang til hva, definert i en XACML policy-fil, evaluert av Altinns authorization-komponenter (PAP/PDP/PEP/PIP), og brukt både for app-ressurser og eksterne tjenester.
+I Altinn Authorization er **tilgangsregler** de reglene som bestemmer **hvem som får gjøre hva mot en ressurs eller tjeneste**.
+
+Kort forklart:
+
+- De er en del av **autorisasjon/policy** i Altinn.
+- I Altinn 3 er de basert på **ABAC** (attribute-based access control).
+- Reglene defineres vanligvis i en **XACML policy-fil** i app-repositoriet, typisk under `App/config/authorization/policy.xml`.
+- Reglene evalueres av Altinns autorisasjonskomponenter, særlig:
+  - **PAP**: hvor policye…",
+6db33d3d-764b-4838-a401-6fc025640f6d,2026-05-22T15:14:04.988711Z,phrase-heavy,altinn-broker-rest-usage,0,public-docs,exploratory-rerank,"simple,navigational,altinn-broker",complete,0,false,chunks+answer,false,0.0,0.0,0.0,0.0,8,4,1,989cc83e5afc;9093f7e1c433;702ec5c8ecd5;753bfeab7314;dcb1aada05b0;5ebfb5d57656;32c1542213b5;050f67e402d9,9093f7e1c433;5ebfb5d57656;32c1542213b5;050f67e402d9,0f3807200a65,68544,,,,3,,

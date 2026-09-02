@@ -1,0 +1,59 @@
+;; public-docs v1 Enforced Rerank Suite
+;;
+;; Status: Phase E output, 2026-04-21. Five Altinn-NO cases promoted from
+;; the exploratory suite after Phase D 3-run stability check showed each
+;; case's primary golden chunk lands at rerank-position ≤10 in all three
+;; consecutive runs with variance ≤2.
+;;
+;; Selection criteria: "Option (a) strict" — only stable cases that pass the
+;; default max-acceptable-rank=10 gate. Stable-but-rank-bad cases
+;; (correspondence-post-published at rank 53, systemuser-api-model at rank 71)
+;; stay in exploratory pending runner support for per-case rank ceilings.
+;;
+;; See `plans/in-progress/add-evals/claude-public-docs-stability-report.md`
+;; for the 3-run variance analysis that drove promotion.
+;;
+;; This file is the v1 gate target. Changes to any :golden-chunk-ids entry
+;; require a classifier-labeled commit per contract Decision 7
+;; (golden-update: source-drift | materialization-drift | retrieval-tuning |
+;;  oracle-correction). Drive-by edits are rejected.
+{:cases
+ [{:id               "altinn-broker-getting-started"
+   :query            "Hvordan kommer jeg i gang med Altinn Broker under overgangen til Altinn 3?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :navigational
+   :golden-chunk-ids ["9584a6e89afc"]
+   :notes            "5 core getting-started steps. Phase D: stable at rerank=2 across 3 runs."}
+
+  {:id               "altinn-broker-technical-overview"
+   :query            "Hva er den tekniske arkitekturen bak Altinn Broker i overgangsfasen?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :exact-lookup
+   :golden-chunk-ids ["63c3d3e28820"]
+   :notes            "Transition Service Bridge component. Phase D: stable at rerank=4-6 across 3 runs (variance=2)."}
+
+  {:id               "altinn-dialogporten-about"
+   :query            "Hva er Dialogporten?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :exact-lookup
+   :golden-chunk-ids ["9f75a7784e9b"]
+   :notes            "root Dialogporten index definition. Phase D: stable at rerank=1 across 3 runs."}
+
+  {:id               "altinn-studio-create-user"
+   :query            "Hvordan oppretter jeg en bruker i Altinn Studio v8?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :navigational
+   :golden-chunk-ids ["0fac42eefdc4"]
+   :notes            "numbered Ansattporten steps. Phase D: stable at rerank=4 across 3 runs."}
+
+  {:id               "altinn-studio-datamodeling"
+   :query            "Hvordan definerer jeg en datamodell i Altinn Studio v8?"
+   :language         :no
+   :source-slice     :altinn-docs
+   :query-family     :navigational
+   :golden-chunk-ids ["2f6cee8d5f5e"]
+   :notes            "navigation to datamodell tool. Phase D: stable at rerank=1 across 3 runs (retrieval rank=22, rerank promotes to top-1 consistently)."}]}

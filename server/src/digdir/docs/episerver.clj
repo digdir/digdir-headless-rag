@@ -267,7 +267,8 @@
             {:facet true :index true :name "lastmod" :optional true :sort true :type "string"}
             {:facet true :index true :name "type" :optional false :sort false :type "string"}
             {:facet false :index true :name "meta_keywords" :optional true :sort false :type "string"}
-            {:facet false :index true :name "meta_description" :optional true :sort false :type "string"}]})
+            {:facet false :index true :name "meta_description" :optional true :sort false :type "string"}
+            {:facet false :index true :name "total_chunks" :optional true :sort true :type "int32"}]})
 
 (defn episerver-chunks-schema [[docs-collection-name chunks-collection-name :as coll-ids]]
   {:name chunks-collection-name
@@ -279,6 +280,7 @@
             {:facet true :index true :name "chunk_index" :optional false :sort true :type "int32"}
             {:facet false :index true :locale "en" :name "content_markdown" :optional false :sort false :type "string"}
             {:facet false :index true :name "metadata" :optional true :sort false :type "string"}
+            {:facet false :index true :name "content_length" :optional true :sort true :type "int32"}
             {:facet true :index true :name "page_guid" :optional false :sort false :type "string"}]})
 
 (defn episerver-phrases-schema
@@ -304,13 +306,13 @@
   (-> doc
       (select-keys [:id :doc_num :page_guid :title :url :url_segment
                     :language :page_type :lastmod :type
-                    :meta_keywords :meta_description])))
+                    :meta_keywords :meta_description :total_chunks])))
 
 (defn prepare-episerver-chunks
   "Prepares chunks for storage"
   [config chunks]
   (mapv #(select-keys % [:chunk_id :doc_num :chunk_index
-                         :content_markdown :metadata :page_guid])
+                         :content_markdown :content_length :metadata :page_guid])
         chunks))
 
 ;; ============================================================================

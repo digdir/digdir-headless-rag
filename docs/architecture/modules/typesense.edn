@@ -1,0 +1,23 @@
+{:id "typesense",
+ :plane "knowledge",
+ :name "Typesense Search",
+ :note "Per-pipeline indexes",
+ :icon "search",
+ :color "#5d98eb",
+ :status "Data service",
+ :summary
+ "Stores retrieval documents, chunks and phrases in tenant-scoped search collections.",
+ :description
+ "Typesense is the retrieval index. The platform manages collection schemas and aliases, issues keyword and vector-oriented search strategies, and returns candidates for merge and reranking.",
+ :responsibilities
+ ["Store documents, chunks and generated phrases"
+  "Serve filtered multi-strategy search queries"
+  "Manage collection creation, aliases and administrative operations"],
+ :files
+ ["server/src/digdir/rag/typesense.clj"
+  "server/src/digdir/rag/typesense_admin.clj"
+  "server/src/digdir/pipeline/collections.clj"],
+ :input "Indexed records or search parameters",
+ :output "Search candidates + metadata",
+ :keywords
+ "typesense search index collection documents chunks phrases filters alias vector"}

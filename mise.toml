@@ -12,19 +12,33 @@ run = "bb"
 [env]
 
 # Database-based config mode (set CONFIG_MASTER_KEY to enable)
-# When set, config is loaded from database instead of EDN files
-CONFIG_MASTER_KEY=""
-TENANT=""
-ENV=""
+# When set, config is loaded from database instead of EDN files.
+# Provide via a parent or sibling mise.local.toml; do NOT default to "" here
+# or the empty value will override values supplied by parent configs.
+#   CONFIG_MASTER_KEY
+#   TENANT
+#   ENV
 
-# Database credentials (secrets only)
-ADH_POSTGRES_URL=""
-ADH_POSTGRES_USER=""
-ADH_POSTGRES_PWD=""
+# Database credentials (secrets only) — same caveat as above.
+#   ADH_POSTGRES_URL
+#   ADH_POSTGRES_USER
+#   ADH_POSTGRES_PWD
 
 
-# Integration test API key
-RAG_API_TEST_KEY=""
+# Integration test API key — supply via mise.local.toml when running tests.
+#   RAG_API_TEST_KEY
 
 # Development settings
 LOGLEVEL="DEBUG"
+
+# Server-scoped settings (read directly from env; empty string = use code default)
+# Auth / session
+AUTH_APPROVED_DOMAINS=""            # space-separated email domains for legacy whitelist migration; default: empty set
+AUTH_COOKIE_DOMAIN=""               # cookie domain attr (blank = host-only)
+AUTH_JWT_COOKIE_MAX_AGE_SECONDS=""  # default: 604800 (7 days)
+AUTH_JWT_TOKEN_EXPIRY_HOURS=""      # default: 168 (7 days)
+AUTH_SECURE_COOKIES=""              # "true"/"false"; default: false (dev uses plain HTTP)
+AUTH_SESSION_MAX_AGE_SECONDS=""     # default: 3600 (1 hour)
+
+# Rate limiting
+RATE_LIMIT_TRUST_X_FORWARDED_FOR="" # "true" when behind a proxy; default: false

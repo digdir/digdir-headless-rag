@@ -1,0 +1,8 @@
+# Local-only secrets for the E2E stack.
+.env
+mcpo/.env
+
+# Playwright outputs
+playwright/node_modules/
+playwright/playwright-report/
+playwright/test-results/

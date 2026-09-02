@@ -1,0 +1,72 @@
+;; FULL-42 enrichment A/B: off vs HQ (hypothetical-questions) grown by LOCAL
+;; Qwen3.6 MTP (non-thinking) over the 526 competing chunks ->
+;; website_enrichment_hypothetical_questions_qwen_n5 (n-items 5).
+;; Agent = local Qwen with the PERSISTED qwen-adapted prompt (both arms inherit
+;; it, so this isolates only the enrichment lever). Judge = gpt-5.5 SEPARATE pass
+;; (judge? false -> bb sweep-judge after). concurrency 1, N=3 = 252 runs.
+{:repeats 3,
+ :concurrency 1,
+ :max-clarification-rounds 1,
+ :question-filter
+ {:ids
+  #{"ue-notif-06-egendefinert-avsender-epost-dns"
+    "ue-studio-01-skjul-felt-uttrykk"
+    "ue-studio-03-datamodell-filer"
+    "ue-dialog-04-activity-entity-fields"
+    "ue-authz-06-xacml-obligation-authlevel"
+    "ue-api-04-instances-get-no-list"
+    "ue-authz-07-bruker-typer-authorization"
+    "ue-authz-04-opprette-tilgangsliste-medlemmer"
+    "ue-events-01-abonnement-filtre"
+    "ue-corr-04-notification-order-sms-window"
+    "ue-studio-02-pdf-service-task"
+    "ue-broker-05-filstorrelse-grenser-multi"
+    "ue-studio-07-validering-uttrykk-fil"
+    "ue-authz-02-tilgangsliste-handlingsfilter"
+    "ue-studio-05-tekstressurser-sprak"
+    "ue-studio-06-options-kilder-kodeliste"
+    "ue-dialog-01-aktivitetslogg"
+    "ue-api-06-app-openapi-swagger-spec"
+    "ue-studio-04-non-repeating-group"
+    "ue-events-02-publisere-cloudevents"
+    "ue-corr-02-transmission-group-dialog"
+    "ue-api-05-events-post-app-token"
+    "ue-sys-03-brukerstyrt-vs-leverandorstyrt"
+    "ue-authz-03-validere-samtykketoken"
+    "ue-broker-02-slette-tid-tilgjengelig"
+    "ue-authz-05-xacml-policy-regelstruktur"
+    "ue-authz-01-delegere-tilgangspakke-api"
+    "ue-sys-02-systembrukertoken-pdp-autorisasjon"
+    "ue-dialog-05-search-rest-graphql"
+    "ue-corr-01-events-webhook-subscription"
+    "ue-broker-04-overgang-a2-a3-forskjeller"
+    "ue-notif-07-standard-avsender-sms-epost"
+    "ue-sys-01-leverandorstyrt-og-forhold"
+    "ue-dialog-07-webapi-sdk"
+    "ue-events-03-polling-vs-webhook"
+    "ue-dialog-06-skrivehandlinger"
+    "ue-dialog-02-seen-log"
+    "ue-notif-05-umiddelbar-varsling-otp"
+    "ue-broker-03-store-filer-virusskann"
+    "ue-broker-01-filoverforing-tilstander"
+    "ue-corr-03-system-til-system-nedlasting"
+    "ue-dialog-03-unauthorized-urls"}},
+ :order :interleaved,
+ :judge? false,
+ :execution-scope
+ {:tenant "digdir",
+  :dataset-config-key "default",
+  :agent-id "builtin/agent-rag-agent"},
+ :run-timeout-ms 600000,
+ :configs
+ [{:id "off",
+   :skill-graph-id :builtin/agent-rag-graph-bundled,
+   :skill-params {}}
+  {:id "enriched-hq",
+   :skill-graph-id :builtin/agent-rag-graph-bundled,
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions],
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}}}]}

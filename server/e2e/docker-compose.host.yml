@@ -1,0 +1,75 @@
+name: digdir-rag-host
+
+# Slim Open WebUI stack pointed at a bb dev running on the HOST machine
+# (default localhost:8181) instead of building a fresh digdir-rag container.
+# Useful when you want to exercise the live, in-development backend through
+# Open WebUI — same Typesense, same ColBERT, same datahike file, same
+# runtime-config toggles you've set locally — without rebuilding the
+# digdir-rag image on every code change.
+#
+# Prereq:
+#   1. bb dev running with E2E_API_KEY env var matching server/e2e/.env's
+#      E2E_API_KEY (so digdir.e2e.seed/maybe-seed! stores the API key MCPO
+#      will use).
+#   2. server/e2e/.env present (copy .env.example and fill in E2E_API_KEY).
+
+services:
+  mcpo:
+    # Bridge Streamable-HTTP MCP <-> OpenAPI for Open WebUI.
+    # Points at host.docker.internal:8181/api/mcp (the host's bb dev).
+    image: ghcr.io/open-webui/mcpo:latest
+    container_name: digdir-rag-mcpo-host
+    env_file:
+      - .env
+    volumes:
+      - ./mcpo/config-host.json.template:/app/config.json.template:ro
+    entrypoint:
+      - sh
+      - -c
+      - |
+        sed "s|\$${E2E_API_KEY}|$$E2E_API_KEY|g" \
+          /app/config.json.template > /tmp/config.json
+        exec mcpo --config /tmp/config.json --host 0.0.0.0 --port 8765
+    ports:
+      - "8765:8765"
+    extra_hosts:
+      # Required for host.docker.internal to resolve on Linux Docker.
+      # Docker Desktop on macOS/Windows resolves it natively; the
+      # mapping is a no-op there.
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8765/openapi.json"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:0.6.18
+    container_name: digdir-rag-openwebui-host
+    depends_on:
+      mcpo:
+        condition: service_healthy
+    environment:
+      # Auto-discover agents as OpenAI-compatible models via the host
+      # bb dev's /v1 surface. OWUI fetches /v1/models on boot and
+      # populates the "Select a model" dropdown — no manual Settings
+      # click required.
+      OPENAI_API_BASE_URLS: "http://host.docker.internal:8181/v1"
+      OPENAI_API_KEYS: "${E2E_API_KEY}"
+      # Also keep the OpenAPI tools surface for clients that want
+      # tool-calling instead of agent-as-model. Both work
+      # side-by-side.
+      OPENAPI_SERVERS: '[{"url":"http://mcpo:8765","label":"digdir-rag"}]'
+      # Disable auth for local dev. Don't expose this port to a network
+      # you don't trust.
+      WEBUI_AUTH: "false"
+      DEFAULT_USER_ROLE: "admin"
+    ports:
+      # Default 3030 host port to avoid the common 3000 collision.
+      # Override with OPENWEBUI_PORT=... in .env if 3030 is also taken.
+      - "${OPENWEBUI_PORT:-3030}:8080"
+    volumes:
+      - open-webui-data-host:/app/backend/data
+
+volumes:
+  open-webui-data-host:

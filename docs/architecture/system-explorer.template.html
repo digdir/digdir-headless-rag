@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>System Atlas · Digdir RAG-as-a-Service</title>
+  <style>
+    :root {
+      --bg: #071018;
+      --panel: #0b1620;
+      --panel-2: #0e1b27;
+      --panel-3: #122230;
+      --line: #203544;
+      --line-bright: #315064;
+      --text: #eef6f8;
+      --muted: #8fa8b3;
+      --muted-2: #607b88;
+      --cyan: #46d7c8;
+      --cyan-soft: rgba(70, 215, 200, .12);
+      --blue: #74a7ff;
+      --violet: #a78bfa;
+      --orange: #f1a46a;
+      --green: #70d6a1;
+      --danger: #ff8790;
+      --shadow: 0 24px 70px rgba(0, 0, 0, .28);
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { min-height: 100%; }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% -15%, rgba(58, 188, 187, .13), transparent 34rem),
+        radial-gradient(circle at 86% 8%, rgba(65, 102, 180, .1), transparent 28rem),
+        var(--bg);
+      font-family: var(--sans);
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input { font: inherit; }
+
+    button { color: inherit; }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: 72px minmax(0, 1fr);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 0 28px;
+      border-bottom: 1px solid rgba(57, 86, 103, .55);
+      background: rgba(7, 16, 24, .76);
+      backdrop-filter: blur(20px);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    .brand { display: flex; align-items: center; gap: 13px; min-width: 0; }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(70, 215, 200, .42);
+      border-radius: 11px;
+      background: linear-gradient(145deg, rgba(70, 215, 200, .18), rgba(70, 215, 200, .03));
+      box-shadow: inset 0 1px rgba(255, 255, 255, .05), 0 10px 24px rgba(24, 150, 145, .1);
+    }
+
+    .brand-mark svg { width: 21px; color: var(--cyan); }
+    .brand-copy { min-width: 0; }
+    .brand-title { font-size: 15px; font-weight: 720; letter-spacing: -.01em; }
+    .brand-subtitle { margin-top: 3px; color: var(--muted); font-size: 12px; }
+
+    .top-meta { display: flex; align-items: center; gap: 18px; color: var(--muted); font-size: 12px; }
+    .branch { font-family: var(--mono); color: #b8ccd4; white-space: nowrap; }
+    .status { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px rgba(112, 214, 161, .08); }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(660px, 1fr) minmax(390px, 430px);
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .panel {
+      min-height: 0;
+      border: 1px solid rgba(42, 68, 84, .78);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(13, 27, 39, .96), rgba(9, 20, 29, .98));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .architecture {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .panel-head {
+      min-height: 75px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 17px 20px;
+      border-bottom: 1px solid rgba(38, 63, 78, .7);
+    }
+
+    .panel-head h1, .panel-head h2 { margin: 0; font-size: 16px; letter-spacing: -.01em; }
+    .panel-head p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+
+    .head-actions { display: flex; align-items: center; gap: 9px; }
+
+    .search-wrap { position: relative; }
+    .search-wrap svg { position: absolute; width: 15px; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted-2); pointer-events: none; }
+    .search {
+      width: 218px;
+      height: 37px;
+      padding: 0 12px 0 35px;
+      color: var(--text);
+      outline: 0;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #09131c;
+      transition: border-color .18s, box-shadow .18s;
+    }
+    .search::placeholder { color: #617b86; }
+    .search:focus { border-color: rgba(70, 215, 200, .62); box-shadow: 0 0 0 3px rgba(70, 215, 200, .08); }
+
+    .canvas-scroll { min-height: 0; overflow: auto; }
+    .canvas {
+      min-width: 740px;
+      min-height: 100%;
+      position: relative;
+      padding: 22px 24px 34px 106px;
+      isolation: isolate;
+    }
+
+    .edges { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; overflow: visible; }
+    .edge { fill: none; stroke: rgba(62, 92, 108, .5); stroke-width: 1.15; transition: stroke .2s, opacity .2s, stroke-width .2s; }
+    .edge.related { stroke: rgba(70, 215, 200, .55); stroke-width: 1.7; }
+    .edge.dimmed { opacity: .12; }
+
+    .plane { position: relative; z-index: 2; margin-bottom: 27px; }
+    .plane:last-child { margin-bottom: 0; }
+    .plane-label {
+      position: absolute;
+      right: calc(100% + 17px);
+      top: 15px;
+      width: 78px;
+      color: #718b96;
+      font-family: var(--mono);
+      font-size: 9px;
+      line-height: 1.35;
+      letter-spacing: .13em;
+      text-align: right;
+      text-transform: uppercase;
+    }
+    .plane-label::after { content: ""; display: block; width: 27px; height: 1px; margin: 8px 0 0 auto; background: #2a4351; }
+
+    .node-grid { display: grid; grid-template-columns: repeat(4, minmax(132px, 1fr)); gap: 11px; }
+    .plane[data-plane="operations"] .node-grid { grid-template-columns: repeat(2, minmax(132px, 1fr)); max-width: 50%; }
+
+    .node {
+      min-height: 90px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 7px;
+      padding: 13px 13px 12px;
+      text-align: left;
+      border: 1px solid #243b49;
+      border-radius: 11px;
+      background: linear-gradient(145deg, rgba(18, 36, 49, .98), rgba(12, 25, 35, .98));
+      cursor: pointer;
+      outline: none;
+      box-shadow: inset 0 1px rgba(255, 255, 255, .025), 0 6px 17px rgba(0, 0, 0, .11);
+      transition: transform .16s ease, border-color .16s ease, background .16s ease, opacity .16s ease, box-shadow .16s ease;
+    }
+    .node:hover { transform: translateY(-2px); border-color: #3c6171; background: linear-gradient(145deg, #152d3b, #0e202c); }
+    .node:focus-visible { box-shadow: 0 0 0 3px rgba(70, 215, 200, .16); border-color: var(--cyan); }
+    .node.selected { border-color: rgba(70, 215, 200, .8); background: linear-gradient(145deg, rgba(24, 71, 73, .9), rgba(12, 38, 44, .98)); box-shadow: 0 0 0 1px rgba(70, 215, 200, .08), 0 13px 30px rgba(0, 0, 0, .24); }
+    .node.connected { border-color: rgba(70, 215, 200, .38); }
+    .node.dimmed { opacity: .58; }
+    .node.hidden-search { opacity: .12; filter: saturate(.25); }
+
+    .node-top { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .node-icon { width: 25px; height: 25px; display: grid; place-items: center; color: var(--node-color, var(--cyan)); border-radius: 7px; background: color-mix(in srgb, var(--node-color, var(--cyan)) 12%, transparent); }
+    .node-icon svg { width: 14px; height: 14px; }
+    .node-index { color: #55707d; font: 9px var(--mono); letter-spacing: .04em; }
+    .node-name { color: #f0f7f8; font-size: 12.5px; font-weight: 690; line-height: 1.2; }
+    .node-note { color: #7f99a4; font-size: 10.5px; line-height: 1.25; }
+
+    .legend { position: absolute; z-index: 3; right: 24px; bottom: 15px; display: flex; gap: 13px; color: #607b86; font-size: 10px; }
+    .legend span { display: flex; align-items: center; gap: 6px; }
+    .legend i { width: 12px; height: 1px; background: #4a6572; }
+    .legend i.active { height: 2px; background: var(--cyan); }
+
+    .right-rail { min-height: 0; display: grid; grid-template-rows: minmax(315px, 43%) minmax(380px, 57%); gap: 12px; }
+
+    .migration-btn { background: color-mix(in srgb, #f0a45f 16%, transparent); border: 1px solid color-mix(in srgb, #f0a45f 42%, transparent); color: #f0a45f; border-radius: 8px; padding: 7px 12px; font-size: 12px; cursor: pointer; }
+    .migration-btn:hover { background: color-mix(in srgb, #f0a45f 26%, transparent); }
+    .edge-list { display: grid; gap: 9px; }
+    .edge-row { border: 1px solid rgba(38, 63, 78, .7); border-radius: 9px; padding: 9px 11px; display: grid; gap: 5px; }
+    .edge-row-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; }
+    .edge-label { color: #aec1c8; font-size: 12px; }
+    .edge-badge { font: 9.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 3px 7px; border-radius: 999px; white-space: nowrap; }
+    .edge-badge.call { background: rgba(93, 152, 235, .16); color: #8fb9f0; }
+    .edge-badge.http { background: rgba(74, 211, 187, .16); color: #4ad3bb; }
+    .edge-badge.changes { background: rgba(240, 164, 95, .18); color: #f0a45f; }
+    .evidence { font: 10px var(--mono); color: #6f8a95; overflow-wrap: anywhere; }
+    .evidence.witness { color: #7fa88a; }
+    .evidence.unverified { color: #b98a72; }
+    .schema { margin-top: 12px; }
+    .schema summary { cursor: pointer; color: #738e99; font: 9px var(--mono); letter-spacing: .13em; text-transform: uppercase; }
+    .schema-json { margin: 9px 0 0; padding: 11px; background: var(--panel-3); border-radius: 8px; overflow-x: auto; font: 11px/1.5 var(--mono); color: #b9ccd4; }
+    .details { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+    .detail-head { padding: 18px 19px 14px; border-bottom: 1px solid rgba(38, 63, 78, .7); }
+    .detail-kicker { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--cyan); font: 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+    .core-pill { padding: 4px 7px; border: 1px solid #2d4654; border-radius: 999px; color: #7f9aa5; font: 9px var(--mono); letter-spacing: .05em; }
+    .detail-title { display: flex; align-items: center; gap: 11px; margin-top: 11px; }
+    .detail-title-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; color: var(--detail-color, var(--cyan)); background: color-mix(in srgb, var(--detail-color, var(--cyan)) 13%, transparent); }
+    .detail-title-icon svg { width: 18px; }
+    .detail-title h2 { margin: 0; font-size: 18px; letter-spacing: -.02em; }
+    .detail-body { overflow: auto; padding: 16px 19px 20px; }
+    .detail-description { margin: 0 0 17px; color: #aec1c8; font-size: 12.5px; line-height: 1.62; }
+    .detail-section { margin-top: 15px; }
+    .detail-section h3 { margin: 0 0 8px; color: #738e99; font: 9px var(--mono); letter-spacing: .13em; text-transform: uppercase; }
+    .responsibilities { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+    .responsibilities li { position: relative; padding-left: 14px; color: #9eb3bb; font-size: 11.5px; line-height: 1.4; }
+    .responsibilities li::before { content: ""; position: absolute; left: 0; top: .55em; width: 5px; height: 5px; border-radius: 50%; background: var(--detail-color, var(--cyan)); opacity: .85; }
+    .io-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .io { padding: 9px 10px; border: 1px solid #1f3644; border-radius: 8px; background: rgba(6, 15, 22, .45); }
+    .io b { display: block; margin-bottom: 4px; color: #66838f; font: 8px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+    .io span { color: #afc1c7; font-size: 10.5px; line-height: 1.35; }
+    .file-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .file { max-width: 100%; padding: 5px 7px; overflow: hidden; text-overflow: ellipsis; border: 1px solid #233e4c; border-radius: 6px; color: #8db1bd; background: rgba(23, 50, 62, .45); font: 9px var(--mono); white-space: nowrap; }
+
+    .chat { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+    .chat-head { min-height: 67px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 17px; border-bottom: 1px solid rgba(38, 63, 78, .7); }
+    .agent-id { display: flex; align-items: center; gap: 10px; }
+    .agent-avatar { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 10px; color: #0a1a1d; background: linear-gradient(145deg, #78eadc, #35bdb5); box-shadow: 0 8px 19px rgba(32, 178, 169, .16); }
+    .agent-avatar svg { width: 18px; }
+    .agent-name { font-size: 13px; font-weight: 700; }
+    .agent-scope { margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .clear-chat { padding: 7px; border: 0; border-radius: 7px; color: #607c87; background: transparent; cursor: pointer; }
+    .clear-chat:hover { color: #adc2c9; background: #132531; }
+    .clear-chat svg { display: block; width: 15px; }
+
+    .messages { min-height: 0; overflow-y: auto; padding: 16px 16px 12px; scroll-behavior: smooth; }
+    .message { display: flex; gap: 9px; margin-bottom: 14px; animation: arrive .22s ease both; }
+    @keyframes arrive { from { transform: translateY(5px); opacity: 0; } }
+    .message.user { justify-content: flex-end; }
+    .message-avatar { width: 24px; height: 24px; flex: 0 0 auto; display: grid; place-items: center; margin-top: 2px; border-radius: 7px; color: var(--cyan); background: var(--cyan-soft); }
+    .message-avatar svg { width: 13px; }
+    .bubble { max-width: 88%; color: #b5c7cd; font-size: 11.5px; line-height: 1.53; }
+    .assistant .bubble { padding-top: 3px; }
+    .user .bubble { padding: 9px 11px; border: 1px solid #294b58; border-radius: 11px 11px 3px 11px; color: #d9e7ea; background: #142c38; }
+    .bubble p { margin: 0 0 8px; }
+    .bubble p:last-child { margin-bottom: 0; }
+    .bubble ol { margin: 8px 0 0 18px; padding: 0; }
+    .bubble li { margin-bottom: 7px; padding-left: 3px; }
+    .bubble strong { color: #edf7f7; font-weight: 680; }
+    .citations { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+    .citation { padding: 4px 6px; border: 1px solid #294551; border-radius: 5px; color: #76c9c0; background: rgba(33, 81, 84, .27); font: 8.5px var(--mono); cursor: pointer; }
+    .citation:hover { border-color: #4a817f; color: #9ce5dd; }
+    .trace { display: flex; align-items: center; gap: 7px; margin: 1px 0 7px; color: #66818c; font: 9px var(--mono); }
+    .trace-dots { display: flex; gap: 3px; }
+    .trace-dots i { width: 3px; height: 3px; border-radius: 50%; background: var(--cyan); animation: pulse 1s infinite; }
+    .trace-dots i:nth-child(2) { animation-delay: .16s; }
+    .trace-dots i:nth-child(3) { animation-delay: .32s; }
+    @keyframes pulse { 0%, 70%, 100% { opacity: .25; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-2px); } }
+
+    .suggestions { display: flex; gap: 6px; margin-top: 11px; overflow-x: auto; padding-bottom: 2px; }
+    .suggestion { flex: 0 0 auto; padding: 6px 8px; border: 1px solid #29414e; border-radius: 999px; color: #8ea7b0; background: #0c1b25; font-size: 9.5px; cursor: pointer; }
+    .suggestion:hover { color: #c2d6da; border-color: #456773; }
+
+    .composer { padding: 11px 13px 13px; border-top: 1px solid rgba(38, 63, 78, .7); }
+    .composer-box { display: grid; grid-template-columns: minmax(0, 1fr) 35px; align-items: center; gap: 8px; padding: 5px 5px 5px 12px; border: 1px solid #294552; border-radius: 10px; background: #09151e; transition: border-color .18s, box-shadow .18s; }
+    .composer-box:focus-within { border-color: rgba(70, 215, 200, .58); box-shadow: 0 0 0 3px rgba(70, 215, 200, .07); }
+    .composer input { min-width: 0; height: 32px; padding: 0; outline: 0; border: 0; color: #dbe9ec; background: transparent; font-size: 11px; }
+    .composer input::placeholder { color: #58717c; }
+    .send { width: 33px; height: 33px; display: grid; place-items: center; border: 0; border-radius: 8px; color: #071719; background: var(--cyan); cursor: pointer; transition: transform .15s, opacity .15s; }
+    .send:hover { transform: translateY(-1px); }
+    .send:disabled { opacity: .3; cursor: default; transform: none; }
+    .send svg { width: 15px; }
+    .scope-note { margin-top: 6px; color: #4e6873; font: 8.5px var(--mono); text-align: center; }
+
+    .empty-search { display: none; position: absolute; z-index: 5; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #75909a; text-align: center; }
+    .empty-search.show { display: block; }
+
+    @media (max-width: 1080px) {
+      .workspace { grid-template-columns: 1fr; }
+      .architecture { min-height: 700px; }
+      .right-rail { grid-template-columns: 1fr 1fr; grid-template-rows: 590px; }
+    }
+
+    @media (max-width: 760px) {
+      .shell { grid-template-rows: auto 1fr; }
+      .topbar { min-height: 72px; padding: 14px 16px; align-items: flex-start; }
+      .top-meta { align-items: flex-end; flex-direction: column; gap: 5px; }
+      .workspace { padding: 7px; gap: 7px; }
+      .panel-head { align-items: flex-start; flex-direction: column; }
+      .search { width: min(76vw, 300px); }
+      .architecture { min-height: 670px; }
+      .right-rail { display: grid; grid-template-columns: 1fr; grid-template-rows: 540px 620px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" data-icon="network"></div>
+        <div class="brand-copy">
+          <div class="brand-title">System Atlas</div>
+          <div class="brand-subtitle">Digdir RAG-as-a-Service architecture</div>
+        </div>
+      </div>
+      <div class="top-meta">
+        <span class="branch">release-v0.1-details</span>
+        <span class="status"><i class="status-dot"></i>18 modules mapped</span>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="panel architecture" aria-labelledby="architecture-title">
+        <div class="panel-head">
+          <div>
+            <h1 id="architecture-title">Architecture map</h1>
+            <p>Select a module to inspect its role and connections.</p>
+          </div>
+          <div class="head-actions">
+            <button id="migration-btn" class="migration-btn" type="button">Migration plan</button>
+            <label class="search-wrap" aria-label="Find a module">
+              <span data-icon="search"></span>
+              <input id="module-search" class="search" type="search" placeholder="Find a module…" autocomplete="off">
+            </label>
+          </div>
+        </div>
+        <div class="canvas-scroll">
+          <div id="canvas" class="canvas">
+            <svg id="edges" class="edges" aria-hidden="true"><defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#3e5c6b"/></marker></defs></svg>
+            <div id="planes"></div>
+            <div id="empty-search" class="empty-search">No modules match that search.</div>
+            <div class="legend"><span><i></i>dependency</span><span><i class="active"></i>selected path</span></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="right-rail">
+        <section class="panel details" aria-live="polite">
+          <div id="detail-head" class="detail-head"></div>
+          <div id="detail-body" class="detail-body"></div>
+        </section>
+
+        <section class="panel chat" aria-labelledby="agent-title">
+          <div class="chat-head">
+            <div class="agent-id">
+              <div class="agent-avatar" data-icon="spark"></div>
+              <div>
+                <div id="agent-title" class="agent-name">Atlas · architecture agent</div>
+                <div class="agent-scope">Grounded in this system map</div>
+              </div>
+            </div>
+            <button id="clear-chat" class="clear-chat" type="button" aria-label="Clear conversation" title="Clear conversation"><span data-icon="trash"></span></button>
+          </div>
+          <div id="messages" class="messages"></div>
+          <form id="chat-form" class="composer">
+            <div class="composer-box">
+              <input id="chat-input" aria-label="Ask about the system" placeholder="Ask how the system works…" autocomplete="off">
+              <button id="send" class="send" type="submit" aria-label="Send question"><span data-icon="send"></span></button>
+            </div>
+            <div class="scope-note">SYSTEM-SCOPED · answers from the mapped implementation only</div>
+          </form>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const icons = {
+      network: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="3" width="6" height="6" rx="1.5"/><rect x="9" y="15" width="6" height="6" rx="1.5"/><path d="M6 9v3h6m6-3v3h-6v3"/></svg>',
+      api: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 9 4 12l4 3m8-6 4 3-4 3m-2-9-4 12"/></svg>',
+      gateway: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h7v14H4zm9 3h7v8h-7M8 9h6m-6 6h6"/></svg>',
+      ui: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="15" rx="2"/><path d="M3 8h18M7 6h.01"/></svg>',
+      chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14a4 4 0 0 1-4 4H8l-5 3V8a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z"/><path d="M8 10h8m-8 4h5"/></svg>',
+      shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 20 6v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>',
+      config: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h9m4 0h3M4 17h3m4 0h9M13 5v4M7 15v4"/></svg>',
+      scope: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>',
+      setup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="8"/></svg>',
+      graph: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="m7 7 4 9m6-9-4 9M7 6h10"/></svg>',
+      agent: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="7" width="16" height="13" rx="3"/><path d="M9 12h.01M15 12h.01M9 16h6M12 3v4"/></svg>',
+      rag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M8 8h4m-4 3h3"/></svg>',
+      llm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3a4 4 0 0 1 4 4 4 4 0 0 1 2 7 4 4 0 0 1-6 4 4 4 0 0 1-6-4 4 4 0 0 1 2-7 4 4 0 0 1 4-4z"/><path d="M12 3v16M8 7c2 0 4 1 4 3m4-3c-2 0-4 1-4 3M7 14c2 0 3-1 3-3m7 3c-2 0-3-1-3-3"/></svg>',
+      source: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h6l2 2h8v12H4z"/><path d="M8 12h8m-8 4h5"/></svg>',
+      pipeline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="5" height="5" rx="1"/><rect x="16" y="14" width="5" height="5" rx="1"/><path d="M8 7.5h4a3 3 0 0 1 3 3v1a3 3 0 0 0 3 3"/></svg>',
+      search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>',
+      database: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"/></svg>',
+      chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10m6 10V4m6 16v-7m4 7H2"/></svg>',
+      pulse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>',
+      spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 1.6 5.4L19 10l-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6zM19 16l.7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7z"/></svg>',
+      trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16m-10 4v6m4-6v6M7 7l1 14h8l1-14M9 7V4h6v3"/></svg>',
+      send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 4 18 8-18 8 3-8zM6 12h15"/></svg>'
+    };
+
+    const modules = /*{{MODULES}}*/[];
+
+    const planes = [
+      { id:'experience', label:'Experience plane' },
+      { id:'control', label:'Control plane' },
+      { id:'runtime', label:'AI runtime' },
+      { id:'knowledge', label:'Knowledge plane' },
+      { id:'operations', label:'Operations' }
+    ];
+
+    // EDGES COME FROM THE MODULE DATA, not from a list in this file. Until slice 2
+    // there were two edge lists — 29 pairs hardcoded here and none in the data —
+    // which could disagree with no signal. `edges` keeps the pair shape the canvas
+    // drawing already expects; `typedEdges` carries the migration information.
+    const typedEdges = modules.flatMap(m => (m.edges || []).map(e => ({ from: m.id, ...e })));
+    const edges = typedEdges.map(e => [e.from, e.to]);
+    const changingEdges = typedEdges.filter(e => e.kind !== e.target);
+
+    const byId = Object.fromEntries(modules.map(m => [m.id, m]));
+    let selectedId = 'skills';
+    let busy = false;
+
+    function hydrateIcons(root = document) {
+      root.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = icons[el.dataset.icon] || ''; });
+    }
+
+    function renderPlanes() {
+      const root = document.getElementById('planes');
+      root.innerHTML = planes.map(plane => `
+        <section class="plane" data-plane="${plane.id}">
+          <div class="plane-label">${plane.label}</div>
+          <div class="node-grid">
+            ${modules.filter(m => m.plane === plane.id).map((m, index) => `
+              <button class="node" type="button" data-module="${m.id}" style="--node-color:${m.color}" aria-label="Inspect ${m.name}">
+                <span class="node-top"><span class="node-icon" data-icon="${m.icon}"></span><span class="node-index">${String(modules.indexOf(m) + 1).padStart(2,'0')}</span></span>
+                <span class="node-name">${m.name}</span>
+                <span class="node-note">${m.note}</span>
+              </button>`).join('')}
+          </div>
+        </section>`).join('');
+      hydrateIcons(root);
+      root.querySelectorAll('.node').forEach(node => node.addEventListener('click', () => selectModule(node.dataset.module)));
+      const mb = document.getElementById('migration-btn');
+      if (mb && !mb.dataset.wired) { mb.dataset.wired = '1'; mb.addEventListener('click', renderMigration); }
+    }
+
+
+    const kindLabel = { call: 'in-process call', http: 'API call' };
+
+    function edgeBadge(e) {
+      const changes = e.kind !== e.target;
+      const cls = changes ? 'edge-badge changes' : `edge-badge ${e.kind}`;
+      const text = changes ? `${kindLabel[e.kind]} → ${kindLabel[e.target]}` : kindLabel[e.kind];
+      return `<span class="${cls}">${text}</span>`;
+    }
+
+    function evidenceOf(e) {
+      if (e.witness) return `<span class="evidence witness" title="a static require supports this edge">witness: ${e.witness.file.replace('server/src/digdir/','')} → ${e.witness.requires}</span>`;
+      const cls = e.unverified ? 'evidence unverified' : 'evidence runtime';
+      return `<span class="${cls}" title="${e.via}">${e.unverified ? 'unverified: ' : 'runtime: '}${e.via.length > 90 ? e.via.slice(0, 90) + '…' : e.via}</span>`;
+    }
+
+    function connectionsBlock(module) {
+      const out = (module.edges || []);
+      if (!out.length) return '';
+      return `<div class="detail-section"><h3>Connections (${out.length})</h3><div class="edge-list">` +
+        out.map(e => `<div class="edge-row"><div class="edge-row-head"><b>${byId[e.to] ? byId[e.to].name : e.to}</b>${edgeBadge(e)}</div><span class="edge-label">${e.label}</span>${evidenceOf(e)}</div>`).join('') +
+        `</div></div>`;
+    }
+
+    function schemaBlock(module) {
+      if (!module.schema) return '';
+      return `<details class="schema"><summary>JSON Schema — the contract a service call would carry</summary>` +
+        `<pre class="schema-json">${JSON.stringify({ input: module.schema.input, output: module.schema.output }, null, 2)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre></details>`;
+    }
+
+    function renderMigration() {
+      const head = document.getElementById('detail-head');
+      const body = document.getElementById('detail-body');
+      document.documentElement.style.setProperty('--detail-color', '#f0a45f');
+      head.innerHTML = `
+        <div class="detail-kicker"><span>Target architecture</span><span class="core-pill">${changingEdges.length} edges change type</span></div>
+        <div class="detail-title"><h2>Migration plan</h2></div>`;
+      body.innerHTML = `
+        <p class="detail-description">Every edge whose call type differs between today and the target. This set <strong>is</strong> the migration plan: each row is one in-process call that becomes an API call. Edges already crossing a network boundary are excluded by construction, so completed work is not listed as work to do.</p>
+        <div class="edge-list">` +
+        changingEdges.map(e => `<div class="edge-row"><div class="edge-row-head"><b>${byId[e.from] ? byId[e.from].name : e.from} → ${byId[e.to] ? byId[e.to].name : e.to}</b>${edgeBadge(e)}</div><span class="edge-label">${e.label}</span>${evidenceOf(e)}</div>`).join('') +
+        `</div>
+        <div class="detail-section"><h3>Not in this set</h3><ul class="responsibilities">
+          <li>${typedEdges.filter(e => e.kind === 'http' && e.target === 'http').length} edges are <b>already API calls today</b> — Typesense and the LLM providers are reached over HTTP, so they are already where the target wants them.</li>
+          <li>${typedEdges.filter(e => e.kind === 'call' && e.target === 'call').length} edges stay in-process — configuration, persistence and request-scope concerns that a network hop would only slow down.</li>
+        </ul></div>`;
+      hydrateIcons(head);
+    }
+
+    function renderDetails(module) {
+      const head = document.getElementById('detail-head');
+      const body = document.getElementById('detail-body');
+      document.documentElement.style.setProperty('--detail-color', module.color);
+      head.innerHTML = `
+        <div class="detail-kicker"><span>${planes.find(p => p.id === module.plane).label}</span><span class="core-pill">${module.status}</span></div>
+        <div class="detail-title"><span class="detail-title-icon" data-icon="${module.icon}"></span><h2>${module.name}</h2></div>`;
+      body.innerHTML = `
+        <p class="detail-description">${module.description}</p>
+        <div class="detail-section"><h3>Responsibilities</h3><ul class="responsibilities">${module.responsibilities.map(item => `<li>${item}</li>`).join('')}</ul></div>
+        <div class="detail-section"><h3>Contract</h3><div class="io-grid"><div class="io"><b>Input</b><span>${module.input}</span></div><div class="io"><b>Output</b><span>${module.output}</span></div></div>${schemaBlock(module)}</div>
+        ${connectionsBlock(module)}
+        <div class="detail-section"><h3>Implementation</h3><div class="file-list">${module.files.map(file => `<span class="file" title="${file}">${file}</span>`).join('')}</div></div>`;
+      hydrateIcons(head);
+    }
+
+    function connectionsFor(id) {
+      return new Set(edges.filter(edge => edge.includes(id)).flat());
+    }
+
+    function selectModule(id) {
+      const search = document.getElementById('module-search');
+      if (search && search.value) {
+        search.value = '';
+        searchModules('');
+      }
+      selectedId = id;
+      const connected = connectionsFor(id);
+      document.querySelectorAll('.node').forEach(node => {
+        node.classList.toggle('selected', node.dataset.module === id);
+        node.classList.toggle('connected', connected.has(node.dataset.module) && node.dataset.module !== id);
+        node.classList.toggle('dimmed', !connected.has(node.dataset.module));
+      });
+      renderDetails(byId[id]);
+      drawEdges();
+    }
+
+    function drawEdges() {
+      const canvas = document.getElementById('canvas');
+      const svg = document.getElementById('edges');
+      const box = canvas.getBoundingClientRect();
+      const selectedConnections = connectionsFor(selectedId);
+      svg.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
+      const defs = svg.querySelector('defs').outerHTML;
+      const paths = edges.map(([from, to]) => {
+        const a = document.querySelector(`[data-module="${from}"]`).getBoundingClientRect();
+        const b = document.querySelector(`[data-module="${to}"]`).getBoundingClientRect();
+        const x1 = a.left - box.left + a.width / 2;
+        const y1 = a.bottom - box.top;
+        const x2 = b.left - box.left + b.width / 2;
+        const y2 = b.top - box.top;
+        const mid = y1 + (y2 - y1) * .5;
+        const related = selectedConnections.has(from) && selectedConnections.has(to) && (from === selectedId || to === selectedId);
+        const dimmed = selectedId && !related;
+        return `<path class="edge${related ? ' related' : ''}${dimmed ? ' dimmed' : ''}" d="M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}" ${related ? 'marker-end="url(#arrow)"' : ''}/>`;
+      }).join('');
+      svg.innerHTML = defs + paths;
+    }
+
+    function searchModules(query) {
+      const needle = query.trim().toLowerCase();
+      let matches = 0;
+      document.querySelectorAll('.node').forEach(node => {
+        const module = byId[node.dataset.module];
+        const hit = !needle || `${module.name} ${module.note} ${module.summary} ${module.keywords}`.toLowerCase().includes(needle);
+        node.classList.toggle('hidden-search', !hit);
+        if (hit) matches++;
+      });
+      document.getElementById('empty-search').classList.toggle('show', matches === 0);
+    }
+
+    function scrollMessages() {
+      const messages = document.getElementById('messages');
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function citations(ids) {
+      return `<div class="citations">${ids.map(id => `<button class="citation" type="button" data-cite="${id}">${byId[id].name}</button>`).join('')}</div>`;
+    }
+
+    function addMessage(role, html, cited = []) {
+      const messages = document.getElementById('messages');
+      const el = document.createElement('div');
+      el.className = `message ${role}`;
+      el.innerHTML = role === 'user'
+        ? `<div class="bubble">${html}</div>`
+        : `<div class="message-avatar" data-icon="spark"></div><div class="bubble">${html}${cited.length ? citations(cited) : ''}</div>`;
+      messages.appendChild(el);
+      hydrateIcons(el);
+      el.querySelectorAll('[data-cite]').forEach(cite => cite.addEventListener('click', () => selectModule(cite.dataset.cite)));
+      scrollMessages();
+      return el;
+    }
+
+    function welcome() {
+      document.getElementById('messages').innerHTML = '';
+      const el = addMessage('assistant', `<p>I’m grounded in the <strong>release-v0.1-details</strong> architecture. Ask me about request flow, retrieval, ingestion, security, configuration, storage, or operations.</p>`);
+      const suggestions = document.createElement('div');
+      suggestions.className = 'suggestions';
+      suggestions.innerHTML = ['How does a question become an answer?','Where is tenant config stored?','How does ingestion work?'].map(q => `<button type="button" class="suggestion">${q}</button>`).join('');
+      el.querySelector('.bubble').appendChild(suggestions);
+      suggestions.querySelectorAll('button').forEach(button => button.addEventListener('click', () => ask(button.textContent)));
+    }
+
+    function rankModules(question) {
+      const tokens = question.toLowerCase().replace(/[^a-z0-9\s-]/g,' ').split(/\s+/).filter(t => t.length > 2);
+      return modules.map(module => {
+        const haystack = `${module.name} ${module.note} ${module.summary} ${module.description} ${module.keywords}`.toLowerCase();
+        const score = tokens.reduce((total, token) => total + (haystack.includes(token) ? (module.name.toLowerCase().includes(token) ? 4 : 1) : 0), 0);
+        return [module, score];
+      }).filter(([,score]) => score > 0).sort((a,b) => b[1] - a[1]).slice(0,3).map(([module]) => module);
+    }
+
+    function answerFor(question) {
+      const q = question.toLowerCase();
+      if (/^(hi|hello|hey|help)\b/.test(q)) return { html:'<p>Hello. I can explain this platform’s architecture, trace dependencies, and point you to the implementing namespaces. Try asking how requests, ingestion, or configuration flow through the system.</p>', cites:[] };
+      if (/(question|request|query).*(answer|flow)|become an answer|end.to.end|request flow/.test(q)) return {
+        html:`<p>A question follows a scoped, observable path:</p><ol><li><strong>API or MCP</strong> authenticates the caller and establishes tenant/dataset scope.</li><li><strong>Skills Graph Runtime</strong> selects the configured workflow—or hands control to the bounded agent loop.</li><li><strong>RAG Core</strong> filters and retrieves from Typesense, merges candidates, reranks them, then sends grounded context to the configured LLM.</li><li>The answer returns with citations and can stream progress into the Playground or API client.</li></ol>`,
+        cites:['api','mcp','scope','skills','rag','typesense','llm'] };
+      if (/(ingest|pipeline|load document|index document|source)/.test(q)) return {
+        html:`<p><strong>Source Loaders</strong> fetch and normalize content from Kudos, Optimizely, websites, folders, and files. A configured <strong>Ingestion Pipeline</strong> then chunks and enriches those documents, materializes documents/chunks/phrases collections in <strong>Typesense</strong>, and records execution state in Postgres.</p>`,
+        cites:['sources','pipeline','typesense','data'] };
+      if (/(where|what).*(store|persist|database)|tenant config|data live|postgres|datahike/.test(q)) return {
+        html:`<p>There are two primary stores. <strong>Datahike over Postgres</strong> is the system of record for configuration, identities, permissions, agents, conversations, messages, and execution metadata. <strong>Typesense</strong> is the retrieval index for documents, chunks, and phrases. Configuration Resolution reads its inherited trees from the Datahike-backed model.</p>`,
+        cites:['data','typesense','config'] };
+      if (/(config|inherit|tenant|dataset setting)/.test(q)) return {
+        html:`<p>Configuration uses three rooted trees: <strong>platform</strong>, <strong>runtime</strong>, and <strong>dataset</strong>. The resolver starts from the request’s explicit scope, walks ancestors, chooses the nearest defined value, decodes its type, and decrypts it when necessary. This lets tenants specialize behavior without copying an entire configuration.</p>`,
+        cites:['config','scope','data'] };
+      if (/(agent|react|tool|plan)/.test(q)) return {
+        html:`<p>Agent-backed datasets replace the fixed RAG chain with a bounded <strong>ReAct loop</strong>. The agent reads its policy and workspace, chooses an authorized tool, observes the result, and evaluates whether the evidence is sufficient. Iteration limits and the Skills runtime keep the loop controlled and observable.</p>`,
+        cites:['agents','skills','rag','llm'] };
+      if (/(auth|secure|permission|api key|jwt|access)/.test(q)) return {
+        html:`<p>Browser users enter through JWT-backed cookies; integrations use scoped API keys. Authentication produces a principal carrying permitted datasets, agents, and skill graphs. ABAC checks and Execution Scope then prevent work from escaping the caller’s allowed tenant and resources.</p>`,
+        cites:['auth','scope','api','mcp'] };
+      if (/(interface|surface|entry|access the system|front door)/.test(q)) return {
+        html:`<p>The platform has four interaction surfaces: the <strong>Headless HTTP API</strong>, the tool-oriented <strong>MCP Gateway</strong>, the operator-facing <strong>Admin UI</strong>, and the diagnostic <strong>Playground</strong>. They converge on the same scoped skills and RAG runtime.</p>`,
+        cites:['api','mcp','admin','playground','skills'] };
+      if (/(observe|diagnostic|log|evaluate|quality|sweep|test)/.test(q)) return {
+        html:`<p>Live behavior is exposed through Playground timelines, citations, tool events, status polling, and structured logs. For offline quality work, Sweeps run repeatable question sets through runtime variants and judge groundedness, completeness, and relevance.</p>`,
+        cites:['playground','telemetry','sweeps'] };
+
+      const ranked = rankModules(question);
+      if (!ranked.length) return { html:'<p>That looks outside my system-architecture scope. I can help with this platform’s APIs, configuration, skills, agents, RAG flow, ingestion, storage, security, or operations.</p>', cites:[] };
+      return {
+        html:`<p>The most relevant subsystem is <strong>${ranked[0].name}</strong>: ${ranked[0].summary}</p>${ranked.length > 1 ? `<p>It works closely with ${ranked.slice(1).map(m => `<strong>${m.name}</strong>`).join(' and ')}. Select the cited modules to inspect their exact responsibilities and source namespaces.</p>` : ''}`,
+        cites: ranked.map(m => m.id)
+      };
+    }
+
+    function escapeHtml(value) {
+      return value.replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+    }
+
+    function ask(question) {
+      const clean = question.trim();
+      if (!clean || busy) return;
+      busy = true;
+      document.getElementById('chat-input').value = '';
+      document.getElementById('send').disabled = true;
+      addMessage('user', escapeHtml(clean));
+      const thinking = addMessage('assistant', `<div class="trace"><span>Mapping question to modules</span><span class="trace-dots"><i></i><i></i><i></i></span></div>`);
+      window.setTimeout(() => {
+        thinking.remove();
+        const answer = answerFor(clean);
+        addMessage('assistant', answer.html, answer.cites);
+        if (answer.cites.length) selectModule(answer.cites[0]);
+        busy = false;
+        document.getElementById('send').disabled = false;
+        document.getElementById('chat-input').focus();
+      }, 520);
+    }
+
+    renderPlanes();
+    hydrateIcons();
+    selectModule(selectedId);
+    welcome();
+    document.getElementById('module-search').addEventListener('input', event => searchModules(event.target.value));
+    document.getElementById('chat-form').addEventListener('submit', event => { event.preventDefault(); ask(document.getElementById('chat-input').value); });
+    document.getElementById('clear-chat').addEventListener('click', welcome);
+    window.addEventListener('resize', () => window.requestAnimationFrame(drawEdges));
+    window.addEventListener('load', drawEdges);
+  </script>
+</body>
+</html>

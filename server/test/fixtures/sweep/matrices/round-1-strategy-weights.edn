@@ -1,0 +1,88 @@
+;; Round 1 OFAT — retrieval :strategy-weights sweep
+;;
+;; The plan's first OFAT cell was "Rerank top-k 10/20/40/80
+;; (context-window pressure vs. recall)". A pre-sweep smoke test
+;; (2026-05-22) showed that knob is a no-op for the zero-recall
+;; questions — for three altinn-authorization / altinn-broker /
+;; altinn-systemuser cases, n-retrieved stayed at 1-7 chunks
+;; regardless of context-top-k or retrieve :limit. The bottleneck
+;; isn't rerank trimming, it's that the agent's workspace stays
+;; small because the right chunks aren't surfacing.
+;;
+;; That makes :strategy-weights the highest-leverage Round-1 knob.
+;; It's the next item down in the plan's OFAT table:
+;;   "Retrieval strategy weights | balanced / phrase-heavy /
+;;    metadata-heavy / content-heavy".
+;;
+;; In-skill defaults (digdir.rag.merge/default-merge-strategy-weights):
+;;   {:content 1.0 :phrase 0.7 :metadata 0.2 :unknown 0.15}
+;; — strongly content-biased, with metadata heavily demoted. For
+;; navigational/exact-lookup queries (e.g. "Hva er X" / "Hvordan
+;; oppretter jeg Y") the title-and-heading metadata that names the
+;; concept may be the actual signal; the default weights bury that.
+;;
+;; Levels:
+;;   - default       — explicit nil; in-skill defaults apply
+;;                     (the leaderboard control; matches baseline-v0)
+;;   - balanced      — every strategy weighted 1.0; tests whether
+;;                     the asymmetric defaults are doing useful work
+;;   - phrase-heavy  — phrase 2.0; everything else at default. Tests
+;;                     whether bumping exact-token-sequence matches
+;;                     above content matches helps factual queries
+;;   - metadata-heavy — metadata 1.0 (5x default); tests whether
+;;                     title/heading signal is being lost to the
+;;                     0.2 demotion
+;;
+;; Control: bundled (recall winner from baseline-v0).
+;;
+;; Filter: chunks+answer rows only (n=18). Recall is the signal.
+;;
+;; Repeats: 3 (per baseline recommendation — separates real config
+;; effects from run-to-run agent-loop variance).
+;;
+;; Expected wall-clock:
+;;   4 configs × 18 questions × 3 repeats = 216 runs
+;;   × ~32s mean lat on bundled = ~115 min ≈ 1.9 hours
+;;
+;; Drive from REPL:
+;;   (digdir.sweep.runner/run-from-files
+;;     {:matrix-path "test/fixtures/sweep/matrices/round-1-strategy-weights.edn"})
+
+{:configs
+ [{:id "weights-default"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   ;; Explicit nil = let the in-skill defaults flow through. This is
+   ;; the baseline-v0 control; numbers here should match baseline at
+   ;; ctop-10 within noise (gives us a sanity check on the matrix).
+   :skill-params {:builtin/retrieval {:strategy-weights nil}}}
+
+  {:id "weights-balanced"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval
+                  {:strategy-weights {:content 1.0
+                                      :phrase 1.0
+                                      :metadata 1.0}}}}
+
+  {:id "weights-phrase-heavy"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval
+                  {:strategy-weights {:content 1.0
+                                      :phrase 2.0
+                                      :metadata 0.2}}}}
+
+  {:id "weights-metadata-heavy"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval
+                  {:strategy-weights {:content 1.0
+                                      :phrase 0.7
+                                      :metadata 1.0}}}}]
+
+ :repeats 3
+ :max-clarification-rounds 2
+
+ :execution-scope
+ {:tenant "digdir"
+  :dataset-config-key "default"
+  :agent-id "builtin/agent-rag-agent"}
+
+ :question-filter {:grounding-modes #{:chunks+answer}}}

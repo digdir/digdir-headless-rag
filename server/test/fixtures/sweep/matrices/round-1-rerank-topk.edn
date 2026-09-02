@@ -1,0 +1,69 @@
+;; Round 1 OFAT — rerank context-top-k sweep
+;;
+;; Per multi-variable-sweep-experiment-plan.md, Round 1 varies one
+;; dimension at a time against a fixed control. This cell tests the
+;; "Rerank top-k | 10 / 20 / 40 / 80 | Context-window pressure vs.
+;; recall" line from the OFAT table.
+;;
+;; The knob we vary is `:context-top-k` — the number of chunks the
+;; rerank skill returns (default 10). That's the value that
+;; determines what's visible in :reranked-chunks (which the runner
+;; reads for recall@k), and it's the "context window pressure"
+;; lever the plan refers to.
+;;
+;; Note: skill-params on the config win over the agent's per-call
+;; rerank args (tools.clj:1129 passes nil for explicit-parameters,
+;; so `merged-sub-skill-parameters :builtin/rerank` returns skill-
+;; params as-is). This gives a single point of control.
+;;
+;; Control: `agent-rag-graph-bundled` (the recall winner from
+;; baseline-v0). Holding the graph constant isolates the rerank
+;; knob.
+;;
+;; Filter: chunks+answer rows only (n=18). Answer-only and refusal-
+;; expected rows skip recall by design and would only dilute the
+;; signal we're chasing here. We can rerun against the full 31
+;; rows in a follow-up sweep if hit-rate / latency on those rows
+;; ends up mattering for the OFAT decision.
+;;
+;; Repeats: 3 (per leaderboard recommendation — faithful's between-
+;; run variance flipped 2-3 questions between v1 and v2 of baseline-
+;; v0; 3 repeats gives us mean ± stderr to separate variance from
+;; real config effects).
+;;
+;; Expected wall-clock:
+;;   4 configs × 18 questions × 3 repeats = 216 runs
+;;   × ~30s mean lat on bundled = ~108 min ≈ 1.8 hours
+;;
+;; Drive from REPL:
+;;   (load-file "src-dev/digdir/sweep/runner.clj")
+;;   (digdir.sweep.runner/run-from-files
+;;     {:matrix-path "test/fixtures/sweep/matrices/round-1-rerank-topk.edn"})
+
+{:configs
+ [{:id "rerank-ctop-10"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/rerank {:context-top-k 10}}}
+
+  {:id "rerank-ctop-20"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/rerank {:context-top-k 20}}}
+
+  {:id "rerank-ctop-40"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/rerank {:context-top-k 40}}}
+
+  {:id "rerank-ctop-80"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/rerank {:context-top-k 80}}}]
+
+ :repeats 3
+ :max-clarification-rounds 2
+
+ :execution-scope
+ {:tenant "digdir"
+  :dataset-config-key "default"
+  :agent-id "builtin/agent-rag-agent"}
+
+ ;; Only chunks-scoreable rows — recall is the signal we're after.
+ :question-filter {:grounding-modes #{:chunks+answer}}}

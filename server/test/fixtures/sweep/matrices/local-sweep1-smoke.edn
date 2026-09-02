@@ -1,0 +1,17 @@
+;; 1-run smoke to validate the Sweep-1 path end-to-end before the full 2×2:
+;; local Qwen agent reachable, prompt-variant injected, Part-A metadata captured
+;; (reasoning-tokens/finish-reason/empty? in runs.csv + models.edn manifest).
+;; judge? false (cloud judge is a separate pass).
+{:configs
+ [{:id "adapted-smoke"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted
+   :skill-params {}}]
+ :repeats 1
+ :judge? false
+ :order :config-major
+ :concurrency 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-dialog-01-aktivitetslogg"}}}

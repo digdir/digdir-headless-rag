@@ -1,0 +1,38 @@
+;; P1 of plans/proposed/read-stage-ceiling-plan.md — read-coverage sweep.
+;;
+;; The agent's read-DECISION is the bottleneck: on the faithful baseline these 10
+;; questions had the golden DISPLAYED but NOT READ (studio-02 / corr-01 never read
+;; it; broker-05 reads <=1 of 2 twins). Sweep the purpose-built :auto-read-top-k
+;; knob (auto-reads the top-K ranked chunks into the workspace regardless of the
+;; LLM's pick) at K = 0 (off / real agent) / 2 / 3 / 5.
+;;
+;; Each config's :skill-params is a DELTA over the real agent config
+;; (resolve-effective-configs), so this is the faithful agent + the read knob.
+;; judge? true → measure quality (judge verdict/score) alongside read-rate /
+;; recall, and the CSV's token columns capture the cost tradeoff. N=3 for a noise
+;; band (per-question recall is high-variance).
+;;
+;; 4 configs × 10 questions × 3 repeats = 120 judged runs.
+{:configs
+ [{:id "off"          :skill-graph-id :builtin/agent-rag-graph-bundled :skill-params {}}
+  {:id "auto-read-2"  :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/agent {:auto-read-top-k 2}}}
+  {:id "auto-read-3"  :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/agent {:auto-read-top-k 3}}}
+  {:id "auto-read-5"  :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/agent {:auto-read-top-k 5}}}]
+ :repeats 3
+ :judge? true
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-authz-06-xacml-obligation-authlevel"
+                          "ue-authz-07-bruker-typer-authorization"
+                          "ue-broker-05-filstorrelse-grenser-multi"
+                          "ue-corr-01-events-webhook-subscription"
+                          "ue-corr-04-notification-order-sms-window"
+                          "ue-events-02-publisere-cloudevents"
+                          "ue-events-03-polling-vs-webhook"
+                          "ue-studio-02-pdf-service-task"
+                          "ue-studio-03-datamodell-filer"
+                          "ue-sys-01-leverandorstyrt-og-forhold"}}}

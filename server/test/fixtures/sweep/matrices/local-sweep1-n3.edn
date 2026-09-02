@@ -1,0 +1,42 @@
+;; LOCAL Sweep-1 N=3 CONFIRM (Test phase 3). Same 2×2 × 8 Q as the c1 re-screen but
+;; N=3 to beat down the N=1 variance, after the finalize empty-recovery + context-
+;; grounding fixes (graphs.clj). concurrency 1 (big agent prefills don't batch).
+;; judge? false → cloud gpt-5.5 via `bb sweep-judge` after.
+;;
+;; Front-runner from the two N=1 concurrency-1 runs: adapted-prompt + default-budget
+;; (stable effQ 0.51/0.51, best retrieval recall@10 0.69 / golden-read 0.75 / ans-hit
+;; 1.00). Budget axis was noise. This batch confirms it. ~96 serial runs (~4-4.5h).
+;;
+;; Run with the agent-run OPENAI_* env (preserve_thinking + recommended thinking sampling).
+{:configs
+ [{:id "default-prompt+default-budget"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :default
+   :skill-params {}}
+  {:id "adapted-prompt+default-budget"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted
+   :skill-params {}}
+  {:id "default-prompt+reduced-budget"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :default
+   :skill-params #:builtin{:rerank {:context-top-k 6 :max-context-length 5000}}}
+  {:id "adapted-prompt+reduced-budget"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted
+   :skill-params #:builtin{:rerank {:context-top-k 6 :max-context-length 5000}}}]
+ :repeats 3
+ :judge? false
+ :order :interleaved
+ :concurrency 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-03-store-filer-virusskann"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-dialog-01-aktivitetslogg"
+                          "ue-events-01-abonnement-filtre"
+                          "ue-corr-02-transmission-group-dialog"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-sys-03-brukerstyrt-vs-leverandorstyrt"}}}

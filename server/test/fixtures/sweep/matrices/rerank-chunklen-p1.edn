@@ -1,0 +1,36 @@
+;; FALSIFICATION TEST for the rerank-truncation hypothesis.
+;;
+;; Pool-head + rerank-score instrumentation (2026-06-02) found: 20/21 buried-golden
+;; runs are a RERANKER miss (golden IS in ColBERT's top-40 window but scored below
+;; generic chunks), and 20/20 of those goldens are LONGER than rerank-max-chunk-length
+;; (1000). Hypothesis: ColBERT truncates each chunk to its first 1000 chars before
+;; late-interaction scoring, so the answer-bearing content of long goldens (median
+;; 2440) is truncated away — the reranker scores the golden's generic intro and
+;; shorter generic chunks out-score it. This explains why every ADDITIVE/boost lever
+;; failed: the golden is retrieved and in-window; the loss is at rerank-time.
+;;
+;; Test: raise rerank-max-chunk-length 1000 -> 4000 (covers the long goldens). If the
+;; long goldens surface (recall@20 up, golden rerank-score up, pool-rank into top-20),
+;; truncation is CAUSAL. If not, length was only a correlate. judge? false — the
+;; immediate signal is retrieval (does the long golden surface), which doesn't need
+;; the judge. 2 × 10 × 3 = 60 runs. Cohort = the 10 retrieval-variance questions.
+{:configs
+ [{:id "chunklen-1000" :skill-graph-id :builtin/agent-rag-graph-bundled :skill-params {}}
+  {:id "chunklen-4000" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:rerank-max-chunk-length 4000}}}]
+ :repeats 3
+ :judge? false
+ :order :interleaved
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-events-02-publisere-cloudevents"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-broker-03-store-filer-virusskann"
+                          "ue-broker-05-filstorrelse-grenser-multi"
+                          "ue-corr-01-events-webhook-subscription"
+                          "ue-sys-02-systembrukertoken-pdp-autorisasjon"
+                          "ue-api-06-app-openapi-swagger-spec"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-studio-02-pdf-service-task"}}}

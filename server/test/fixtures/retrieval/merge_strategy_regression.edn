@@ -1,0 +1,40 @@
+{:suite "retrieval-merge-regression"
+ :note "Synthetic retrieval fixtures for deterministic merge behavior checks."
+ :cases
+ [{:id "digdir-arsverk-base"
+   :query "Hvor mange årsverk hadde Digdir i 2022?"
+   :golden-chunk-id "6a80d6499075"
+   :golden-answer "Digdir hadde 326 utførte årsverk i 2022."
+   :max-acceptable-rank 1
+   :phrase-hits [{:chunk_id "792beec82d38" :rank 0.98 :index 0}
+                 {:chunk_id "792beec82d38" :rank 0.97 :index 1}
+                 {:chunk_id "181cd3add336" :rank 0.96 :index 2}
+                 {:chunk_id "6a80d6499075" :rank 0.31 :index 3}]
+   :metadata-hits [{:chunk_id "792beec82d38" :rank 0.81 :index 0}]
+   :content-hits [{:chunk_id "6a80d6499075" :rank 0.95 :index 0}
+                  {:chunk_id "792beec82d38" :rank 0.10 :index 1}]}
+
+  {:id "digdir-arsverk-variant"
+   :query "Hvor mange utførte årsverk hadde Digdir per 31.12.2022?"
+   :golden-chunk-id "6a80d6499075"
+   :golden-answer "Digdir besto 31.12.2022 av 326 utførte årsverk."
+   :max-acceptable-rank 2
+   :phrase-hits [{:chunk_id "842fe7e2695e" :rank 0.97 :index 0}
+                 {:chunk_id "15a66d5ec5c5" :rank 0.95 :index 1}
+                 {:chunk_id "6a80d6499075" :rank 0.34 :index 2}]
+   :metadata-hits [{:chunk_id "792beec82d38" :rank 0.79 :index 0}
+                   {:chunk_id "842fe7e2695e" :rank 0.73 :index 1}]
+   :content-hits [{:chunk_id "6a80d6499075" :rank 0.88 :index 0}
+                  {:chunk_id "842fe7e2695e" :rank 0.52 :index 1}
+                  {:chunk_id "15a66d5ec5c5" :rank 0.49 :index 2}]}
+
+  {:id "innovation-en-2022"
+   :query "What were total innovation investments in the Norwegian industrial sector in 2022?"
+   :golden-chunk-id "391859380a9f"
+   :golden-answer "Total innovation investments were 42.5 billion NOK in 2022."
+   :max-acceptable-rank 1
+   :phrase-hits [{:chunk_id "1234567890ab" :rank 0.93 :index 0}
+                 {:chunk_id "391859380a9f" :rank 0.58 :index 1}]
+   :metadata-hits [{:chunk_id "391859380a9f" :rank 0.77 :index 0}]
+   :content-hits [{:chunk_id "391859380a9f" :rank 0.99 :index 0}
+                  {:chunk_id "1234567890ab" :rank 0.21 :index 1}]}]}

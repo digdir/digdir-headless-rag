@@ -1,0 +1,43 @@
+{:id "skills",
+ :plane "runtime",
+ :name "Skills Graph Runtime",
+ :note "Composable DAG execution",
+ :icon "graph",
+ :color "#46d7c8",
+ :status "Core runtime",
+ :summary
+ "Executes configured graphs of reusable AI capabilities with typed edges and events.",
+ :description
+ "Skills are composable nodes assembled into directed graphs. The runner resolves a graph, invokes nodes in dependency order, passes outputs along edges and emits lifecycle events for observability.",
+ :responsibilities
+ ["Register skill implementations and graph templates"
+  "Validate and execute configured graph topology"
+  "Propagate node outputs, failures and lifecycle events"],
+ :files
+ ["server/src/digdir/skills/api.clj"
+  "server/src/digdir/skills/graph/runner.clj"
+  "server/src/digdir/skills/invoke.clj"],
+ :input "Query + resolved graph + execution context",
+ :output "Node results + graph event stream",
+ :edges
+ [{:to "agents",
+   :kind :call,
+   :target :call,
+   :label "Agent skills registered in the graph",
+   :via
+   "skill-graph id dispatch: digdir.skills.invoke/invoke-rag resolves :skill-graph-id through the graph runner"}
+  {:to "rag",
+   :kind :call,
+   :target :http,
+   :label "Retrieval and synthesis invoked as graph nodes",
+   :via
+   "skill-graph id dispatch: digdir.skills.invoke/invoke-rag resolves :skill-graph-id through the graph runner"}
+  {:to "llm",
+   :kind :http,
+   :target :http,
+   :label "Model calls made by graph nodes",
+   :via
+   "graph nodes call the configured provider; provider resolved from tenant config at call time",
+   :unverified true}],
+ :keywords
+ "skill skills graph dag node runner template invoke events composable workflow"}

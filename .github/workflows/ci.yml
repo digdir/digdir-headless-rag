@@ -1,0 +1,315 @@
+name: CI
+
+# Minimal PR-gating CI. Deploy/Kamal automation is a separate, larger effort —
+# see plans/proposed/github-ci-kamal-v2-plan.md for that design; this workflow
+# only covers the "lint + test on every PR" slice.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - release-v0.1-details
+      - agentic-skills
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    # Self-hosted on kamal-1 (container `digdir-rag-1`). There is exactly ONE
+    # such runner, so if it stops, every PR in this repo stops — see
+    # infra/ci-runner/README.md, "If CI stops", for what that looks like and
+    # how to unblock it. TO REVERT, restore exactly:
+    #
+    #     runs-on: ubuntu-latest
+    #
+    runs-on: [self-hosted, digdir-rag]
+    timeout-minutes: 20
+
+    # The test suite resolves configuration through the config DB, so without a
+    # DB pointer and a master key `digdir.config.accessor/get` throws
+    # "Database config required. Set CONFIG_MASTER_KEY environment variable."
+    # That accounted for ALL of the CI-vs-local failure delta (16 errors /
+    # 11 failures on CI vs 2 errors / 8 failures locally) — it was NOT, as
+    # previously assumed, Typesense-dependent tests. Verified by reproducing
+    # locally with these vars unset, and by re-running the full suite with
+    # exactly these values against a throwaway DB: 8 failures / 2 errors, i.e.
+    # the true baseline.
+    #
+    # These are throwaway CI values guarding a temporary file DB on a
+    # single-use runner. They are not secrets.
+    env:
+      CONFIG_MASTER_KEY: ci-test-master-key
+      JWT_SECRET: ci-test-jwt-secret
+      DATAHIKE_FILE_PATH: /tmp/digdir-ci-db/dh
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Installs the exact toolchain pinned in mise.toml (java, clojure, node,
+      # babashka) — versions live in one place, not duplicated here.
+      - name: Install mise-pinned toolchain
+        uses: jdx/mise-action@v4
+
+      - name: Cache Clojure & JS deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            ~/.gitlibs
+            server/.shadow-cljs
+            server/node_modules
+          key: ${{ runner.os }}-deps-${{ hashFiles('server/deps.edn', 'server/package.json', 'server/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-
+
+      # Datahike's file backend refuses to start if the parent directory is
+      # absent ("Datahike :file backend parent directory does not exist"), so
+      # create it before anything touches the config DB.
+      - name: Prepare config DB directory
+        run: mkdir -p /tmp/digdir-ci-db
+
+      - name: Lint (clj-kondo)
+        run: bb lint
+
+      - name: Config-resolution tests
+        run: bb test-config
+
+      # The earlier TODO here guessed that Typesense-dependent namespaces were
+      # the cause of CI's extra failures, and proposed a service container or a
+      # skip-marker. That guess was wrong: the delta was entirely the missing
+      # config env above. The suite does not hang on a bare runner, and with the
+      # env set CI matches the local baseline exactly.
+      #
+      # The note that used to sit here said remaining failures were pre-existing
+      # and tracked in #38, and that this check should not be made `required`
+      # until that reached zero. IT HAS REACHED ZERO — read from a run's own
+      # output rather than from the green tick: 2103 tests, 8892 assertions,
+      # 0 failures, 0 errors. And `bb test` exits non-zero on failure, so this
+      # step can genuinely go red; it is not a vacuous gate.
+      - name: Unit tests
+        run: bb test
+
+  # ---------------------------------------------------------------------------
+  # Build the Electric client. #407
+  #
+  # WHY THIS EXISTS: lint, test-config and test never invoke shadow-cljs, so a
+  # change to Electric client code could merge green and break only at deploy —
+  # the most expensive place to find it and the furthest from the author. That
+  # is not hypothetical: the #398 Atlas work added client code that was never
+  # client-compiled between authoring and merging.
+  #
+  # ⚠️ NOT REQUIRED, DELIBERATELY, AND NOT `continue-on-error`. Branch protection
+  # requires `lint-and-test` only, so this job is visible and can go red without
+  # gating merges. `continue-on-error` would have HIDDEN genuine failures, which
+  # is the opposite of what a new check needs. A new check's early reds are
+  # disproportionately its own defects, and that is better discovered by a red
+  # that does not stop eight lanes.
+  #
+  # No Hyperfiddle activation token is needed. That is not inherited from the
+  # config: docs/investigations/330-dev-client-decoupling-measurement.md P4 ran
+  # this build in a token-less worktree with no token slot, got 0 activation
+  # prompts, and then SERVED the resulting bundle and got 200 — because exit 0
+  # is not evidence.
+  #
+  # Peak memory is MEASURED rather than inferred from survival: the runner is
+  # capped at 8g with memswap_limit equal to it, on a box with zero swap, so
+  # "it did not get OOM-killed" does not distinguish 2 GiB from 7.9. An
+  # over-limit build is killed by its own cgroup and cannot threaten the Kamal
+  # co-tenants — the cap is what protects production.
+  build-client:
+    runs-on: [self-hosted, digdir-rag]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install mise-pinned toolchain
+        uses: jdx/mise-action@v4
+
+      - name: Cache Clojure & JS deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            ~/.gitlibs
+            server/.shadow-cljs
+            server/node_modules
+          # ⚠️ A DISTINCT KEY FROM lint-and-test, DELIBERATELY. Measured: with a
+          # shared key, `lint-and-test` populates it first and NEVER runs
+          # shadow-cljs, so the entry contains ~/.m2 and node_modules but no
+          # `server/.shadow-cljs`. actions/cache does not overwrite an exact key
+          # hit, so this job restored that cache successfully and still reported
+          # ABSENT — and would have done so on EVERY run, for ever. The client
+          # build would be permanently cold while appearing to be cached.
+          key: ${{ runner.os }}-client-${{ hashFiles('server/deps.edn', 'server/package.json', 'server/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-client-
+
+      # Whether the shadow cache was restored decides warm-versus-cold, so it is
+      # recorded rather than guessed at afterwards from the elapsed time.
+      - name: Record cache state (warm or cold)
+        run: |
+          if [ -d server/.shadow-cljs ]; then
+            echo "shadow-cljs cache: PRESENT (warm build expected)"
+            du -sh server/.shadow-cljs || true
+          else
+            echo "shadow-cljs cache: ABSENT (cold build)"
+          fi
+
+      # THE BUILD AND THE MEASUREMENT ARE SEPARATE STEPS, deliberately.
+      # The first version wrapped the build in `/usr/bin/time -v`, which is NOT
+      # installed in this runner image — so the step exited 127 and the job went
+      # red having never attempted the build. A MISSING INSTRUMENT FAILED THE
+      # THING IT WAS MEASURING, and the red said nothing about the client.
+      # ⚠️ memory.peak IS MONOTONIC AND THE RUNNER CONTAINER IS LONG-LIVED
+      # (restart: always), so it may already hold a PRIOR job's peak — the test
+      # suite's recorded 1.8 GiB would silently inflate this build's figure.
+      # Reset it if the kernel allows; otherwise record the prior value so the
+      # reader can see what the number might be contaminated by.
+      - name: Reset or record the peak-memory counter
+        run: |
+          # ⚠️ RECORD WHICH RUNNER PRODUCED THIS READING. There are two runners
+          # on the box and a job may land on either, so the before/after pair is
+          # comparable WITHIN a run and NOT across runs. Observed before-values
+          # of 3086, 4972, then 4570 MiB — and a monotonic counter cannot
+          # decrease, so that sequence is two different containers interleaved.
+          # Without this line the next person sees the same impossible decrease
+          # and has nothing to reason from: a reading without the identity of
+          # what produced it cannot be compared to another reading.
+          printf 'runner: %s\n' "${RUNNER_NAME:-unknown}"
+          if [ -w /sys/fs/cgroup/memory.peak ] && echo 0 > /sys/fs/cgroup/memory.peak 2>/dev/null; then
+            echo "peak counter: RESET to 0 before the build"
+          elif [ -r /sys/fs/cgroup/memory.peak ]; then
+            printf 'peak counter: NOT resettable. Value BEFORE this build: %s MiB — the after figure is the max of this build and anything earlier in this container.\n' \
+              "$(( $(cat /sys/fs/cgroup/memory.peak) / 1048576 ))"
+          else
+            echo "peak counter: not readable here; see the report step"
+          fi
+          # ⚠️ memory.peak is a HIGH-WATER MARK, not usage. Knowing the peak was
+          # already 3 GiB does NOT tell you the container was HOLDING 3 GiB when
+          # the build began — it may have freed nearly all of it. Without this,
+          # the after-figure supports "the cgroup reached X" but NOT "the build
+          # needs X", and those are different claims about different quantities.
+          if [ -r /sys/fs/cgroup/memory.current ]; then
+            printf 'memory in use BEFORE the build: %s MiB\n' \
+              "$(( $(cat /sys/fs/cgroup/memory.current) / 1048576 ))"
+          else
+            echo "memory.current not readable — the build's OWN requirement cannot be bounded from the peak alone"
+          fi
+
+      - name: Build the Electric client
+        run: bb build-client
+
+      # Peak memory is read from the CGROUP, which is what the limit is actually
+      # enforced against and what the OOM killer acts on — a more faithful number
+      # than a per-process high-water mark, since the build spawns a JVM.
+      #
+      # ⚠️ READ THIS WITH `memory in use BEFORE` OR NOT AT ALL. The counter is
+      # monotonic over the CONTAINER's life and this kernel will not reset it, so
+      # on a long-lived runner the peak DEGRADES TOWARD USELESSNESS AS THE
+      # CONTAINER AGES: eventually `after` always equals `before`, the step learns
+      # nothing about this run, AND STILL PRINTS A CONFIDENT NUMBER. It does not
+      # stop working — it stops meaning anything, and the output looks the same.
+      #
+      # Observed drifting upward already: before-values of 3086, then 4972, then
+      # 4570 MiB across successive runs. The peak answers "how close did the
+      # cgroup come to the cap", which is the question gating rests on. Only the
+      # PAIR says anything about the build itself.
+      #
+      # ⚠️ If nothing can report it, SAY SO. A measurement step that quietly
+      # produces no measurement leaves "it survived" standing in for "it used
+      # 2 GiB", which is exactly the inference this job exists to avoid.
+      - name: Report peak memory
+        if: always()
+        run: |
+          if [ -r /sys/fs/cgroup/memory.peak ]; then
+            printf 'peak memory (cgroup v2): %s bytes = %s MiB\n' \
+              "$(cat /sys/fs/cgroup/memory.peak)" "$(( $(cat /sys/fs/cgroup/memory.peak) / 1048576 ))"
+          elif [ -r /sys/fs/cgroup/memory/memory.max_usage_in_bytes ]; then
+            printf 'peak memory (cgroup v1): %s bytes = %s MiB\n' \
+              "$(cat /sys/fs/cgroup/memory/memory.max_usage_in_bytes)" \
+              "$(( $(cat /sys/fs/cgroup/memory/memory.max_usage_in_bytes) / 1048576 ))"
+          else
+            echo "PEAK MEMORY NOT MEASURED — no readable cgroup counter. Do NOT infer it from the build succeeding: surviving does not distinguish 2 GiB from 7.9 on an 8g cap with no swap."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Publish the green marker.
+  #
+  # WHAT THIS IS FOR: a box-side deploy agent watches this ref and deploys the
+  # commit it points at. The ref MOVING is the statement "lint and tests passed
+  # for this SHA on this branch" — delivered over git, so the agent needs no
+  # GitHub API token and this repository stores no deploy credential.
+  #
+  # WHY A SEPARATE JOB, AND WHY ON A GITHUB-HOSTED RUNNER: `needs` makes the
+  # dependency explicit, but separating the jobs is not enough on its own.
+  # lint-and-test runs on the SELF-HOSTED runner and executes untrusted pull
+  # request code, and that runner is NOT ephemeral — it persists between jobs.
+  # A hostile PR could leave a background process, a git credential helper, a
+  # poisoned PATH entry or a modified tool behind, and a later job on that same
+  # host would run with a token able to move the ref THAT CAUSES A DEPLOY.
+  #
+  # So this job must not merely be a different JOB, it must be a different
+  # MACHINE. ubuntu-latest is ephemeral by construction, so the write token
+  # never shares a host with repository code. This job is a checkout and one
+  # git push — it never needs the self-hosted box, and seconds of Linux is not
+  # the cost that made us self-host the suite.
+  #
+  # DO NOT move this to [self-hosted, digdir-rag] to "keep it consistent".
+  #
+  # ⚠️ PUSH ONLY, NEVER pull_request — STATED RATHER THAN IMPLIED. The `if`
+  # below is deliberately redundant with the workflow's own trigger list: a
+  # future edit that adds a trigger must not silently grant a fork's PR the
+  # ability to move a ref that causes a deploy. If you are removing this
+  # condition, you are removing the thing that makes the trigger list safe to
+  # change.
+  mark-green:
+    needs: lint-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/release-v0.1-details'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      # NO CHECKOUT. The ref is moved through the GitHub API, so the runner
+      # needs no working tree and no history at all.
+      #
+      # ⚠️ WHY NOT `git push`: it was, and it broke on the second merge.
+      # actions/checkout defaults to fetch-depth: 1, so the runner clone holds
+      # only the triggering commit. git then cannot prove the new commit is a
+      # descendant of the marker's current value, and refuses the non-forced
+      # push with "! [rejected] (fetch first)". The first merge succeeded only
+      # because the marker did not exist yet and an absent ref needs no
+      # fast-forward check — so the working case and the failing case are
+      # different code paths, and testing the easy one proves nothing.
+      #
+      # Fetching enough history to answer the question means either fetch-depth: 0
+      # (a full 51 MB / 1195-commit clone on every merge, growing forever) or a
+      # deepen of some guessed size that fails intermittently once the marker
+      # falls further behind than the guess. Both pay a growing cost to answer
+      # one question about one ref.
+      #
+      # The API answers it server-side, where the full history already is.
+      # `force=false` makes GitHub itself enforce the fast-forward, so the
+      # forward-only property is preserved exactly as designed — verified in
+      # both directions on a throwaway ref: advancing succeeds, and moving
+      # backward is refused with "not a fast forward".
+      - name: Move the green marker to this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ref="heads/deploy/test-green"
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/${ref}" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/${ref}" \
+              -f sha="${GITHUB_SHA}" -F force=false -q '.object.sha'
+          else
+            # First run only: the marker does not exist yet. Creation needs no
+            # fast-forward check because there is nothing to fast-forward from.
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/${ref}" -f sha="${GITHUB_SHA}" -q '.object.sha'
+          fi
+          echo "green marker -> ${GITHUB_SHA}"

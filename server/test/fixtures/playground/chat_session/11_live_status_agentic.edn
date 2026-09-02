@@ -1,0 +1,10 @@
+[{:event :request/started :request-id "req-11" :query "Agentic"}
+ {:event :stage/started :stage :skills-init :label "Initializing skills"}
+ {:event :stage/started :stage :agent-iteration :label "agent-iteration"}
+ {:event :tool/call :tool-call {:tool "search_documents" :iteration 0 :args {:queries ["digdir"]}}}
+ {:event :tool/result :tool-result {:tool "search_documents" :summary "Found 15 chunks" :ok? true :iteration 0}}
+ {:event :tool/call :tool-call {:tool "rerank_results" :iteration 0 :args {:query "digdir"}}}
+ {:event :tool/result :tool-result {:tool "rerank_results" :summary "Top 8 chunks" :ok? true :iteration 0}}
+ {:event :warning/raised :warning {:code :auto-filter-fallback :message "Fallback used"}}
+ {:event :stage/started :stage :skills-generating :label "Generating response"}
+ {:event :response/chunk :delta "agent answer"}]

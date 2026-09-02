@@ -4,7 +4,9 @@
             [time-literals.read-write]))
 (time-literals.read-write/print-time-literals-clj!)
 
-(def edn-opts {:readers *data-readers*})
+(def edn-opts
+  #?(:clj {:readers *data-readers*}
+     :cljs {}))
 
 (defn edn-read-string
   ([s] (edn-read-string {} s))

@@ -1,0 +1,11 @@
+;; Smoke: confirm the rechunked collection is retrievable (search + docs join +
+;; preserved clean-golden id). broker-03's golden (693 chars) keeps its id, so
+;; recall>0 here validates the new collection end-to-end before re-grounding/A-B.
+{:configs [{:id "rechunked" :skill-graph-id :builtin/agent-rag-graph-bundled :skill-params {}}]
+ :repeats 1
+ :judge? false
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"
+                   :chunks-collection-override "website_chunks_rechunk1500v1"}
+ :question-filter {:ids #{"ue-broker-03-store-filer-virusskann"}}}

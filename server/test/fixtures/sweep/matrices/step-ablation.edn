@@ -1,0 +1,72 @@
+;; #390 part (1) — DOES A STEP CHANGE THE OUTCOME AT ALL. No judge.
+;;
+;; Four configs INTERLEAVED in one sweep rather than run as separate arms, so
+;; every arm shares the same endpoint state, model load and hour. Separate arms
+;; would differ in one thing PLUS whatever drifted between them.
+;;
+;; Read the outcome on the GROUND-TRUTH metrics, not on answer text: at
+;; temperature 0.6 the control does not reproduce itself (answer text identical
+;; 0/8, evidence set identical 0/8), so text/evidence difference is saturated
+;; before any treatment. Admitted metrics, by control-vs-control stability:
+;; answer-substring-hit? 100%, recall-at-10 88%, golden-read? 88%,
+;; golden-in-search-pool? 75%, citation-recall 75%. REJECTED: n-cited 25%.
+;;
+;; Base rates on the control arm (16 runs): read-signal-eval 16/16,
+;; sufficiency-gate 4/16, response-validation 0/16 — so the third ablation is
+;; predicted to be a no-op BY CONSTRUCTION and is kept to record that.
+{:configs
+ [{:id "control"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval {:enrichment-types [:hypothetical-questions]
+                         :enrichment-search-targets
+                         {:hypothetical-questions
+                          "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true :no-tool-call-retry true}}}
+  {:id "no-read-signal-eval"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval {:enrichment-types [:hypothetical-questions]
+                         :enrichment-search-targets
+                         {:hypothetical-questions
+                          "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true :no-tool-call-retry true
+                     :ablate-stages #{:read-signal-eval}}}}
+  {:id "no-sufficiency-gate"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval {:enrichment-types [:hypothetical-questions]
+                         :enrichment-search-targets
+                         {:hypothetical-questions
+                          "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true :no-tool-call-retry true
+                     :ablate-stages #{:sufficiency-gate}}}}
+  {:id "no-response-validation"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval {:enrichment-types [:hypothetical-questions]
+                         :enrichment-search-targets
+                         {:hypothetical-questions
+                          "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true :no-tool-call-retry true
+                     :ablate-stages #{:response-validation}}}}]
+ :repeats 1
+ :judge? false
+ :order :interleaved
+ :concurrency 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 1800000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter
+ {:ids #{"ue-broker-01-filoverforing-tilstander"
+         "ue-studio-03-datamodell-filer"
+         "ue-authz-06-xacml-obligation-authlevel"
+         "ue-api-04-instances-get-no-list"
+         "ue-dialog-02-seen-log"
+         "ue-corr-03-system-til-system-nedlasting"
+         "ue-sys-01-leverandorstyrt-og-forhold"
+         "ue-notif-05-umiddelbar-varsling-otp"}}}

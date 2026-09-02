@@ -1,0 +1,29 @@
+;; D — ENRICHMENT-HQ ON KIMI, BROAD SET (118 frontier goldens, FIXED query-planner).
+;; D4 found the qwen_n5 enrichment lever did NOT transfer from the curated 42-Q
+;; (+0.068, t≈2.14) to the broad 118-Q set with the LOCAL model (+0.024, t≈0.67, null;
+;; golden-in-pool identical 84%). Is that non-transfer a property of the corpus/goldens,
+;; or of the weak local synthesizer? Re-test off vs enriched-HQ on the 118 with Kimi.
+;; Both arms inherit the deployed snippet-AB defaults; the ONLY delta is the enrichment
+;; search target. (off = bare deployed; enriched-hq = + website_..._qwen_n5.)
+;; 2 × 118 × N=3 = 708 runs, conc-48, judge? false. (Longest sweep — runs last.)
+{:configs
+ [{:id "off"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {}}
+  {:id "enriched-hq"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}}}]
+ :repeats 3
+ :judge? false
+ :order :interleaved
+ :concurrency 48
+ :max-clarification-rounds 1
+ :run-timeout-ms 3000000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :questions-path "test/fixtures/sweep/questions-website-goldens.edn"
+ :question-filter {:dataset :public-docs}}

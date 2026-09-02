@@ -1,0 +1,6 @@
+;; Promoted live hard cases.
+;;
+;; Leave this suite empty until repeated ka/dev/kudos sweeps show a stable
+;; current->relaxed improvement pattern. Candidate and exploratory queries live
+;; in token_budget_exploratory_candidates.edn until then.
+{:cases []}

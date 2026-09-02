@@ -179,7 +179,8 @@
             {:facet true :index true :name "path" :optional false :sort false :type "string"}
             {:facet true :index true :name "url" :optional true :sort false :type "string"}
             {:facet true :index true :name "lastmod" :optional true :sort true :type "string"}
-            {:facet true :index true :name "type" :optional false :sort false :type "string"}]})
+            {:facet true :index true :name "type" :optional false :sort false :type "string"}
+            {:facet false :index true :name "total_chunks" :optional true :sort true :type "int32"}]})
 
 (defn folder-chunks-schema [[docs-collection-name chunks-collection-name :as coll-ids]]
   {:name chunks-collection-name
@@ -191,6 +192,7 @@
             {:facet true :index true :name "chunk_index" :optional false :sort true :type "int32"}
             {:facet false :index true :locale "en" :name "content_markdown" :optional false :sort false :type "string"}
             {:facet false :index true :name "metadata" :optional true :sort false :type "string"}
+            {:facet false :index true :name "content_length" :optional true :sort true :type "int32"}
             {:facet true :index true :name "path" :optional false :sort false :type "string"}]})
 
 (defn folder-phrases-schema
@@ -220,7 +222,7 @@
     (-> doc
         (assoc :path relative-path)
         (assoc :url url)
-        (select-keys [:id :doc_num :title :path :url :lastmod :type]))))
+        (select-keys [:id :doc_num :title :path :url :lastmod :type :total_chunks]))))
 
 (defn prepare-folder-chunks
   "Prepares chunks for storage"
@@ -228,7 +230,7 @@
   (let [base-path (:base-path config)]
     (mapv #(-> %
                (update :path (fn [path] (make-relative-path base-path path)))
-               (select-keys [:chunk_id :doc_num :chunk_index :content_markdown :metadata :path]))
+               (select-keys [:chunk_id :doc_num :chunk_index :content_markdown :content_length :metadata :path]))
           chunks)))
 
 ;; ============================================================================

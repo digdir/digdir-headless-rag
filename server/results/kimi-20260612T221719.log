@@ -1,0 +1,33 @@
+[06-12 22:17:19] === Kimi K2.6 sweep (model-h2h-full42-kimi.edn) ===
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+{:result :unchanged, :tenant "digdir", :root :platform, :tenant-config-key "default", :path "services.azure-openai.use-azure-openai-api", :marker "./local-db/dh_bb_dev_model_headtohead_v1/.config-changed"}
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+{:result :updated, :tenant "digdir", :root :platform, :tenant-config-key "default", :path "services.azure-openai.model-name", :marker "./local-db/dh_bb_dev_model_headtohead_v1/.config-changed"}
+Picked up JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow
+[digdir.data.db] init-db env=:local backend=:file path="./local-db/dh_bb_dev_model_headtohead_v1" DATAHIKE_FILE_PATH="./local-db/dh_bb_dev_model_headtohead_v1" cwd="/Users/bdbrodie/dev/digdir/rag/model-headtohead/server"
+Ensuring all config definitions exist...
+Ensuring email config definitions exist...
+  Config definitions ensured.
+WARNING: parse-long already refers to: #'clojure.core/parse-long in namespace: taoensso.carmine, being replaced by: #'taoensso.carmine/parse-long
+WARNING: parse-double already refers to: #'clojure.core/parse-double in namespace: taoensso.carmine, being replaced by: #'taoensso.carmine/parse-double
+2026-06-12T20:18:10.362428Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1075,11] :sweep.runner/start {:configs 1, :questions 42, :repeats 3, :total 126, :run-timeout-ms 3000000, :out-dir "results/sweep-2026-06-12T20-18-10-182670Z"}
+2026-06-12T20:18:10.373410Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1104,21] :sweep.runner/run-begin {:config-id "deployed", :question-id "ue-broker-02-slette-tid-tilgjengelig", :repeat 2}
+2026-06-12T20:18:10.373313Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1104,21] :sweep.runner/run-begin {:config-id "deployed", :question-id "ue-broker-01-filoverforing-tilstander", :repeat 1}
+2026-06-12T20:18:10.373310Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1104,21] :sweep.runner/run-begin {:config-id "deployed", :question-id "ue-broker-01-filoverforing-tilstander", :repeat 0}
+2026-06-12T20:18:10.373352Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1104,21] :sweep.runner/run-begin {:config-id "deployed", :question-id "ue-broker-01-filoverforing-tilstander", :repeat 2}
+2026-06-12T20:18:10.373311Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1104,21] :sweep.runner/run-begin {:config-id "deployed", :question-id "ue-broker-02-slette-tid-tilgjengelig", :repeat 0}
+2026-06-12T20:18:10.373367Z INFO LOG bdb-dd-m4.local digdir.sweep.runner[1104,21] :sweep.runner/run-begin {:config-id "deployed", :question-id "ue-broker-02-slette-tid-tilgjengelig", :repeat 1}
+query-planner LLM call failed after retries: clj-http: status 404 — falling back to raw query
+query-planner LLM call failed after retries: clj-http: status 404 — falling back to raw query
+query-planner LLM call failed after retries: clj-http: status 404 — falling back to raw query
+query-planner LLM call failed after retries: clj-http: status 404 — falling back to raw query
+query-planner LLM call failed after retries: clj-http: status 404 — falling back to raw query
+query-planner LLM call failed after retries: clj-http: status 404 — falling back to raw query

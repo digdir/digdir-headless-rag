@@ -1,0 +1,15 @@
+;; Promotion equivalence smoke: the new DEFAULT ({}) must now behave identically
+;; to explicit windowing@2000, and differ from historical-off. 3 questions, N=1.
+{:configs
+ [{:id "default-now" :skill-graph-id :builtin/agent-rag-graph-bundled :skill-params {}}
+  {:id "explicit-window" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:rerank-windowing true :rerank-max-chunk-length 2000}}}
+  {:id "hist-off" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:rerank-windowing false :rerank-max-chunk-length 1000}}}]
+ :repeats 1
+ :judge? false
+ :order :interleaved
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-05-filstorrelse-grenser-multi" "ue-sys-02-systembrukertoken-pdp-autorisasjon" "ue-broker-03-store-filer-virusskann"}}}

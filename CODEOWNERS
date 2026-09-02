@@ -1,0 +1,33 @@
+# CODEOWNERS template — placeholder, not yet enforced.
+#
+# Per-area owners are pending a Digdir decision (Open Question Q3 in
+# plans/proposed/release-v0.1-packaging-plan.md). Until real GitHub usernames
+# or teams are filled in below, GitHub will not treat this file as active
+# (an owner entry of "# TODO owner" is a comment, not a valid owner), so this
+# has no enforcement effect yet — it's a map of areas to fill in.
+#
+# Format once real owners are known:
+#   <path-pattern>  @github-username-or-team
+#
+# Areas, mapped to their real paths in this tree:
+
+# Ingestion pipelines
+/server/src/digdir/pipeline/   # TODO owner
+
+# Runtime skill execution (skill graphs, builtins, templates)
+/server/src/digdir/skills/     # TODO owner
+
+# Agent definitions & orchestration
+/server/src/digdir/agents/     # TODO owner
+
+# Admin UI (playground + shared UI components)
+/server/src/digdir/playground/ # TODO owner
+/server/src/digdir/ui/         # TODO owner
+
+# Config model (schema, accessors, permissions, ops tooling)
+/server/src/digdir/config/     # TODO owner
+
+# Ops / deploy (Kamal config, bb deploy tasks)
+/deploy.yml                    # TODO owner
+/deploy.test.yml               # TODO owner
+/server/src/digdir/config/ops/ # TODO owner

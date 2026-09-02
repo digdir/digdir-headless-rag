@@ -1,0 +1,81 @@
+;; Project clj-kondo configuration.
+;;
+;; Library configs (Electric, malli, encore, …) are imported into
+;; `.clj-kondo/imports/` and committed, so a bare CI runner lints identically to
+;; a developer machine. Regenerate with `bb lint-init` after changing deps.
+;;
+;; Keep exclusions narrow and explain each one. A blanket suppression makes the
+;; exit code meaningless, which is the state this config exists to end.
+{:config-in-ns
+ {;; digdir.ui.routing is a .cljc whose state and helpers are defined inside
+  ;; #?(:cljs …) and consumed inside Electric `e/client` blocks. clj-kondo also
+  ;; lints the file for :clj, where those definitions genuinely do not exist, so
+  ;; it reports every use as unresolved. The uses are unreachable on :clj — a
+  ;; platform-split false positive, not a missing definition.
+  ;;
+  ;; Scoped to this one namespace, and it is a real trade-off: :unresolved-symbol
+  ;; is the linter most likely to catch a typo, and it is off for this file. The
+  ;; proper fix is to make this a .cljs namespace (it is client-only); that is a
+  ;; larger change with Electric implications and is deliberately not done here.
+  ;;
+  ;; A per-form #_{:clj-kondo/ignore …} was tried first and rejected: in a .cljc
+  ;; the ignore is required for the :clj pass but redundant for :cljs, so
+  ;; clj-kondo emits a permanent "Redundant ignore" info on every run.
+  digdir.ui.routing {:linters {:unresolved-symbol {:level :off}}}
+
+  ;; The three namespaces below are .cljc files where a require is
+  ;; unconditional but its only use sits inside a #?(:clj ...) block. clj-kondo
+  ;; lints .cljc for both platforms, so the :cljs pass reports the require as
+  ;; unused while the :clj build genuinely needs it.
+  ;;
+  ;; This is not theoretical debt: acting on these three warnings removed the
+  ;; requires, left `bb lint` at 0 errors, and broke compilation
+  ;; ("namespace 'digdir.data.db' not found") — caught only by `bb test`. They
+  ;; are suppressed here, narrowly and per-namespace, so the warning cannot be
+  ;; re-actioned by the next person to run a cleanup pass.
+  ;;
+  ;; The proper fix in each case is to move the require inside the same reader
+  ;; conditional as its use; that is a behaviour-neutral edit but touches
+  ;; load order in files that are central to the app, so it is deliberately
+  ;; not bundled into a lint-cleanup change.
+  digdir.playground.ui.common {:linters {:unused-namespace {:exclude [digdir.playground.ui.components]}}}
+  digdir.rag.core {:linters {:unused-namespace {:exclude [digdir.rag.merge]}}}
+
+  ;; Same platform-split cause as above, but a different linter: these private
+  ;; vars are defined unconditionally and used only inside #?(:clj ...), so the
+  ;; :cljs pass reports them unused. Deleting any of them removes live code —
+  ;; api-key-grant-schema-repair-entries backs the API-key schema-repair path,
+  ;; and filter-conversations-by-tags backs conversation tag filtering — while
+  ;; lint would still report 0 errors.
+  digdir.data.db {:linters {:unused-namespace {:exclude [clojure.edn]}}}
+
+  ;; Mirror image of the cases above: `load-translations-cljs!` takes an
+  ;; argument used only inside #?(:cljs ...), so it is the :clj pass that
+  ;; reports it unused. Renaming it to `_trans` silences the warning and
+  ;; breaks the ClojureScript branch — lint DOES catch that one (unresolved
+  ;; symbol), unlike the require cases, but the binding is still a genuine
+  ;; false positive rather than debt.
+  digdir.i18n {:linters {:unused-binding {:level :off}}}
+
+  ;; `dev/start-http!` defs the jetty handle inside the function on purpose: it
+  ;; is the REPL affordance that makes `(.stop jetty-server)` work from the
+  ;; comment block at the bottom of the same file. (#330 moved the def out of
+  ;; `dev/-main` into the helper both entrypoints call; the reason is unchanged
+  ;; and the exclusion is namespace-wide, so it still applies.) Hoisting it to a
+  ;; top-level defonce
+  ;; would satisfy the linter but restructure `bb dev`'s startup ordering, which
+  ;; #165 has just stabilised by moving the API bind ahead of the client
+  ;; compile. Not worth re-opening for a style warning in dev-only tooling, so
+  ;; it is tolerated here explicitly rather than silently.
+  dev {:linters {:inline-def {:level :off}}}}
+
+ ;; :unused-private-var takes FULLY-QUALIFIED var symbols and is configured at
+ ;; the top level, not per-namespace — bare names here make clj-kondo throw
+ ;; (NullPointerException in findings/ignored?) rather than report a config
+ ;; error, so the failure is easy to misread as a code problem.
+ :linters
+ {:unused-private-var
+  {:exclude [digdir.data.db/api-key-grant-schema-repair-entries
+             digdir.data.db/filter-conversations-by-tags
+             digdir.data.db/playground-conversation-pull-attrs
+             digdir.config.ui.inheritance/path-filter-debounce-ms]}}}

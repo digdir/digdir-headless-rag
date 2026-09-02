@@ -1,9 +1,65 @@
 (ns digdir.docs.website-test
   "Tests for digdir.docs.website namespace."
-  (:require [clojure.test :refer [deftest testing is are]]
+  (:require [clojure.xml :as xml]
+            [clojure.test :refer [deftest testing is ]]
             [clojure.string :as str]
             [digdir.docs.website :as website]
-            [digdir.docs.test-fixtures :as fixtures]))
+            [digdir.docs.test-fixtures :as fixtures])
+  (:import (java.io ByteArrayInputStream)
+           (java.net InetAddress)))
+
+(defn- address
+  [& octets]
+  (InetAddress/getByAddress
+   (byte-array (map #(unchecked-byte (int %)) octets))))
+
+(deftest fetch-policy-rejects-non-http-and-untrusted-hosts
+  (let [policy (assoc website/default-fetch-policy
+                      :allowed-hosts #{"docs.example.com"})]
+    (binding [website/*host-resolver* (fn [_] [(address 93 184 216 34)])]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"HTTP or HTTPS"
+                            (website/validate-fetch-uri! "file:///etc/passwd" policy)))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"not allowed"
+                            (website/validate-fetch-uri! "https://evil.example/a.md" policy)))
+      (is (instance? java.net.URI
+                     (website/validate-fetch-uri! "https://docs.example.com/a.md" policy))))))
+
+(deftest fetch-policy-blocks-every-private-or-reserved-answer
+  (let [policy (assoc website/default-fetch-policy
+                      :allowed-hosts #{"docs.example.com"})]
+    (doseq [blocked [(address 127 0 0 1)
+                     (address 10 0 0 1)
+                     (address 169 254 169 254)
+                     (address 172 16 0 1)
+                     (address 192 168 0 1)
+                     (address 100 64 0 1)
+                     (address 192 0 2 1)
+                     (address 198 51 100 1)
+                     (address 203 0 113 1)]]
+      (binding [website/*host-resolver* (fn [_] [(address 93 184 216 34) blocked])]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"private or reserved"
+                              (website/validate-fetch-uri!
+                               "https://docs.example.com/a.md" policy)))))))
+
+(deftest website-policy-does-not-trust-sitemap-provided-hosts
+  (let [policy (website/website-fetch-policy
+                {:sitemap/url "https://docs.example.com/sitemap.xml"
+                 :base-url "https://content.example.com"})]
+    (is (= #{"docs.example.com" "content.example.com"}
+           (:allowed-hosts policy)))
+    (binding [website/*host-resolver* (fn [_] [(address 93 184 216 34)])]
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (website/validate-fetch-uri! "https://metadata.example/a.md"
+                                                policy))))))
+
+(deftest response-reader-enforces-byte-limit-without-content-length
+  (is (= "abcd"
+         (String. ^bytes (website/read-bounded-bytes
+                          (ByteArrayInputStream. (.getBytes "abcd" "UTF-8")) 4)
+                  "UTF-8")))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"size limit"
+                        (website/read-bounded-bytes
+                         (ByteArrayInputStream. (.getBytes "abcde" "UTF-8")) 4))))
 
 ;; ============================================================================
 ;; URL Helper Functions Tests
@@ -112,6 +168,51 @@
           filtered (website/filter-markdown-urls urls)]
       (is (= 2 (count filtered)))
       (is (not-any? #(str/ends-with? (:loc %) ".html") filtered)))))
+
+(deftest extract-sub-sitemap-urls-from-index
+  (testing "Pulls every <sitemap><loc> out of a sitemapindex"
+    (let [sitemap-xml (clojure.xml/parse (java.io.ByteArrayInputStream.
+                                          (.getBytes fixtures/sample-sitemapindex-xml)))
+          locs (vec (website/extract-sub-sitemap-urls sitemap-xml))]
+      (is (= ["http://example.com/nb/sitemap-markdown.xml"
+              "http://example.com/en/sitemap-markdown.xml"]
+             locs)))))
+
+(deftest parse-sitemap-recurses-sitemapindex
+  (testing "When given a sitemapindex root, parse-sitemap recurses into each child"
+    (let [index-xml (clojure.xml/parse (java.io.ByteArrayInputStream.
+                                        (.getBytes fixtures/sample-sitemapindex-xml)))
+          leaf-xml (clojure.xml/parse (java.io.ByteArrayInputStream.
+                                       (.getBytes fixtures/sample-sitemap-xml)))
+          fetched (atom [])]
+      (with-redefs [website/fetch-sitemap
+                    (fn [url]
+                      (swap! fetched conj url)
+                      (if (str/includes? url "sitemap-markdown.xml")
+                        leaf-xml
+                        index-xml))]
+        (let [urls (vec (website/parse-sitemap "http://example.com/root-sitemap.xml"))]
+          ;; Root + 2 leaf fetches
+          (is (= ["http://example.com/root-sitemap.xml"
+                  "http://example.com/nb/sitemap-markdown.xml"
+                  "http://example.com/en/sitemap-markdown.xml"]
+                 @fetched))
+          ;; Each leaf yields 2 .md urls (page3.html filtered out) -> 4 total
+          (is (= 4 (count urls)))
+          (is (every? #(str/ends-with? (:loc %) ".md") urls)))))))
+
+(deftest parse-sitemap-urlset-unchanged
+  (testing "When given a plain urlset, parse-sitemap returns its markdown urls without recursing"
+    (let [leaf-xml (clojure.xml/parse (java.io.ByteArrayInputStream.
+                                       (.getBytes fixtures/sample-sitemap-xml)))
+          fetched (atom [])]
+      (with-redefs [website/fetch-sitemap
+                    (fn [url]
+                      (swap! fetched conj url)
+                      leaf-xml)]
+        (let [urls (vec (website/parse-sitemap "http://example.com/sitemap.xml"))]
+          (is (= ["http://example.com/sitemap.xml"] @fetched))
+          (is (= 2 (count urls))))))))
 
 ;; ============================================================================
 ;; url-to-doc Tests

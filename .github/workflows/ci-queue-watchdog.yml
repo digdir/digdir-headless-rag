@@ -1,0 +1,363 @@
+name: CI queue watchdog
+
+# Makes a stranded CI job VISIBLE. Nothing else in this repo does.
+#
+# WHY THIS EXISTS, AND WHY IT IS NOT A JOB TIMEOUT. The obvious guard — a
+# job-level `timeout-minutes` — was proposed, MEASURED, and does not work: a
+# probe job requesting a label no runner has, with `timeout-minutes: 2`, sat
+# queued for 640 seconds without ever failing. `timeout-minutes` clocks a job's
+# EXECUTION, not the time it waits for a runner, so it is inert for exactly
+# this failure. Do not "simplify" this workflow away in favour of one.
+#
+# ⚠️ WHERE THIS RUNS IS HALF THE DESIGN. It runs on `ubuntu-latest`, NOT on the
+# self-hosted runners it watches. A monitor that runs on the thing it monitors
+# shares that thing's failure domain and goes quiet at precisely the moment it
+# is needed — the runners being stuck is the condition it exists to report.
+# Do not move this to `[self-hosted, digdir-rag]`.
+#
+# It FAILS rather than warns. A red scheduled workflow is emailed to the repo's
+# watchers; a green one that checked nothing is indistinguishable from a green
+# one that checked everything.
+#
+# THREE CHECKS, THREE DIFFERENT FAILURE MODES, and they are not
+# interchangeable:
+#   1. a run EXISTS but sits queued  -> runner-side. Our fleet can cause this.
+#   2. no run exists AT ALL          -> GitHub-side association, or a workflow
+#                                       that no longer triggers. Our fleet
+#                                       cannot cause it and cannot widen it.
+#   3. a run COMPLETED AND FAILED    -> on the DEFAULT branch, where nobody is
+#                                       waiting on the result.
+# Treating 1 and 2 as one thing is what put an earlier grace-period request on
+# the wrong instrument entirely.
+#
+# 1 and 2 watch SILENCE. 3 watches FAILURE, and the distinction is the reason
+# it was missing: a PR's red X gets seen because somebody is blocked on it,
+# while a post-merge run has no audience at all.
+#
+# BOTH ARMS OF BOTH CHECKS WERE EXERCISED BEFORE THIS LANDED. A guard nobody
+# has watched go red is not a guard — and one nobody has watched stay green
+# will be ignored within a week.
+#
+#   queued-too-long, with a permanently-queued job present:
+#     threshold 15 -> "queued runs examined: 2 / No run has been queued longer
+#                      than 15 minutes"                              -> SUCCESS
+#     threshold  0 -> named all three queued runs with wait times    -> FAILURE
+#
+#   no-run-at-all, against a real PR (#415) whose head genuinely had zero runs,
+#   with only the grace changed between the two runs:
+#     grace 0 -> "PR #415 head bdff35d3 has NO workflow run and has been
+#                 sitting 1 min", and correctly did NOT name #414, which had
+#                 a run                                              -> FAILURE
+#     grace 5 -> same PR, same zero-run state, inside the grace      -> SUCCESS
+#   The green arm is the one that matters here: it proves the grace actually
+#   suppresses the false alarm rather than merely existing.
+#
+#   default-branch-failure, with only the watched branch changed between runs:
+#     release-v0.1-details -> "newest completed push run ... 5c684c8d ->
+#                              failure", named "mark-green: failure" and the
+#                              stale-marker consequence            -> FAILURE
+#     test/green-target    -> "newest completed push run ... 83083317 ->
+#                              success"                            -> SUCCESS
+#   The red arm here was NOT synthetic: the default branch was genuinely red at
+#   the time, from the merge that added the check above it.
+
+on:
+  schedule:
+    # HOURLY, and deliberately not more often.
+    #
+    # COST NOTE, because this repo has contributed ZERO to the org's Actions
+    # spend and this lane is the first spend on it: ~24 runs/day billed at the
+    # 1-minute minimum is roughly 720 minutes/month. Half-hourly would be ~1,400
+    # (about $11/month) — trivial money, but the wrong shape for a repo whose
+    # bill has been zero, so hourly it is.
+    #
+    # The detection value is materially unchanged: hourly with a 15-minute
+    # threshold catches a stranded job within ~75 minutes rather than ~45. What
+    # this replaces is a job that currently sits undetected FOREVER, so half an
+    # hour of extra latency against infinity is not worth paying double for.
+    #
+    # 🔴 THIS SCHEDULE IS LOAD-BEARING FOR CORRECTNESS, NOT ONLY FOR COST.
+    # The no-run-at-all check below tolerates one known false positive (a
+    # force-push of an old commit onto an old PR) purely because an hourly tick
+    # almost never lands inside the ~15-second association window. Making this
+    # more frequent multiplies that exposure roughly in proportion — at
+    # every-minute it is ~60x. Read the "KNOWN FALSE POSITIVE" comment on the
+    # anchor logic before shortening this interval.
+    - cron: '7 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-queue-watchdog
+  cancel-in-progress: true
+
+jobs:
+  check-queue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # A run queued longer than this is treated as stranded. Normal pickup is
+      # seconds and a full CI job is ~4 minutes, so with two runners this needs
+      # several concurrent PRs to trip legitimately — and when it does, the
+      # message says which runs and how long, rather than crying wolf.
+      STRANDED_MINUTES: '15'
+    steps:
+      - name: Report queued runs older than the threshold
+        run: |
+          set -euo pipefail
+
+          # FAIL if the predicate cannot be evaluated. "Cannot check" is not
+          # "checked and fine" — a guard that exits 0 without evaluating itself
+          # is worse than no guard, because it retires the question.
+          if ! queued=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?status=queued&per_page=100" 2>/dev/null); then
+            echo "::error::Could not read workflow runs — the watchdog could not evaluate its predicate."
+            echo "::error::This is a FAILURE, not a pass. Fix the permission or disable this lane deliberately."
+            exit 1
+          fi
+
+          total=$(printf '%s' "$queued" | jq '.total_count')
+          now=$(date -u +%s)
+
+          # Print the denominator beside the verdict. "0 stranded" means
+          # something different when 0 runs were examined than when 12 were,
+          # and without this line the two are indistinguishable.
+          echo "queued runs examined: ${total}"
+
+          stranded=$(printf '%s' "$queued" | jq -r --argjson now "$now" --argjson lim "${STRANDED_MINUTES}" '
+            [ .workflow_runs[]
+              | { id, name, branch: .head_branch,
+                  waited: (($now - (.created_at | fromdateiso8601)) / 60 | floor) }
+              | select(.waited >= $lim) ]
+            | .[] | "  run \(.id) [\(.name)] on \(.branch) — queued \(.waited) min"
+          ')
+
+          if [ -n "$stranded" ]; then
+            echo "$stranded"
+            echo "::error::CI jobs have been queued longer than ${STRANDED_MINUTES} minutes."
+            echo "::error::Most likely a runner is in a reconnect window and will NOT pick these up on its own."
+            echo "::error::A runner settings page reading 'online' does not rule this out — it read online throughout the incident this lane exists for."
+            echo "::error::Remedy, in order: re-dispatch the run; then 'ssh kamal-1 docker restart digdir-rag-1'; then revert ci.yml to 'runs-on: ubuntu-latest'."
+            echo "::error::Full runbook: infra/ci-runner/README.md, section 'If CI stops'."
+            exit 1
+          fi
+
+          echo "No run has been queued longer than ${STRANDED_MINUTES} minutes."
+
+      - name: Open PRs whose head has no run AT ALL
+        # `if: always()` so a failure in the queue check above cannot mask this
+        # one. They are separate assertions about separate failure modes and
+        # both should always be evaluated.
+        if: always()
+        env:
+          # THE GRACE PERIOD, and the number is measured rather than picked.
+          #
+          # There is a window between a PR head existing and its workflow run
+          # being associated, and sampling inside it reports "no run" for
+          # something perfectly healthy. Measured on this repo:
+          #   head commit -> run object exists : 3-12s  (n=12 PRs)
+          #   run created -> job started       : 2s at p50 AND p90, max 3s (n=20)
+          #   total head -> running            : ~15s worst observed
+          # Five minutes is roughly 20x the worst case.
+          #
+          # ⚠️ LIMIT, deliberately visible: n=16, all sampled in one afternoon
+          # with both runners mostly idle. Do NOT read 15 seconds as a
+          # guarantee under load.
+          #
+          # It does not need to scale with our fleet, and this is the reason:
+          # the "no run at all" state is GitHub-side ASSOCIATION, which runner
+          # pressure cannot widen. A busy fleet produces a QUEUED run — a
+          # different state, owned by the check above. Two failure modes, two
+          # places, two guards.
+          GRACE_MINUTES: '5'
+        run: |
+          set -uo pipefail
+
+          if ! prs=$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&per_page=100" 2>/dev/null); then
+            echo "::error::Could not list open pull requests — this check could not be evaluated."
+            echo "::error::That is a FAILURE, not a pass."
+            exit 1
+          fi
+
+          # Denominator beside the verdict, same as the queue check: "none
+          # missing" out of 0 PRs is not the same statement as out of 12.
+          echo "open PRs examined: $(printf '%s' "$prs" | jq 'length')"
+
+          now=$(date -u +%s)
+          bad=0
+
+          while IFS=$'\t' read -r num sha created; do
+            [ -z "${num:-}" ] && continue
+
+            runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${sha}" --jq '.total_count' 2>/dev/null || echo ERR)
+            if [ "$runs" = "ERR" ]; then
+              echo "::error::Could not read runs for PR #${num} — not evaluated, which is a failure rather than a pass."
+              bad=1
+              continue
+            fi
+            [ "$runs" != "0" ] && continue
+
+            # Age from the LATER of the head commit and the PR opening. A PR
+            # raised from a long-lived branch has an old head commit but was
+            # only just opened, and flagging it instantly would be the same
+            # false positive this grace exists to remove.
+            #
+            # ⚠️ KNOWN FALSE POSITIVE, ACCEPTED ON ARITHMETIC — AND ITS SAFETY
+            # DEPENDS ON THE CRON ABOVE. Force-push an OLD commit onto an OLD
+            # PR and the association window starts NOW (a run appears in
+            # seconds), but both anchors are already old, so the grace is spent
+            # and this fires before association. It is a genuine false
+            # positive, not "a stale head worth flagging" — do not talk
+            # yourself into the latter, which is the mistake this comment
+            # exists to correct.
+            #
+            # It is tolerable ONLY because of the arithmetic: the check runs
+            # HOURLY and the association window is ~15 seconds, so it misfires
+            # only if a tick lands inside that window — on the order of one
+            # hour in 240. Negligible, and not worth the machinery of tracking
+            # push time (which the REST API does not directly give us anyway).
+            #
+            # 🔴 IF YOU CHANGE THE SCHEDULE, RE-READ THIS. At every-minute the
+            # exposure grows ~60x and this becomes a recurring false alarm with
+            # no visible cause. The cron is load-bearing for correctness here,
+            # not just for cost.
+            cdate=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}" --jq '.commit.committer.date' 2>/dev/null || echo "")
+            [ -z "$cdate" ] && cdate="$created"
+            c=$(date -u -d "$cdate" +%s)
+            p=$(date -u -d "$created" +%s)
+            anchor=$(( c > p ? c : p ))
+            age=$(( (now - anchor) / 60 ))
+
+            if [ "$age" -ge "${GRACE_MINUTES}" ]; then
+              echo "  PR #${num} head ${sha:0:8} has NO workflow run and has been sitting ${age} min"
+              bad=1
+            fi
+          done < <(printf '%s' "$prs" | jq -r '.[] | [(.number|tostring), .head.sha, .created_at] | @tsv')
+
+          if [ "$bad" -ne 0 ]; then
+            echo "::error::Open PRs have no workflow run at all, past the ${GRACE_MINUTES}-minute grace."
+            echo "::error::This is NOT the queued-too-long case above — no run was ever created."
+            echo "::error::Likely causes: an invalid workflow file on that branch, a workflow that no longer matches its trigger, or Actions being disabled."
+            echo "::error::Check the PR's Checks tab and the workflow file's 'on:' block before touching the runners."
+            exit 1
+          fi
+
+          echo "Every open PR has a run, or is inside the ${GRACE_MINUTES}-minute grace."
+
+      - name: Default-branch post-merge CI must be green
+        # WHY THIS EXISTS. Everything else in this workflow watches SILENCE — a
+        # job that never ran, a PR with no run. Nothing watched FAILURE on the
+        # default branch, and the difference matters: a PR's red X is seen
+        # because somebody is waiting on it, but a POST-MERGE run has no
+        # audience. It goes red and the tab is already closed.
+        #
+        # This was not hypothetical. It was written down as a gap and found to
+        # be live within minutes: the merge of #417 left `mark-green` FAILING
+        # while `lint-and-test` passed, so the run was red, the deploy marker
+        # ref (refs/heads/deploy/test-green) stayed pinned at an older commit,
+        # and nobody noticed — including the person who had just described the
+        # failure mode. "Merged and green" was true of a different workflow on
+        # the same commit.
+        #
+        # ⚠️ ORDER OF CONSTRUCTION, deliberate: this watches the PRODUCER of the
+        # deploy marker. Any future check that asserts "deployed == marker"
+        # TRUSTS that marker, and a marker produced by an unwatched job is not
+        # trustworthy. Watch the producer before relying on the product.
+        if: always()
+        env:
+          # Not hardcoded: read from the repo so a default-branch rename cannot
+          # silently turn this into a check of a branch that no longer exists.
+          WATCH_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -uo pipefail
+
+          if ! runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${WATCH_BRANCH}&event=push&per_page=30" 2>/dev/null); then
+            echo "::error::Could not read push runs for ${WATCH_BRANCH} — this check was NOT evaluated."
+            echo "::error::That is a FAILURE, not a pass."
+            exit 1
+          fi
+
+          # ⚠️ ONLY RUNS THAT REACHED A VERDICT. `ci.yml` sets
+          # `cancel-in-progress: true`, so two merges in quick succession
+          # CANCEL the earlier run. A cancelled run means SUPERSEDED, not
+          # broken — and between the cancellation and the newer run finishing,
+          # a naive "newest completed, conclusion != success" would report the
+          # default branch as red purely because someone merged twice. That is
+          # the same shape as the false alarm that started this whole thread:
+          # sampling a transient state and reporting it as a property.
+          # `skipped` and `neutral` are excluded for the same reason.
+          # `startup_failure` IS included — an unparseable workflow is a real
+          # failure, and one this repo has actually produced.
+          newest=$(printf '%s' "$runs" | jq -r '
+            [ .workflow_runs[]
+              | select(.status == "completed")
+              # NOT `[...] | index(.conclusion)` — inside that pipe `.` is the
+              # ARRAY, not the run, so `.conclusion` indexes an array with a
+              # string and jq aborts. That shipped and turned this check RED.
+              | select(.conclusion == "success" or .conclusion == "failure"
+                       or .conclusion == "timed_out" or .conclusion == "startup_failure") ]
+            | sort_by(.created_at) | last
+            | if . == null then "NONE" else "\(.id)\t\(.conclusion)\t\(.head_sha)\t\(.name)" end')
+
+          if [ "$newest" = "NONE" ] || [ -z "$newest" ]; then
+            # A real state, not an error: a brand-new or quiet branch. Say so
+            # explicitly rather than passing silently, so "green" is never
+            # mistaken for "checked and healthy".
+            echo "::notice::No completed push runs on ${WATCH_BRANCH} — there was nothing to assert."
+            exit 0
+          fi
+
+          id=$(printf '%s' "$newest" | cut -f1)
+          concl=$(printf '%s' "$newest" | cut -f2)
+          sha=$(printf '%s' "$newest" | cut -f3)
+          wf=$(printf '%s' "$newest" | cut -f4)
+
+          # The known answer beside the verdict: which run was actually examined.
+          echo "newest completed push run on ${WATCH_BRANCH}: ${id} [${wf}] ${sha:0:8} -> ${concl}"
+
+          # A newer run still in flight may already be fixing this. Report the
+          # completed state anyway — the branch IS red until something proves
+          # otherwise — but say so, so nobody re-investigates a known fix.
+          inflight=$(printf '%s' "$runs" | jq -r '[.workflow_runs[] | select(.status != "completed")] | length')
+          [ "$inflight" != "0" ] && echo "note: ${inflight} newer push run(s) still in flight."
+
+          if [ "$concl" != "success" ]; then
+            echo "failed jobs:"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/jobs" \
+              --jq '.jobs[] | select(.conclusion != "success") | "  \(.name): \(.conclusion)"' 2>/dev/null \
+              || echo "  (job detail unavailable)"
+
+            echo "::error::Post-merge CI on ${WATCH_BRANCH} is RED at ${sha:0:8} (run ${id})."
+            echo "::error::Nobody is waiting on a post-merge run, so this does not surface on its own."
+            echo "::error::If mark-green is among the failed jobs, the deploy marker ref refs/heads/deploy/test-green is STALE — anything comparing 'deployed' against it is comparing against an old commit and will look healthy while nothing deploys."
+            exit 1
+          fi
+
+          echo "Post-merge CI on ${WATCH_BRANCH} is green at ${sha:0:8}."
+
+      - name: Runner fleet size (best effort, never silently green)
+        # `if: always()` like the checks above, and for a reason found the hard
+        # way: without it this step is SKIPPED whenever an earlier step fails —
+        # so the one piece of runner context a reader wants during a red run is
+        # exactly what disappears from it. Observed: skipped in run 33413859097
+        # (red), success in 33414608272 (green).
+        if: always()
+        # Secondary and explicitly bounded: reading runners needs
+        # `administration:read`, which this repo's default GITHUB_TOKEN does
+        # NOT carry (confirmed on the probe run — it took this branch). When
+        # unavailable it SAYS the check did not happen rather than printing a
+        # reassuring nothing. It does not fail the job; the queue check above
+        # is load-bearing and stands alone.
+        run: |
+          set -uo pipefail
+          if online=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runners" --jq '[.runners[] | select(.status=="online")] | length' 2>/dev/null); then
+            echo "runners online: ${online}"
+            [ "${online}" -eq 0 ] && echo "::warning::Zero runners are online — every job in this repo will queue indefinitely."
+          else
+            echo "::notice::Runner list not readable with the default token (needs administration:read)."
+            echo "::notice::This check was NOT performed. It is not evidence that the fleet is healthy."
+          fi

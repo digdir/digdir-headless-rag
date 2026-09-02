@@ -1,22 +1,40 @@
 # Pipeline Quick Start Guide
 
+Pipelines are the ingestion units that produce datasets. Agents and query APIs read the resulting datasets, not pipelines directly.
+
 ## 5-Minute Setup
 
-### 1. Create a Pipeline
+### 1. Create a Dataset, Then a Pipeline
 
-Navigate to `/config/pipelines` in the admin UI, or use the API:
+Navigate to the Pipelines section of the Operator Console, or use the Operator Console APIs:
 
 ```bash
-curl -X POST https://your-domain/api/pipelines \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+curl -X POST https://your-domain/console-api/datasets \
   -H "Content-Type: application/json" \
+  -H "X-User-Email: user@example.com" \
+  --cookie "auth-token=YOUR_JWT_TOKEN" \
   -d '{
-    "tenant": "your-tenant",
-    "environment": "prod",
-    "pipelineName": "my-first-pipeline",
+    "name": "My First Dataset",
+    "description": "Primary query target"
+  }'
+```
+
+Then create the first child pipeline under that dataset:
+
+```bash
+curl -X POST https://your-domain/console-api/datasets/ds_123/pipelines \
+  -H "Content-Type: application/json" \
+  -H "X-User-Email: user@example.com" \
+  --cookie "auth-token=YOUR_JWT_TOKEN" \
+  -d '{
+    "tenant": "digdir",
+    "dataset-config-key": "public-docs",
+    "pipeline-name": "my-first-pipeline",
     "properties": {
       "name": "My First Pipeline",
       "sourceType": "kudos",
+      "kudosUsePreprod": true,
+      "kudosDocumentTypes": ["Årsrapport", "Statusrapport"],
       "chunkStrategy": "semantic",
       "searchPhrasesModel": "gpt-4o",
       "rerankEnabled": true,
@@ -28,44 +46,64 @@ curl -X POST https://your-domain/api/pipelines \
 ### 2. Execute the Pipeline
 
 ```bash
-curl -X POST https://your-domain/api/pipelines/your-tenant:prod:my-first-pipeline/execute \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+curl -X POST "https://your-domain/console-api/datasets/ds_123/pipelines/my-first-pipeline/execute?tenant=digdir&dataset-config-key=public-docs" \
+  -H "X-User-Email: user@example.com" \
+  --cookie "auth-token=YOUR_JWT_TOKEN"
 
-# Returns: { "executionId": "exec-abc123" }
+# Returns: { "execution-id": "exec-abc123" }
 ```
 
 ### 3. Monitor Execution
 
-Check status via UI at `/config/pipelines` or via API:
+Check status via the Operator Console or via API:
 
 ```bash
-curl https://your-domain/api/pipelines/your-tenant:prod:my-first-pipeline/executions \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+curl "https://your-domain/console-api/datasets/ds_123/pipelines/my-first-pipeline/executions?tenant=digdir&dataset-config-key=public-docs" \
+  --cookie "auth-token=YOUR_JWT_TOKEN"
 ```
 
 ### 4. Create API Key
 
 ```bash
-curl -X POST https://your-domain/config/api-keys \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+curl -X POST https://your-domain/console-api/api-keys \
   -H "Content-Type: application/json" \
+  --cookie "auth-token=YOUR_JWT_TOKEN" \
   -d '{
     "name": "My API Key",
-    "pipelines": ["your-tenant:prod:my-first-pipeline"],
-    "scopes": ["query"]
+    "dataset-scopes": [
+      {
+        "tenant": "digdir",
+        "dataset-config-key": "public-docs"
+      }
+    ]
   }'
+# NOTE: do not send "scopes" — the endpoint refuses it with
+# `scopes` is not settable on this endpoint; a new key gets the default `query` scope
 
-# Returns: { "apiKey": "rag_abc123..." }
+# Returns: { "api-key-id": "key_abc123", "api-key": "rag_abc123...", ... }
 ```
 
-### 5. Query via RAG API
+### 5. Query via MCP
+
+Retrieval and generation moved to the MCP server (`POST /api/mcp`, MCP JSON-RPC). See
+[endpoints/mcp.md](api/endpoints/mcp.md) for the full contract.
 
 ```bash
-curl -X POST https://your-domain/api/rag \
+curl -X POST https://your-domain/api/mcp \
   -H "X-API-Key: rag_abc123..." \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "What is the budget for 2024?"
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "builtin.agent-rag-agent__agent-rag-graph-bundled",
+      "arguments": {
+        "user-query": "What is the budget for 2024?",
+        "tenant": "digdir",
+        "dataset_config_key": "public-docs"
+      }
+    }
   }'
 ```
 
@@ -77,8 +115,8 @@ curl -X POST https://your-domain/api/rag \
 {
   "name": "Website Documentation",
   "sourceType": "website",
-  "sitemapUrl": "/sitemap.xml",
-  "baseUrl": "https://your-site.com",
+  "websiteSitemapUrl": "/sitemap.xml",
+  "websiteBaseUrl": "https://your-site.com",
   "chunkStrategy": "header-based",
   "chunkMinimumLength": 333,
   "collectionPrefix": "docs_"
@@ -103,8 +141,9 @@ curl -X POST https://your-domain/api/rag \
 {
   "name": "CMS Content",
   "sourceType": "episerver",
-  "apiEndpoint": "https://cms-api.example.com",
-  "usePreprod": false,
+  "episerverXmlPath": "/path/to/export.xml",
+  "episerverLanguage": "no",
+  "episerverIncludePageTypes": ["ArticlePage", "StandardPage"],
   "chunkStrategy": "semantic"
 }
 ```
@@ -114,7 +153,7 @@ curl -X POST https://your-domain/api/rag \
 ✅ **DO:**
 - Use descriptive pipeline names
 - Set `collectionPrefix` to organize collections
-- Test in dev/test environment first
+- Test in a non-production tenant/dataset before rollout
 - Monitor execution logs for errors
 - Use inheritance for common settings
 
@@ -136,7 +175,7 @@ curl -X POST https://your-domain/api/rag \
 ### No Results from Query
 
 1. Verify execution completed successfully
-2. Check API key has pipeline access
+2. Check API key has dataset access
 3. Verify collection names match
 4. Check TypeSense contains documents
 
@@ -150,4 +189,4 @@ curl -X POST https://your-domain/api/rag \
 
 - Read [PIPELINES.md](PIPELINES.md) for complete documentation
 - See [pipeline-architecture.md](pipeline-architecture.md) for technical details
-- Review [CLAUDE.md](CLAUDE.md) for development patterns
+- Review [CLAUDE.md](../../CLAUDE.md) for development patterns

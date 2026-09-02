@@ -1,0 +1,79 @@
+;; Pattern B: Doubled search — 2 search rounds, insufficient-context retry, eventual success
+;; Derived from: agent-trace-2026-02-10T13-35-08-402281Z.txt (2 searches, 61 chunks)
+{:description "Pattern B: Two search rounds with insufficient-context retry"
+ :query "Hvor mange årsverk hadde Digdir i 2022?"
+ :max-iterations 10
+
+ :llm-responses
+ [;; Iteration 0: two parallel searches
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "I will search with multiple query variations to find annual FTE numbers."
+                        :tool_calls [{:id "call_s1"
+                                      :type "function"
+                                      :function {:name "search_documents"
+                                                 :arguments "{\"queries\":[\"årsverk Digdir 2022\",\"bemanning Digdir 2022\",\"antall ansatte Digitaliseringsdirektoratet 2022\"]}"}}
+                                     {:id "call_s2"
+                                      :type "function"
+                                      :function {:name "search_documents"
+                                                 :arguments "{\"queries\":[\"årsverk Digitaliseringsdirektoratet\",\"ansatte Digdir 2022\",\"organisasjonsstruktur Digdir 2022\"]}"}}]}}]}
+  ;; Iteration 1: rerank
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "I have 61 chunks. Let me rerank to find the most relevant ones."
+                        :tool_calls [{:id "call_r1"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 2: first generate — returns insufficient context
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Let me attempt to generate a response from the current context."
+                        :tool_calls [{:id "call_g1"
+                                      :type "function"
+                                      :function {:name "generate_response"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 3: retry search with different terms
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "The first attempt could not find the specific number. Let me search with different terms focusing on HR and annual reports."
+                        :tool_calls [{:id "call_s3"
+                                      :type "function"
+                                      :function {:name "search_documents"
+                                                 :arguments "{\"queries\":[\"HR Digdir årsrapport 2022\",\"utførte årsverk Digitaliseringsdirektoratet\",\"personalstatistikk Digdir 2022\"]}"}}]}}]}
+  ;; Iteration 4: rerank again
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "New results added. Let me rerank the full workspace."
+                        :tool_calls [{:id "call_r2"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Iteration 5: second generate — succeeds
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Let me generate a response with the expanded context."
+                        :tool_calls [{:id "call_g2"
+                                      :type "function"
+                                      :function {:name "generate_response"
+                                                 :arguments "{\"query\":\"Hvor mange årsverk hadde Digdir i 2022?\"}"}}]}}]}
+  ;; Final: text response
+  {:choices [{:finish_reason "stop"
+              :message {:content "Digdir hadde 330 utførte årsverk i 2022 [7]."}}]}]
+
+ :tool-results
+ [;; call_s1: first search
+  "Retrieved 40 chunks (40 new unique). Workspace now has 40 total chunks. [0 phrase, 82 metadata, 42 content] Auto-filtered by orgs_long: Digitaliseringsdirektoratet."
+  ;; call_s2: second search
+  "Retrieved 40 chunks (21 new unique). Workspace now has 61 total chunks. [0 phrase, 100 metadata, 49 content] Auto-filtered by orgs_long: Digitaliseringsdirektoratet."
+  ;; call_r1: first rerank
+  "Reranked to top 10 chunks. Top results: 1. Digdir hadde pr 31.12.2022 seks lærlinger."
+  ;; call_g1: first generate — insufficient context
+  "Informasjonen om antall årsverk i Digdir i 2022 er ikke spesifikt oppgitt i de tilgjengelige kildene.\n\n[SYSTEM: The generated response indicates the answer was NOT found in the current context. Do NOT return this as your final answer. Instead, try searching with different terms — use synonyms, rephrase the question, try broader or more specific queries.]"
+  ;; call_s3: retry search
+  "Retrieved 40 chunks (15 new unique). Workspace now has 76 total chunks."
+  ;; call_r2: second rerank
+  "Reranked to top 10 chunks. Top results: 1. Digdir er en kompetansebedrift med 330 utførte årsverk."
+  ;; call_g2: second generate — success
+  "Digdir hadde 330 utførte årsverk i 2022 [7]."]
+
+ :expected {:iterations 6
+            :tool-sequence ["search_documents" "search_documents" "rerank_results"
+                            "generate_response" "search_documents" "rerank_results"
+                            "generate_response"]
+            :response-pattern "330"
+            :exhausted false}}

@@ -1,0 +1,90 @@
+;; Pattern D: exact Altinn 3 launch-date replay — generate_response is insufficient,
+;; the iteration-limit fallback LLM call fails with 400, and the loop must preserve
+;; the last generated answer instead of surfacing an error.
+;; Source: agent-trace-2026-03-30T19-48-18-188404Z.txt
+{:description "March 30 Altinn 3 replay: preserve last generated answer when fallback LLM call fails"
+ :query "Når ble Altinn 3 lansert?"
+ :max-iterations 10
+
+ :llm-responses
+ [;; Iteration 0
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg starter med et bredt søk etter lanseringsinformasjon for Altinn 3."
+                        :tool_calls [{:id "call_s1"
+                                      :type "function"
+                                      :function {:name "search"
+                                                 :arguments "{\"queries\":[\"Altinn 3 lansering\",\"Når ble Altinn 3 lansert\",\"historie om Altinn 3\",\"utgivelsesdato for Altinn 3\",\"Altinn 3 utvikling og lansering\"]}"}}]}}]}
+  ;; Iteration 1
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg leser de mest lovende treffene først."
+                        :tool_calls [{:id "call_r1"
+                                      :type "function"
+                                      :function {:name "read_chunks"
+                                                 :arguments "{\"chunk_ids\":[\"d81ff032aa35\",\"a1a45b9d7585\",\"05e9fe2c2c5b\"]}"}}]}}]}
+  ;; Iteration 2
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg reranker evidensen jeg har lest."
+                        :tool_calls [{:id "call_rr1"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Når ble Altinn 3 lansert?\"}"}}]}}]}
+  ;; Iteration 3
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg prøver et nytt søk med flere varianter rundt oppstart og lansering."
+                        :tool_calls [{:id "call_s2"
+                                      :type "function"
+                                      :function {:name "search"
+                                                 :arguments "{\"queries\":[\"lansering av Altinn 3\",\"historie om Altinn 3 utvikling\",\"Altinn 3 startdato\",\"Altinn Studio lansering\",\"Altinn 3 prosjektstart\"]}"}}]}}]}
+  ;; Iteration 4
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg leser nye treff fra den siste søkerunden."
+                        :tool_calls [{:id "call_r2"
+                                      :type "function"
+                                      :function {:name "read_chunks"
+                                                 :arguments "{\"chunk_ids\":[\"64cc1aee310d\",\"2f6cee8d5f5e\",\"f2c87d24c5be\"]}"}}]}}]}
+  ;; Iteration 5
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg reranker på nytt etter flere lesinger."
+                        :tool_calls [{:id "call_rr2"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Når ble Altinn 3 lansert?\"}"}}]}}]}
+  ;; Iteration 6
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg gjør et siste søk etter årstall eller oppstartsdato."
+                        :tool_calls [{:id "call_s3"
+                                      :type "function"
+                                      :function {:name "search"
+                                                 :arguments "{\"queries\":[\"Altinn 3 lanseringsår\",\"Altinn Studio lanseringsdato\",\"historie om Altinn 3\",\"utvikling av Altinn 3\",\"Altinn 3 prosjektstart\"]}"}}]}}]}
+  ;; Iteration 7
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg leser de beste treffene én gang til før jeg svarer."
+                        :tool_calls [{:id "call_r3"
+                                      :type "function"
+                                      :function {:name "read_chunks"
+                                                 :arguments "{\"chunk_ids\":[\"d81ff032aa35\",\"a1a45b9d7585\",\"05e9fe2c2c5b\"]}"}}]}}]}
+  ;; Iteration 8
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg reranker alt samlet før svargenerering."
+                        :tool_calls [{:id "call_rr3"
+                                      :type "function"
+                                      :function {:name "rerank_results"
+                                                 :arguments "{\"query\":\"Når ble Altinn 3 lansert?\"}"}}]}}]}
+  ;; Iteration 9
+  {:choices [{:finish_reason "tool_calls"
+              :message {:content "Jeg forsøker nå å generere et svar basert på evidensen."
+                        :tool_calls [{:id "call_g1"
+                                      :type "function"
+                                      :function {:name "generate_response"
+                                                 :arguments "{\"query\":\"Når ble Altinn 3 lansert?\"}"}}]}}]}
+  ;; Exhaustion fallback at iteration 10
+  {:throw {:message "Interceptor Exception: status: 400"
+           :data {:status 400}}}]
+
+ :expected {:iterations 10
+            :tool-sequence ["search" "read_chunks" "rerank_results"
+                            "search" "read_chunks" "rerank_results"
+                            "search" "read_chunks" "rerank_results"
+                            "generate_response"]
+            :response-pattern "ikke eksplisitt dato|ikke oppgitt|lansert"
+            :exhausted true}}

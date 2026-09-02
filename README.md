@@ -3,21 +3,77 @@
 
 This repository is a prototype to explore the possibilities for rapid experimentation and development of Retrieval-Augmented Generation (RAG) applications.
 
+> ### This stack is not the productization target
+>
+> Digdir plans to **migrate to a different tech stack** for productization, so
+> this repository is expected to stay prototype-grade for the foreseeable
+> future (PI, 2026-08-21). That is a stronger statement than "expect rough
+> edges", and it changes the answer to ordinary engineering questions:
+>
+> - **Deep refactors and legacy retirement have low return.** Code that will be
+>   superseded does not repay being made beautiful.
+> - **What survives a stack migration is knowledge, not implementation** — the
+>   eval methodology, the golden question sets, the corpus findings, the
+>   negative results. Those deserve investment the Clojure does not, and they
+>   belong in `docs/`, where a migration can carry them, rather than only in
+>   code or a branch.
+> - **Tests are worth writing where they protect a property that will be
+>   carried forward**, and less so where they pin an implementation detail that
+>   will not. A test of *what the system must be true of* migrates; a test of
+>   *how this namespace happens to do it* does not.
+>
+> None of this licenses carelessness in what ships: the release path, the auth
+> surface and the public API contract are used by real callers now, and a
+> prototype that silently returns wrong answers is worse than no prototype.
+> It licenses **choosing where the effort goes**.
+
 It provides:
 
-- **A headless HTTP API** for RAG and retrieval (`/api/rag`, `/api/retrieve`, conversations, etc.)
+- **A headless HTTP API** for agentic RAG (`/api/mcp`, an MCP server), plus datasets, conversations, and API-key management
 - **An admin web UI** for configuration, access control, and document ingestion
 - **Document ingestion pipelines** that turn source content into Typesense collections usable by the RAG system
 
+> For an end-to-end explanation of how the system is structured — modules, data flow, and design choices as implemented — see **[`docs/system-overview.md`](docs/system-overview.md)**.
+
+## Documentation map
+
+| Doc | Use it for |
+| --- | --- |
+| [`docs/system-overview.md`](docs/system-overview.md) | How the system works — modules, data flow, design choices (the spine; everything else links into it) |
+| [`docs/onboarding.md`](docs/onboarding.md) | Getting started as a new contributor |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Branch/commit conventions, running checks, PR expectations |
+| [`decisions/`](decisions/) | Architecture Decision Records |
+| [`docs/runbooks/`](docs/runbooks/) | Operating procedures (config export/import, cutover, etc.) |
+| [`server/docs/api/README.md`](server/docs/api/README.md) | API reference (`/api/mcp` and the console API) |
 
 ## Repository layout
 
 - **`server/`**: Clojure/Electric application (admin UI + headless API)
 - **`server/docs/`**: Documentation (API docs, pipeline architecture)
-- **`config/`**: Hierarchical configuration system
-- **`docs/`**: Design/engineering docs (e.g. configuration resolution model)
+- **`config/`**: Point-in-time config export/import snapshots (live config is DB-backed, see [Configuration](#configuration))
+- **`docs/`**: Design/engineering docs (system overview, onboarding, runbooks)
 - **`bb.edn`**: Babashka task runner for common workflows (dev, test, setup, deploy helpers)
 - **`mise.toml`**: Toolchain versions + convenience tasks/env
+
+
+## Just want to run it? Docker is the only prerequisite
+
+```sh
+cp .env.example .env
+docker compose -f docker-compose.newcomer.yml up --build
+```
+
+Brings up the server **and** its Typesense search backend. The admin UI is then
+on <http://localhost:8080>. Nothing below this section is needed — no Mise, no
+JVM, no Clojure.
+
+**It starts with an empty corpus.** Retrieval finds nothing until a dataset is
+materialised, and a query returns `Dataset ref does not resolve to a canonical
+dataset runtime node` until then (#434 tracks that error being reported as an
+internal error rather than as a missing prerequisite). What a newcomer's starting
+corpus should be is an open question — see #328.
+
+The sections below are for **working on** the backend, which needs the toolchain.
 
 
 ## Prerequisites
@@ -50,59 +106,73 @@ If you don't use Mise, you'll need:
 ### 1) Configure environment variables
 
 The repo uses environment variables for secrets and for selecting config mode.
-A good place to set these for development is `mise.toml` (`[env]` section), your shell profile, or a local `.env` (don’t commit secrets).
+Set these for development in `mise.local.toml` (gitignored) or your shell profile — never in tracked files. **A `.env` file is not read by anything in this repo** (`mise.toml` has no `_.file` directive and no other loader picks one up), so values placed there are silently ignored (#302); `.env.example` is a reference catalog of the variables, not a file to copy into place.
 
-**Config mode selection**
+**Config mode**
 
-- **DB-backed config mode**: set `CONFIG_MASTER_KEY` (and typically `TENANT` + `ENV`).
-- **Legacy/EDN config mode**: set `ENTITY_CONFIG_FILE` to a file in `config/`.
+All runtime configuration is DB-backed (Datahike) — set `CONFIG_MASTER_KEY` to enable it.
+Tenant and environment are supplied per request by API clients, not read from env. Two
+Datahike backends are supported for the bootstrap connection:
 
-**Common env vars** (see `mise.toml` and `config/README.md`):
+- **Local file** (`DATAHIKE_FILE_PATH`) — no external DB to run; the easiest way to get a
+  working dev instance (e.g. `DATAHIKE_FILE_PATH=./local-db/dh_dev_v1`).
+- **Remote Postgres** (`ADH_POSTGRES_URL` + `ADH_POSTGRES_USER` + `ADH_POSTGRES_PWD`) — for
+  connecting to a shared database.
+
+**Common env vars** (see `mise.toml`; details in [`docs/system-overview.md`](docs/system-overview.md#41-configuration-system)):
 
 - **Required for most real runs**
-  - `ADH_POSTGRES_URL`
-  - `ADH_POSTGRES_USER`
-  - `ADH_POSTGRES_PWD`
+  - `DATAHIKE_FILE_PATH` (local file backend) — or `ADH_POSTGRES_URL` / `ADH_POSTGRES_USER` / `ADH_POSTGRES_PWD` (Postgres backend)
   - `JWT_SECRET`
-  - `CONFIG_MASTER_KEY` (required for DB-backed config mode)
-- **Other configuration settings required**
-  - `TYPESENSE_API_KEY`
-  - `TYPESENSE_API_KEY_ADMIN`
-  - One of:
-    - `AZURE_OPENAI_API_KEY`
-    - `OPENAI_API_KEY`
-    - `ANTHROPIC_API_KEY`
+  - `CONFIG_MASTER_KEY` (enables DB-backed config)
+- **Other configuration settings required** — an LLM provider. Which one runs is
+  decided in the config DB by `services.azure-openai.use-azure-openai-api`, and
+  **both paths read that same `services.azure-openai.*` family** — the name is
+  historical, not a scope:
+  - **Azure OpenAI** (`use-azure-openai-api true`, the shipped default) —
+    `AZURE_OPENAI_API_KEY`
+  - **Any OpenAI-compatible server, including a local one** (`false`) —
+    `OPENAI_API_ENDPOINT` *and* `OPENAI_API_KEY`, both read from the
+    environment. This is the **no-cloud-credentials path**: a local server on
+    your own machine runs the whole path — retrieval, the tool-calling agent
+    loop, streaming, synthesis. Verified end to end against **LM Studio**;
+    Ollama, vLLM and llama.cpp reach the same client code but were not run.
+    See [`docs/onboarding.md` §4a](docs/onboarding.md#4a-run-with-a-local-model--no-cloud-credentials-at-all).
+  - `ANTHROPIC_API_KEY` is read only by `digdir.llm.anthropic`, which no other
+    namespace currently requires. Neither path above needs it.
 
-The app also supports defaults for the “agent graph” LLM configuration:
-
-- `AGENT_GRAPH_DEFAULT_LLM_CONFIG` (EDN string)
+The running server reads Typesense connection details (host, TLS, admin key) from
+DB-backed config (`server/src/digdir/rag/typesense.clj`), never from the environment
+directly. `TYPESENSE_API_KEY_ADMIN` still gets you there: `bb migration-import` writes it
+into each imported tenant's config, so setting it before the import is enough
+(`server/src/digdir/config/env_bridge.clj`). `TYPESENSE_API_KEY` is read by nothing.
 
 ### 2) Run the server (dev)
 
-The dev entrypoint starts:
-
-- Shadow-CLJS compiler in watch mode
-- Jetty web server
-
-Using **Mise**:
+`bb dev` starts the **backend only** — Jetty plus a REPL, and no Electric
+client build (#330):
 
 ```sh
-mise run dev
+bb dev
 ```
 
-Or via **Babashka**:
+Dev server default is **http://localhost:8081**. It needs no Hyperfiddle
+activation token, so it works on a fresh clone.
 
-```sh
-bb admin-dev
-```
-
-Dev server default is **http://localhost:8081**.
+For UI work with hot reload, run `bb dev-fullstack` instead: that is the
+server *plus* the Shadow-CLJS watch build, and it does need the token.
 
 ### 3) Open the admin UI
 
 Once running, open:
 
 - `http://localhost:8081`
+
+**The UI needs a client build; `bb dev` does not make one.** Run
+`bb build-client` once (~100 s, no activation token) and reload — `bb dev`
+picks it up without a restart — or run `bb dev-fullstack`. Until then the UI
+answers `:digdir.api.http/missing-shadow-build-manifest` and names the command
+to run. The login form itself is server-rendered and works either way.
 
 The Electric UI root is `server/src/digdir/ui/main.cljc`.
 
@@ -116,54 +186,69 @@ bb setup
 
 This wizard:
 
-- Checks required env vars
+- Detects which Datahike backend your environment selects (`DATAHIKE_FILE_PATH`
+  takes precedence over `ADH_POSTGRES_URL`, same as the boot path) and prints it
+- Checks the env vars that backend actually needs — the Postgres variables are
+  not required when you are on the local file backend
 - Checks DB connectivity
 - Helps bootstrap the first admin user and permissions
+- Picks the LLM provider, including a local OpenAI-compatible server — it probes
+  the endpoint, lists the models the server reports, and writes the choice per
+  tenant (see [`docs/onboarding.md` §4a](docs/onboarding.md#4a-run-with-a-local-model--no-cloud-credentials-at-all))
 
 Authorization is **permissions-based** (users must exist in the DB and have at least one permission).
-See `config/README.md` for details and the user management endpoint overview.
+
+### First login to the admin UI (dev)
+
+Login sends a 6-digit confirmation code by email (Scaleway TEM). In dev you do
+not need those credentials: `bb dev` arms a fallback that writes the code to the
+server log and prefills the confirm-email form when no email service is
+configured. The page labels this clearly as **Local development mode** and
+explains that production sends codes by email. Click **Log in** and you're in;
+grep the `bb dev` output for `dev-login` when diagnosing the flow. See
+[`docs/onboarding.md`](docs/onboarding.md) ("Logging into the admin UI") for the
+full flow.
+
+The fallback is armed only from `server/src-dev/dev.cljc`, which is on the
+`:dev`/`:test` classpath and not in a production build — there is no way to turn
+it on in prod. With a configured email service the code is mailed as normal.
+See [`docs/system-overview.md`](docs/system-overview.md#41-configuration-system) for how config and permissions resolve, and `server/docs/api/endpoints/api-keys.md` for the API-key management endpoints.
 
 ## Headless API
 
-The headless API is served from the same server under `/api/*`.
+The query surface is **`POST /api/mcp`** — a [Model Context Protocol](https://modelcontextprotocol.io)
+server over Streamable HTTP (JSON-RPC 2.0, with optional SSE streaming). Each configured
+agent × skill-graph pair is exposed as an MCP tool; `tools/list` enumerates what a given
+API key can call, and `tools/call` invokes one.
+
+The legacy `POST /api/rag` and `POST /api/retrieve` endpoints were removed in Phase 0 of the
+MCP server migration (`server/src/digdir/api/routes/handlers.clj:4`) and are not coming back.
 
 - **API docs**: `server/docs/api/README.md`
-- **OpenAPI spec**: `server/docs/api/openapi.yaml`
+- **MCP reference**: `server/docs/api/endpoints/mcp.md`
+- **OpenAPI spec** (authoritative contract): `server/docs/api/openapi.yaml`
 
-Key endpoints:
+Also served from the same server under `/api/*`:
 
-- `POST /api/rag`
-  - Full RAG pipeline: retrieval + LLM answer
-- `POST /api/retrieve`
-  - Retrieval-only: ranked chunks, no LLM answer
-- Conversations
-  - `GET/POST /api/conversations`
-  - `GET/PUT/DELETE /api/conversations/:id`
+- Datasets — `GET /api/datasets`, `GET /api/datasets/:dataset-id`
+- Conversations — `GET/POST /api/conversations`, `GET/PUT/DELETE /api/conversations/:id`
 
 Authentication:
 
-- **RAG/retrieve/conversations** use API keys via `X-API-Key`.
-- API key management in the admin interface uses **JWT (cookie-based)**.
+- **MCP, datasets, conversations** use API keys via `X-API-Key`.
+- The admin interface (Operator Console API) uses **JWT (cookie-based)**.
 
-Example request:
-
-```sh
-curl -X POST http://localhost:8081/api/rag \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: rag_your_api_key_here" \
-  -d '{"query":"Hva er Altinn?"}'
-```
+For a first-request walkthrough (mint an API key, call `initialize`, then `tools/call`), see
+`server/docs/api/getting-started.md`.
 
 ## Configuration
 
-Tenant configuration lives in `config/` and is loaded using **Aero** with a **base + overrides** deep-merge pattern.
+All runtime configuration (services, auth, LLM providers, agent behavior, dataset
+definitions, skill parameters) lives in a Datahike-backed tree, resolved per request by
+tenant/agent/dataset against a platform → runtime → dataset inheritance model. The `config/`
+directory only holds point-in-time export/import snapshots, not live config.
 
-- **Config docs**: `config/README.md`
-- **Config resolution model (DB-backed)**: `docs/config-resolution.md`
-
-Typical legacy config pattern:
-
-- `ENTITY_CONFIG_FILE=config/ka_dev.edn`
+- **Config resolution model**: [`docs/system-overview.md` §4.1](docs/system-overview.md#41-configuration-system)
 
 DB-backed config mode is enabled by setting `CONFIG_MASTER_KEY`.
 
@@ -219,9 +304,8 @@ Prod server default is **http://localhost:8080**.
 
 This repo includes Kamal config files and Babashka wrappers:
 
-- `deploy-admin.yml` (+ `deploy-admin.*.yml`)
-- `accessories.yml`
-- `bb deploy-admin <destination>`
+- `deploy.yml` (+ `deploy.*.yml`)
+- `bb deploy <destination>`
 
 Destinations supported by `bb.edn` currently include:
 
@@ -235,7 +319,6 @@ Destinations supported by `bb.edn` currently include:
 - **Dev server port**
   - Dev runs on `8081` (see `server/src-dev/dev.cljc`). Prod runs on `8080` (see `server/src-prod/prod.cljc`).
 - **Typesense / Postgres connectivity**
-  - If you rely on remote accessories, see `bb port-forward` and related tasks in `bb.edn`.
+  - For a local instance, bring up `docker-compose.dev.yml`. `bb dev` does *not* port-forward; run `bb port-forward` separately to borrow the shared, populated corpus (needs SSH access to the deploy box). Each environment forwards to its own local port — dev `8308`, test `8208`, prod `8108` — so point `services.typesense.api-host` at the one you asked for; `bb port-forward` brings up test on `8208`.
 - **Tests not running**
   - See `server/TESTING.md` (RCF enable flags and REPL invocation).
-

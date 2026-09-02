@@ -3,6 +3,32 @@
   (:require [cheshire.core :as json]
             [clojure.java.io :as io]))
 
+(defmacro recording-fn
+  "Drop-in replacement for `(fn [& _] body)` that RECORDS the arg count of
+   every call. Read the counts with `arities`.
+
+   Use it for any function that is multi-arity in `src/`. `(fn [& _] …)`
+   accepts two and three arguments identically and returns the same value
+   either way, so no assertion in the suite can see which arity a caller
+   chose. That blindness is why #119 shipped behind a green suite: `/v1`
+   called the 2-arity `build-rag-skill-params`, dropping the agent's
+   `:skill-params`, while MCP called the 3-arity — and the stub of the
+   function under test erased the difference.
+
+   Recording rather than pinning the arity is deliberate. A fixed-arity stub
+   throws when a caller DROPS an argument but stays silent when a caller ADDS
+   one; recording catches both, and lets a test assert the arity a caller is
+   expected to use."
+  [& body]
+  `(let [!calls# (atom [])]
+     (with-meta (fn [& args#] (swap! !calls# conj (count args#)) ~@body)
+       {::arities !calls#})))
+
+(defn arities
+  "Arg counts recorded by `recording-fn`, in call order."
+  [stub]
+  @(::arities (meta stub)))
+
 (defn mock-ring-request
   "Create a mock Ring request map.
 
@@ -14,7 +40,6 @@
            :headers - Map of headers
            :params - Query parameters
            :path-params - Path parameters (e.g., {:id \"123\"})
-           :api-key/entity-id - Entity ID from API key auth
            :user/id - User ID from JWT auth"
   [method uri & [opts]]
   (let [body-str (when-let [body (:body opts)]
@@ -26,7 +51,6 @@
              :remote-addr "127.0.0.1"}
       body-str (assoc :body (io/input-stream (.getBytes body-str "UTF-8")))
       (:path-params opts) (assoc :path-params (:path-params opts))
-      (:api-key/entity-id opts) (assoc :api-key/entity-id (:api-key/entity-id opts))
       (:user/id opts) (assoc :user/id (:user/id opts)))))
 
 (defn parse-json-body

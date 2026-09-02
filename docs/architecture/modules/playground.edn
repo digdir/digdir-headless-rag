@@ -1,0 +1,36 @@
+{:id "playground",
+ :plane "experience",
+ :name "Playground",
+ :note "Chat + deep diagnostics",
+ :icon "chat",
+ :color "#a78bfa",
+ :status "External surface",
+ :summary
+ "Interactive chat with conversations, citations and execution-level observability.",
+ :description
+ "The Playground is both a product surface and an observability tool. It persists branching conversations while exposing the runtime timeline, tool calls, citations, statuses and streaming output.",
+ :responsibilities
+ ["Run multi-turn, branchable conversations"
+  "Show citations, tool activity and execution timing"
+  "Persist conversation trees and selected runtime scope"],
+ :files
+ ["server/src/digdir/playground/ui.cljc"
+  "server/src/digdir/playground/core.cljc"],
+ :input "User messages + selected scope",
+ :output "Answers, citations and execution trace",
+ :edges
+ [{:to "scope",
+   :kind :call,
+   :target :call,
+   :label "Tenant and dataset selection",
+   :via "Electric e/server call carrying the selected tenant",
+   :unverified true}
+  {:to "skills",
+   :kind :call,
+   :target :http,
+   :label "Run a question through the agent loop",
+   :witness
+   {:file "server/src/digdir/playground/ui.cljc",
+    :requires digdir.skills.api}}],
+ :keywords
+ "playground chat diagnostics conversation citation timeline streaming observability"}

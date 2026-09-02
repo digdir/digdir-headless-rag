@@ -1,0 +1,22 @@
+{:id "data",
+ :plane "knowledge",
+ :name "Datahike / Postgres",
+ :note "System of record",
+ :icon "database",
+ :color "#8c9ff0",
+ :status "Data service",
+ :summary
+ "Persists configuration, identities, permissions, conversations and execution records.",
+ :description
+ "Postgres, accessed through Datahike, is the transactional system of record. It contains the configuration graph as well as users, API keys, permissions, agents, messages and pipeline execution metadata.",
+ :responsibilities
+ ["Persist the configuration tree and entity relationships"
+  "Store users, credentials, permissions and API-key records"
+  "Store conversations, messages and pipeline execution state"],
+ :files
+ ["server/src/digdir/data/db.cljc"
+  "server/src/digdir/config/schema.clj"],
+ :input "Transactions and Datalog queries",
+ :output "Durable application state",
+ :keywords
+ "data database datahike postgres persistence datalog conversations messages config users executions"}

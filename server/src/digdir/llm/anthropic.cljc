@@ -1,6 +1,7 @@
 (ns digdir.llm.anthropic
-  (:require #?(:clj [clj-http.client :as http])
-            #?(:clj [taoensso.telemere :as t])))
+  #?(:clj (:require [clj-http.client :as http]
+                    [digdir.secrets :as secrets]
+                    [taoensso.telemere :as t])))
 
 #?(:clj
    (defn clean-http-response
@@ -24,7 +25,11 @@
            start-time (System/currentTimeMillis)
            request-size (count (str options))
            resp (http/post "https://api.anthropic.com/v1/messages"
-                           {:headers {"x-api-key" (or (System/getenv "ANTHROPIC_API_KEY") "Not set")
+                           {:headers {;; Was `(or (System/getenv "ANTHROPIC_API_KEY") "Not set")` — a
+                                      ;; missing key was sent to Anthropic as the literal
+                                      ;; string "Not set", so a configuration error arrived
+                                      ;; as an authentication failure at the provider (#22).
+                                      "x-api-key" (secrets/get! :anthropic-api-key)
                                       "anthropic-version" "2023-06-01"
                                       "anthropic-beta" "prompt-caching-2024-07-31"
                                       "content-type" "application/json"

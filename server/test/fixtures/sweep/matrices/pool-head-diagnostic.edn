@@ -1,0 +1,25 @@
+;; Pool-head characterization run — the FIRST step of the subtractive arc.
+;; Goal: SEE what buries the goldens so a penalty can target the real competitor
+;; class (near-dup twins / generic overviews / long siblings / multi-strategy
+;; winners) instead of a hunch. OFF only (the real agent, empty skill-params) —
+;; we want the DEFAULT noise composition, no deltas. judge? false: this is purely
+;; the new :golden-features + :pool-head columns, which don't need the judge.
+;; N=3 because the burial is variance-driven — 3 draws sample which chunks win.
+;; 1 × 10 × 3 = 30 runs (~15 min). Cohort = the 10 retrieval-variance questions.
+{:configs
+ [{:id "off" :skill-graph-id :builtin/agent-rag-graph-bundled :skill-params {}}]
+ :repeats 3
+ :judge? false
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-events-02-publisere-cloudevents"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-broker-03-store-filer-virusskann"
+                          "ue-broker-05-filstorrelse-grenser-multi"
+                          "ue-corr-01-events-webhook-subscription"
+                          "ue-sys-02-systembrukertoken-pdp-autorisasjon"
+                          "ue-api-06-app-openapi-swagger-spec"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-studio-02-pdf-service-task"}}}

@@ -5,9 +5,15 @@
         <title>Digdir RAG - Admin</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="stylesheet" href="/admin_app/index.css" type="text/css" media="screen" />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+              integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+              crossorigin="anonymous" />
         <!-- Ensure cache busting on deployment – inject main.BUILD-HASH.js -->
         <!-- $key$ is a template string. See src-prod/prod.cljc/wrap-prod-index-page -->
         <script defer type="text/javascript" src="/admin_app$:hyperfiddle.client.module/main$"></script>
+        <script defer type="text/javascript" src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+                integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+                crossorigin="anonymous"></script>
 	
 	<!-- For Designsystemet -->
 	<link
@@ -24,9 +30,6 @@
 	  rel="stylesheet"
 	  href="komponentkassen/index.css"
 	  />
-	<script type="module" src="https://unpkg.com/@u-elements/u-tags@latest/dist/u-tags.js"></script>
-	<script type="module" src="https://unpkg.com/@u-elements/u-datalist@latest/dist/u-datalist.js"></script>
-	<script type="module" src="https://unpkg.com/@u-elements/u-option@latest/dist/u-option.js"></script>
     </head>
     <body>
     </body>

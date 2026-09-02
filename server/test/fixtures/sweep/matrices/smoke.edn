@@ -1,0 +1,34 @@
+;; Smoke matrix — tiny sweep used to verify the runner end-to-end.
+;;
+;; Two configs (bundled vs faithful skill-graph), two questions
+;; (one well-grounded simple lookup + one harder rerank case),
+;; one repeat → 4 runs total. Wall-clock ~3-4 minutes against the
+;; running dev server.
+;;
+;; Drive it from a REPL:
+;;   (require 'digdir.sweep.runner :reload)
+;;   (digdir.sweep.runner/run-from-files
+;;     {:matrix-path "test/fixtures/sweep/matrices/smoke.edn"})
+;;
+;; Output: server/results/sweep-<ISO-ts>/{runs.csv, matrix.edn}
+
+{:configs
+ [{:id "bundled-default"
+   :skill-graph-id :builtin/agent-rag-graph-bundled}
+
+  {:id "faithful-default"
+   :skill-graph-id :builtin/agent-rag-graph-faithful}]
+
+ :repeats 1
+ :max-clarification-rounds 2
+
+ :execution-scope
+ {:tenant "digdir"
+  :dataset-config-key "default"
+  :agent-id "builtin/agent-rag-agent"}
+
+ :question-filter
+ ;; Pin to exactly two ids so the smoke test is deterministic:
+ ;; a high-confidence simple lookup + a known-hard rerank case.
+ {:ids #{"altinn-dialogporten-about"
+         "altinn-correspondence-post-published"}}}

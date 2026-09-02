@@ -62,6 +62,35 @@ DocumentSource protocol definition:
 
 ## Document Sources
 
+Source types are dispatched by `:source-type` in `digdir.pipeline.executor/dispatch-to-loader`
+(`server/src/digdir/pipeline/executor.clj:419-443`): `:kudos`, `:website`, `:folder`, `:episerver`.
+
+### Kudos (`kudos.clj`)
+Imports documents from the Kudos content API:
+1. Pages through the Kudos search API for matching documents
+2. Downloads and normalizes document content
+3. Chunks content by headers
+4. Generates search phrases
+5. Stores in TypeSense
+
+Configuration (loader-level keys, mapped from Dataset-root config by
+`digdir.pipeline.materialization/dataset-config->loader-config`):
+```clojure
+{:kudos/use-preprod? false
+ :kudos/starting-page 1
+ :documents/types ["Årsrapport" "Statusrapport"]
+ :documents/limit 20000
+ :documents/offset 0
+ :chunks/strategy :header-based
+ :search-phrases/model "gpt-4o"
+ :store/coll-prefix "KUDOS_preprod_v4_"}
+```
+
+The Kudos preprod environment is served by the same `kudos.clj` client: pick the
+deployment with `kudos/profile` (which reads `:kudos/use-preprod?` off the kview),
+or name `kudos/prod` / `kudos/preprod` directly. The profile carries the base URL,
+the list path (prod appends `/search`), the retry schedule and the event names.
+
 ### Website (`website.clj`)
 Imports markdown from sitemap URLs:
 1. Fetches and parses sitemap XML

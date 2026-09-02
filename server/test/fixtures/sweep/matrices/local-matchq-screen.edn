@@ -1,0 +1,54 @@
+;; MECHANISM C SCREEN (prompt-only) — does directing the model to weight the
+;; already-displayed `matched_q=` enrichment signal help, on top of snippet-AB?
+;;
+;; Minimal-first: no rendering change (matched_q text is already shown); the only
+;; delta is the prompt variant. control = the DEPLOYED snippet-AB default
+;; (:qwen-adapted-snippet); C = :qwen-adapted-snippet-matchq (= snippet prompt +
+;; step-2 guidance to prioritize reads whose matched_q closely matches the query).
+;; Both arms carry search-snippets + the no-tool-call guard + enriched-HQ, set
+;; EXPLICITLY so the screen is reproducible regardless of persisted state.
+;;
+;; 8-Q Sweep-1 subset × N=3 × 2 = 48 runs, conc 1, judge? false (gpt-5.5 via
+;; bb sweep-judge after; restore config). Run with the agent-run OPENAI_* env.
+;; Primary: effQ + paired per-Q. If positive → full-42 confirm (and consider
+;; escalating to rendering the actual rank_fusion_score strength number). If null
+;; → stop; the fuller C (merge-threading a strength number) is not worth it.
+;; Reminder: an 8-Q screen can flip sign at scale (cf. read-hi) — CONFIRM positives.
+{:configs
+ [{:id "snippet-AB"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true
+                     :no-tool-call-retry true}}}
+  {:id "snippet-AB+matchq"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet-matchq
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true
+                     :no-tool-call-retry true}}}]
+ :repeats 3
+ :judge? false
+ :order :interleaved
+ :concurrency 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-03-store-filer-virusskann"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-dialog-01-aktivitetslogg"
+                          "ue-events-01-abonnement-filtre"
+                          "ue-corr-02-transmission-group-dialog"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-sys-03-brukerstyrt-vs-leverandorstyrt"}}}

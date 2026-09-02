@@ -12,7 +12,7 @@
 ;; =============================================================================
 
 (defn mk-materialize-t
-  "Execute Kudos pipeline with the given configuration.
+  "Execute Kudos data loading with the given configuration.
 
    This wraps the existing digdir.docs.loader/mk-materialize-t function
    to work with pipeline configs.

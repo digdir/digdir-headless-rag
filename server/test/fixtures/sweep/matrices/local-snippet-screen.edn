@@ -1,0 +1,70 @@
+;; READ-SNIPPET SELF-SELECTION SCREEN — mechanism A (snippet in display) and
+;; A+B (snippet + preview-aware prompt). See
+;; plans/proposed/read-snippet-self-selection-plan.md.
+;;
+;; Root cause being attacked: the agent decides reads from a CONTENT-BLIND
+;; display (title/headers/score/rank only), so it walks past displayed goldens.
+;; The snippet surfaces the query-relevant best-content-window we already compute
+;; at rerank time (and otherwise discard) so the model self-selects — no forced
+;; read budget. Read-rate is the DIRECT target here (unlike the auto-read screen,
+;; whose 8-Q subset was blind to the read leak).
+;;
+;; All three arms share the SAME base prompt (registry :qwen-adapted, byte-
+;; identical to the persisted prompt) so the only deltas are the lever itself:
+;;   control     — snippets OFF (metadata-only). The clean baseline.
+;;   snippet-A   — snippets RENDERED, base prompt unchanged (does the model use
+;;                 the snippet unprompted?).
+;;   snippet-AB  — snippets RENDERED + :qwen-adapted-snippet prompt (steps 1–2
+;;                 teach the model to pick reads from the snippet).
+;; control→snippet-A isolates the render; snippet-A→snippet-AB isolates the
+;; prompt framing.
+;;
+;; Enriched-HQ base on every arm (the locked config). 3 × 8-Q Sweep-1 subset ×
+;; N=3 = 72 runs, conc 1, judge? false (gpt-5.5 via `bb sweep-judge` after,
+;; restore config). Run with the agent-run OPENAI_* env. WATCH prefill tokens /
+;; wall-clock — snippets add display tokens on a prefill-bound local model.
+{:configs
+ [{:id "control"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}}}
+  {:id "snippet-A"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true}}}
+  {:id "snippet-AB"
+   :skill-graph-id :builtin/agent-rag-graph-bundled
+   :agent-prompt-variant :qwen-adapted-snippet
+   :skill-params
+   #:builtin{:retrieval
+             {:enrichment-types [:hypothetical-questions]
+              :enrichment-search-targets
+              {:hypothetical-questions
+               "website_enrichment_hypothetical_questions_qwen_n5"}}
+             :agent {:search-snippets true}}}]
+ :repeats 3
+ :judge? false
+ :order :interleaved
+ :concurrency 1
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-03-store-filer-virusskann"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-dialog-01-aktivitetslogg"
+                          "ue-events-01-abonnement-filtre"
+                          "ue-corr-02-transmission-group-dialog"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-sys-03-brukerstyrt-vs-leverandorstyrt"}}}

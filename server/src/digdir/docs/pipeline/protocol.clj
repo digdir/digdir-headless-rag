@@ -65,13 +65,17 @@
 ;; ============================================================================
 
 (defn header-based-chunks
-  "Chunks markdown text by headers. Common implementation for all sources."
+  "Chunks markdown text by headers. Common implementation for all sources.
+
+   Returns text and metadata only — no `:chunk_id`. Ids are assigned by
+   `chunk-document`, which knows which document the text came from; a
+   chunker does not, and an id derived from content alone collides across
+   documents and loses data on upsert (#72)."
   [config text]
   (let [doc {:page-content text}]
     (->> (chunking/split-into-chunks-by-headers config [doc])
          (mapv (fn [{:keys [page-content metadata]}]
-                 {:chunk_id (core/sha256-short-hash page-content)
-                  :content_markdown page-content
+                 {:content_markdown page-content
                   :metadata (pr-str metadata)})))))
 
 (defn chunk-document
@@ -92,12 +96,17 @@
                                       :else true)))
                                 all-chunks)]
     (assoc doc :chunks
-           (vec (map-indexed (fn [index chunk]
+           (->> filtered-chunks
+                ;; Ids are derived here, not in the chunker: this is the first
+                ;; point that knows the document. See core/chunk-id.
+                (core/assign-chunk-ids (:doc_num doc))
+                (map-indexed (fn [index chunk]
                                (assoc chunk
                                       :doc_num (:doc_num doc)
                                       :chunk_index index
-                                      location-key (get doc location-key)))
-                             filtered-chunks)))))
+                                      :content_length (count (:content_markdown chunk))
+                                      location-key (get doc location-key))))
+                vec))))
 
 ;; ============================================================================
 ;; Generic Pipeline Builder

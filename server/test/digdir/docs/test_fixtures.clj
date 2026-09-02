@@ -183,6 +183,19 @@ Multiple paragraphs in fact.")
   </url>
 </urlset>")
 
+(def sample-sitemapindex-xml
+  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<sitemapindex xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">
+  <sitemap>
+    <loc>http://example.com/nb/sitemap-markdown.xml</loc>
+    <lastmod>2024-01-15</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>http://example.com/en/sitemap-markdown.xml</loc>
+    <lastmod>2024-01-16</lastmod>
+  </sitemap>
+</sitemapindex>")
+
 (def sample-episerver-xml
   "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <ArrayOfExportedPage xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">

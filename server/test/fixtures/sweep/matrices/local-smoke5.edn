@@ -1,0 +1,15 @@
+;; LOCAL 5-question sanity smoke: full-local (Qwen agent + local judge), enrichment off, N=1.
+;; Diverse domains (broker/studio/authz/dialog/events) to eyeball answer quality
+;; before committing to growth + the full A/B.
+{:configs [{:id "off", :skill-graph-id :builtin/agent-rag-graph-bundled, :skill-params {}}]
+ :repeats 1
+ :judge? true
+ :order :interleaved
+ :max-clarification-rounds 1
+ :run-timeout-ms 600000
+ :execution-scope {:tenant "digdir", :dataset-config-key "default", :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-03-store-filer-virusskann"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-dialog-01-aktivitetslogg"
+                          "ue-events-01-abonnement-filtre"}}}

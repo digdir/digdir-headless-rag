@@ -1,0 +1,55 @@
+{:cases
+ [{:id "arsverk-no-base"
+   :pair-id "arsverk-base"
+   :language :no
+   :query "Hvor mange årsverk hadde Digdir i 2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "arsverk-en-base"
+   :pair-id "arsverk-base"
+   :language :en
+   :query "How many FTEs did Digdir have in 2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+
+  {:id "arsverk-no-utforte"
+   :pair-id "arsverk-performed"
+   :language :no
+   :query "Hvor mange utførte årsverk hadde Digdir per 31.12.2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "arsverk-en-utforte"
+   :pair-id "arsverk-performed"
+   :language :en
+   :query "How many performed FTEs did Digdir have as of 31.12.2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+
+  {:id "arsverk-no-stillinger"
+   :pair-id "arsverk-positions"
+   :language :no
+   :query "Hvor mange årsverk og stillinger hadde Digdir i 2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "arsverk-en-positions"
+   :pair-id "arsverk-positions"
+   :language :en
+   :query "How many FTEs and positions did Digdir have in 2022?"
+   :golden-chunk-ids ["6a80d6499075"]}
+
+  {:id "arsverk-no-larlinger"
+   :pair-id "arsverk-apprentices"
+   :language :no
+   :query "Hvor mange årsverk hadde Digdir i 2022, og hvor mange lærlinger hadde de?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "arsverk-en-apprentices"
+   :pair-id "arsverk-apprentices"
+   :language :en
+   :query "How many FTEs did Digdir have in 2022, and how many apprentices did they have?"
+   :golden-chunk-ids ["6a80d6499075"]}
+
+  {:id "arsverk-no-reisetid-overtid"
+   :pair-id "arsverk-travel-overtime"
+   :language :no
+   :query "Hvor mange utførte årsverk hadde Digdir i 2022 når reisetid og overtid er inkludert?"
+   :golden-chunk-ids ["6a80d6499075"]}
+  {:id "arsverk-en-travel-overtime"
+   :pair-id "arsverk-travel-overtime"
+   :language :en
+   :query "How many performed FTEs did Digdir have in 2022 when travel time and overtime are included?"
+   :golden-chunk-ids ["6a80d6499075"]}]}

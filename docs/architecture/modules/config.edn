@@ -1,0 +1,31 @@
+{:id "config",
+ :plane "control",
+ :name "Config Resolution",
+ :note "Three rooted trees",
+ :icon "config",
+ :color "#efb36f",
+ :status "Cross-cutting",
+ :summary
+ "Resolves platform, runtime and dataset settings through inherited configuration trees.",
+ :description
+ "Configuration is stored as definitions, nodes, bindings and values. Reads walk an appropriate ancestor chain and choose the nearest value, decoding types and decrypting secrets on the way.",
+ :responsibilities
+ ["Resolve platform, runtime and dataset-rooted values"
+  "Apply inheritance with deterministic nearest-value wins"
+  "Decrypt protected settings and audit mutations"],
+ :files
+ ["server/src/digdir/config/accessor.clj"
+  "server/src/digdir/config/db.clj"
+  "server/src/digdir/config/crypto.clj"],
+ :input "Tenant + agent/dataset scope + config path",
+ :output "Resolved, typed runtime settings",
+ :edges
+ [{:to "data",
+   :kind :call,
+   :target :call,
+   :label "Config tree storage and schema",
+   :witness
+   {:file "server/src/digdir/config/db.clj",
+    :requires digdir.config.schema}}],
+ :keywords
+ "config configuration tree inheritance tenant dataset runtime resolver secret encrypted settings"}

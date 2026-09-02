@@ -1,0 +1,21 @@
+;; Display order for the System Atlas. Grouped by plane, as the page renders them.
+;; A new module must be placed here deliberately; the build fails on any module
+;; file not listed, and on any id listed with no file.
+["api"
+ "mcp"
+ "admin"
+ "playground"
+ "auth"
+ "config"
+ "scope"
+ "setup"
+ "skills"
+ "agents"
+ "rag"
+ "llm"
+ "sources"
+ "pipeline"
+ "typesense"
+ "data"
+ "sweeps"
+ "telemetry"]

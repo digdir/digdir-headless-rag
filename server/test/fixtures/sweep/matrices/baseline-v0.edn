@@ -1,0 +1,40 @@
+;; Baseline-v0 matrix — first real sweep of the full question set.
+;;
+;; Two configs (bundled vs faithful inner-graph variant) × every live
+;; question in the curated fixture (excluding tombstones) × 1 repeat.
+;;
+;; Purpose: establish the *baseline numbers* before any OFAT-style
+;; knob sweeping starts. The leaderboard from this run answers
+;;   "What does each config achieve out of the box across the full
+;;    question set?"
+;; — which the later OFAT rounds (Round 1 in plans/proposed/multi-
+;; variable-sweep-experiment-plan.md) build on by varying one knob at
+;; a time relative to whichever config wins here.
+;;
+;; Expected wall-clock: 2 configs × 36 questions × ~20-30s per call
+;;                      = roughly 25-35 minutes.
+;;
+;; Drive it from a REPL:
+;;   (load-file "src-dev/digdir/sweep/runner.clj")
+;;   (digdir.sweep.runner/run-from-files
+;;     {:matrix-path "test/fixtures/sweep/matrices/baseline-v0.edn"})
+;;
+;; Output: server/results/sweep-<ISO-ts>/{runs.csv, matrix.edn}
+
+{:configs
+ [{:id "bundled-default"
+   :skill-graph-id :builtin/agent-rag-graph-bundled}
+
+  {:id "faithful-default"
+   :skill-graph-id :builtin/agent-rag-graph-faithful}]
+
+ :repeats 1
+ :max-clarification-rounds 2
+
+ :execution-scope
+ {:tenant "digdir"
+  :dataset-config-key "default"
+  :agent-id "builtin/agent-rag-agent"}
+
+ ;; Empty filter ⇒ every live (non-tombstone) row in the fixture.
+ :question-filter {}}

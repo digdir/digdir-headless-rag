@@ -1,0 +1,26 @@
+;; LEVER A PROMOTION GATE — full-42, N=5, JUDGED, off vs windowing@2000.
+;;
+;; P1 (cohort N=5) was a mechanism-confirmed win: long-golden rerank-score +2.8..+4.3,
+;; golden-displayed 74->80%, golden-read 44->60%, recall@20 0.42->0.57; one regression
+;; (corr-01, multi-passage) now addressed by the top-2-window refinement (falls back to
+;; the proven single window when a 2nd region adds no new coverage, so single-passage
+;; goldens are unaffected).
+;;
+;; This confirms on ALL 42, JUDGED, N=3:
+;;  - net recall + judge lift on the long-golden subset (the 31 >1000-char questions),
+;;  - NO regression on the 11 clean (<=1000-char) questions (the critical guardrail —
+;;    short chunks are byte-identical under windowing, so any movement there is noise),
+;;  - re-judge the long-golden answers (prior verdicts were graded on rerank-starved
+;;    context and some may flip).
+;; 2 × 42 × 3 = 252 judged runs, interleaved (time-balanced arms).
+{:configs
+ [{:id "off" :skill-graph-id :builtin/agent-rag-graph-bundled :skill-params {}}
+  {:id "window-2000" :skill-graph-id :builtin/agent-rag-graph-bundled
+   :skill-params {:builtin/retrieval {:rerank-windowing true :rerank-max-chunk-length 2000}}}]
+ :repeats 5
+ :judge? true
+ :order :interleaved
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-broker-01-filoverforing-tilstander" "ue-broker-02-slette-tid-tilgjengelig" "ue-broker-03-store-filer-virusskann" "ue-broker-04-overgang-a2-a3-forskjeller" "ue-broker-05-filstorrelse-grenser-multi" "ue-events-01-abonnement-filtre" "ue-events-02-publisere-cloudevents" "ue-events-03-polling-vs-webhook" "ue-studio-01-skjul-felt-uttrykk" "ue-studio-02-pdf-service-task" "ue-studio-03-datamodell-filer" "ue-studio-04-non-repeating-group" "ue-studio-05-tekstressurser-sprak" "ue-studio-06-options-kilder-kodeliste" "ue-studio-07-validering-uttrykk-fil" "ue-corr-01-events-webhook-subscription" "ue-corr-02-transmission-group-dialog" "ue-corr-03-system-til-system-nedlasting" "ue-corr-04-notification-order-sms-window" "ue-notif-05-umiddelbar-varsling-otp" "ue-notif-06-egendefinert-avsender-epost-dns" "ue-notif-07-standard-avsender-sms-epost" "ue-dialog-01-aktivitetslogg" "ue-dialog-02-seen-log" "ue-dialog-03-unauthorized-urls" "ue-dialog-04-activity-entity-fields" "ue-dialog-05-search-rest-graphql" "ue-dialog-06-skrivehandlinger" "ue-dialog-07-webapi-sdk" "ue-authz-01-delegere-tilgangspakke-api" "ue-authz-02-tilgangsliste-handlingsfilter" "ue-authz-03-validere-samtykketoken" "ue-authz-04-opprette-tilgangsliste-medlemmer" "ue-authz-05-xacml-policy-regelstruktur" "ue-authz-06-xacml-obligation-authlevel" "ue-authz-07-bruker-typer-authorization" "ue-sys-01-leverandorstyrt-og-forhold" "ue-sys-02-systembrukertoken-pdp-autorisasjon" "ue-sys-03-brukerstyrt-vs-leverandorstyrt" "ue-api-04-instances-get-no-list" "ue-api-05-events-post-app-token" "ue-api-06-app-openapi-swagger-spec"}}}

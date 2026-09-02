@@ -1,0 +1,1 @@
+{:configs [{:id "ctop-80", :skill-graph-id :builtin/agent-rag-graph-bundled, :skill-params #:builtin{:rerank {:context-top-k 80}}}], :n-questions 4, :repeats 1, :execution-scope {:tenant "digdir", :dataset-config-key "default", :agent-id "builtin/agent-rag-agent"}, :max-clarification-rounds 2, :started-at "2026-05-22T15:03:08.691901Z"}

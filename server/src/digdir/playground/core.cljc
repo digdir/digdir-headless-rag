@@ -1,22 +1,24 @@
 (ns digdir.playground.core
-  "Backend logic for the RAG Playground feature.
-   Exposes RAG pipeline stages individually for debugging and experimentation."
-  (:require #?(:clj [digdir.rag.core :as rag])
-            #?(:clj [digdir.rag.typesense :as ts-utils])
+  "Backend logic for the RAG Playground feature."
+  (:require #?(:clj [digdir.rag.typesense :as ts-utils])
             #?(:clj [typesense.client :as ts-client])
+            #?(:clj [digdir.api.util :as api-util])
             #?(:clj [digdir.config.accessor :as cfg])
+            #?(:clj [digdir.agents.db :as agents-db])
+            #?(:clj [digdir.api.routes.endpoints.debug :as debug])
             #?(:clj [digdir.config.core])
             #?(:clj [digdir.config.db])
             #?(:clj [digdir.data.db :as db])
             #?(:clj [digdir.llm.openai :as llm])
-            #?(:clj [wkok.openai-clojure.api :as openai])
             #?(:clj [nano-id.core :refer [nano-id]])
-            #?(:clj [clojure.data.json :as json])
-            #?(:clj [clj-http.client :as http])
             #?(:clj [taoensso.telemere :as t])
-            #?(:clj [digdir.pipeline.skills.api :as skills-api])
-            #?(:clj [digdir.rag.skills.core :as skills-core])
-            [clojure.string :as str]))
+            #?(:clj [digdir.skills.api :as skills-api])
+            #?(:clj [digdir.skills.events :as skill-events])
+            #?(:clj [digdir.skills.invoke :as skills-invoke])
+            #?(:clj [digdir.playground.action-trace :as action-trace])
+            #?(:clj [digdir.playground.diagnostics :as pg-diagnostics])
+            #?(:clj [digdir.playground.timeline :as pg-timeline])
+            [clojure.string]))
 
 ;; Execution state atom - stores results from each pipeline stage
 #?(:clj (defonce !playground-executions (atom {})))
@@ -25,38 +27,68 @@
 #?(:clj (defonce !current-execution-id (atom nil)))
 
 #?(:clj
-   (defn get-entity-by-id
-     "Get entity configuration by ID.
-      Delegates to cfg/get-entity which supports both DB mode and legacy EDN fallback."
-     [entity-id]
-     (cfg/get-entity entity-id)))
+   (defonce ^:private !live-status-schedule-fn
+     (delay (do (require 'digdir.playground.live-status-scheduler)
+                (resolve 'digdir.playground.live-status-scheduler/schedule-live-status-summary!)))))
 
 #?(:clj
    (defn fetch-chunk-by-id
      "Fetch full chunk data from Typesense by chunk_id.
-      Accepts optional opts map with :tenant and :environment for config resolution."
+      Accepts optional opts map with :tenant and :dataset-config-key for config resolution."
      ([chunks-collection docs-collection chunk-id]
       (fetch-chunk-by-id chunks-collection docs-collection chunk-id nil))
      ([chunks-collection docs-collection chunk-id opts]
       (when (and chunks-collection chunk-id)
-        (let [search-args {:searches [{:collection chunks-collection
-                                       :q chunk-id
-                                       :query_by "chunk_id"
-                                       :filter_by (str "chunk_id:=`" chunk-id "`")
-                                       :include_fields (str "id,chunk_id,doc_num,content_markdown,metadata,$"
-                                                            docs-collection "(url,title)")
-                                       :per_page 1}]}
-              response (ts-client/multi-search (ts-utils/make-ts-settings opts) search-args {:query_by "chunk_id"})
-              hits (get-in response [:results 0 :hits])]
-          (when (seq hits)
-            (:document (first hits))))))))
+        (try
+          (let [search-args {:searches [{:collection chunks-collection
+                                         :q chunk-id
+                                         :query_by "chunk_id"
+                                         :filter_by (str "chunk_id:=`" chunk-id "`")
+                                         :include_fields (str "id,chunk_id,doc_num,chunk_index,content_markdown,content_length,metadata,$"
+                                                              docs-collection "(url,title,total_chunks,orgs_long,orgs_short)")
+                                         :per_page 1}]}
+                response (ts-client/multi-search (ts-utils/make-ts-settings opts) search-args {:query_by "chunk_id"})
+                hits (get-in response [:results 0 :hits])]
+            (when (seq hits)
+              (:document (first hits))))
+          (catch Exception e
+            (t/log! :warn [:playground/fetch-chunk-by-id-failed
+                           {:chunk-id chunk-id
+                            :chunks-collection chunks-collection
+                            :docs-collection docs-collection
+                            :error (.getMessage e)}])
+            nil))))))
+
+#?(:clj
+   (defn fetch-dataset-stats
+     "Return lightweight Typesense collection counts for a selected dataset.
+
+      Missing or unreachable collections are reported as nil so the Playground
+      empty state can remain useful without turning metadata into a chat blocker."
+     [dataset-config opts]
+     (let [collection-count
+           (fn [collection-name]
+             (when-not (clojure.string/blank? collection-name)
+               (try
+                 (:num_documents
+                  (ts-client/retrieve-collection
+                   (ts-utils/make-ts-settings opts)
+                   collection-name))
+                 (catch Exception e
+                   (t/log! :warn [:playground/fetch-dataset-stats-failed
+                                  {:collection collection-name
+                                   :error (.getMessage e)}])
+                   nil))))]
+       {:documents (collection-count (:docs-collection dataset-config))
+        :chunks (collection-count (:chunks-collection dataset-config))
+        :phrases (collection-count (:phrases-collection dataset-config))})))
 
 ;; =========Typesense Diagnostics=========
 
 #?(:clj
    (defn list-typesense-collections
      "List all available Typesense collections.
-      Accepts optional opts map with :tenant and :environment for config resolution."
+      Accepts optional opts map with :tenant and :dataset-config-key for config resolution."
      ([] (list-typesense-collections nil))
      ([opts]
       (try
@@ -70,7 +102,7 @@
 #?(:clj
    (defn check-typesense-connection
      "Check if Typesense is reachable and return connection info.
-      Accepts optional opts map with :tenant and :environment for config resolution."
+      Accepts optional opts map with :tenant and :dataset-config-key for config resolution."
      ([] (check-typesense-connection nil))
      ([opts]
       (try
@@ -89,7 +121,7 @@
    (defn get-typesense-diagnostics
      "Get diagnostic information about Typesense configuration.
       Checks connection, lists collections, and validates expected collections exist.
-      Accepts optional opts map with :tenant and :environment for config resolution."
+      Accepts optional opts map with :tenant and :dataset-config-key for config resolution."
      ([expected-collections] (get-typesense-diagnostics expected-collections nil))
      ([expected-collections opts]
       (let [connection (check-typesense-connection opts)
@@ -112,341 +144,34 @@
      (swap! !playground-executions update execution-id merge updates)))
 
 #?(:clj
+   (defn emit-execution-event!
+     "Append a normalized execution event to an execution's in-memory event stream."
+     [execution-id event]
+     (swap! !playground-executions update-in [execution-id :events]
+            (fnil conj [])
+            (merge {:ts (System/currentTimeMillis)
+                    :execution-id execution-id
+                    :request-id execution-id}
+                   (skill-events/normalize-execution-event event)))
+     (when-let [schedule-fn @!live-status-schedule-fn]
+       (schedule-fn execution-id))))
+
+#?(:clj
+   (defn set-execution-stage!
+     "Set execution stage and emit a stage/started event."
+     ([execution-id stage]
+      (set-execution-stage! execution-id stage nil))
+     ([execution-id stage label]
+      (update-execution! execution-id {:stage stage})
+      (emit-execution-event! execution-id
+                             (skill-events/stage-started stage
+                                                         (or label (name stage)))))))
+
+#?(:clj
    (defn update-execution-results!
      "Update specific results in execution state"
      [execution-id result-key value]
      (swap! !playground-executions assoc-in [execution-id :results result-key] value)))
-
-#?(:clj
-   (defn append-streaming-content!
-     "Append content to streaming response"
-     [execution-id content]
-     (swap! !playground-executions update-in [execution-id :streaming-content] str content)))
-
-;; Individual pipeline stage functions
-
-#?(:clj
-   (defn execute-query-relaxation
-     "Execute query relaxation stage - converts user query to search phrases"
-     [execution-id query prompt-rag-query-relax]
-     (update-execution! execution-id {:stage :query-relax})
-     (let [;; Create a mock message list with just the user query
-           messages [{:message/role :user
-                      :message/text query}]
-           search-phrases (rag/query-relaxation prompt-rag-query-relax messages nil)]
-       (update-execution-results! execution-id :query-relaxation search-phrases)
-       search-phrases)))
-
-#?(:clj
-   (defn execute-query-relaxation-with-history
-     "Execute query relaxation with full conversation history for context.
-      Messages should be a vector of {:message/role :user|:assistant, :message/text \"...\"}."
-     [execution-id messages prompt-rag-query-relax]
-     (update-execution! execution-id {:stage :query-relax})
-     (let [search-phrases (rag/query-relaxation prompt-rag-query-relax messages nil)]
-       (update-execution-results! execution-id :query-relaxation search-phrases)
-       search-phrases)))
-
-#?(:clj
-   (defn execute-phrase-search
-     "Execute phrase/semantic search.
-      Accepts optional opts map with :tenant and :environment for config resolution."
-     ([execution-id phrases-collection docs-collection search-phrases prompt filter-by]
-      (execute-phrase-search execution-id phrases-collection docs-collection search-phrases prompt filter-by nil))
-     ([execution-id phrases-collection docs-collection search-phrases prompt filter-by opts]
-      (update-execution! execution-id {:stage :phrase-search})
-      (let [results (rag/lookup-search-phrases-similar
-                     phrases-collection
-                     docs-collection
-                     search-phrases
-                     prompt
-                     filter-by
-                     opts)
-            ;; Add search-type to results
-            results-with-type (map #(assoc % :search-type :phrase) results)]
-        (update-execution-results! execution-id :phrase-search results-with-type)
-        results-with-type))))
-
-#?(:clj
-   (defn execute-metadata-search
-     "Execute metadata BM25 search.
-      Accepts optional opts map with :tenant and :environment for config resolution."
-     ([execution-id chunks-collection docs-collection search-phrases filter-by]
-      (execute-metadata-search execution-id chunks-collection docs-collection search-phrases filter-by nil))
-     ([execution-id chunks-collection docs-collection search-phrases filter-by opts]
-      (update-execution! execution-id {:stage :metadata-search})
-      (let [results (rag/search-chunks-by-metadata
-                     chunks-collection
-                     docs-collection
-                     search-phrases
-                     filter-by
-                     opts)
-            ;; Normalize scores for display (raw BM25 scores are huge 64-bit encoded values)
-            normalized-results (vec (rag/normalize-ranks results))]
-        (update-execution-results! execution-id :metadata-search normalized-results)
-        normalized-results))))
-
-#?(:clj
-   (defn execute-content-search
-     "Execute content BM25 search.
-      Accepts optional opts map with :tenant and :environment for config resolution."
-     ([execution-id chunks-collection docs-collection search-phrases filter-by]
-      (execute-content-search execution-id chunks-collection docs-collection search-phrases filter-by nil))
-     ([execution-id chunks-collection docs-collection search-phrases filter-by opts]
-      (update-execution! execution-id {:stage :content-search})
-      (let [results (rag/search-chunks-by-content
-                     chunks-collection
-                     docs-collection
-                     search-phrases
-                     filter-by
-                     opts)
-            ;; Normalize scores for display (raw BM25 scores are huge 64-bit encoded values)
-            normalized-results (vec (rag/normalize-ranks results))]
-        (update-execution-results! execution-id :content-search normalized-results)
-        normalized-results))))
-
-#?(:clj
-   (defn execute-merge-results
-     "Merge results from all search types, optionally filtering by threshold"
-     [execution-id phrase-results metadata-results content-results rerank-threshold]
-     (update-execution! execution-id {:stage :merge})
-     (let [merged (rag/merge-chunk-search-results
-                   phrase-results
-                   metadata-results
-                   content-results)
-           ;; Apply threshold filter if specified
-           filtered (if rerank-threshold
-                      (let [above-threshold (filterv #(>= (:rank %) rerank-threshold) merged)]
-                        (t/log! :info [:playground/threshold-applied
-                                       {:threshold rerank-threshold
-                                        :before-filter (count merged)
-                                        :after-filter (count above-threshold)}])
-                        above-threshold)
-                      merged)]
-       (update-execution-results! execution-id :merged-results filtered)
-       filtered)))
-
-#?(:clj
-   (defn execute-retrieve-chunks
-     "Retrieve full chunk documents by ID.
-      Accepts optional opts map with :tenant and :environment for config resolution."
-     ([execution-id docs-collection chunks-collection merged-results]
-      (execute-retrieve-chunks execution-id docs-collection chunks-collection merged-results nil))
-     ([execution-id docs-collection chunks-collection merged-results opts]
-      (update-execution! execution-id {:stage :retrieve})
-      (let [chunks (rag/retrieve-chunks-by-id
-                    docs-collection
-                    chunks-collection
-                    merged-results
-                    opts)]
-        (update-execution-results! execution-id :retrieved-chunks chunks)
-        chunks))))
-
-#?(:clj
-   (defn execute-rerank
-     "Rerank chunks using ColBERT"
-     [execution-id retrieved-chunks params]
-     (update-execution! execution-id {:stage :rerank})
-     ;; Log ColBERT configuration
-     (let [colbert-url (cfg/get :services :colbert :api-url)
-           colbert-key (cfg/get :services :colbert :api-key)]
-       (t/log! :info [:playground/rerank-config
-                      {:colbert-url colbert-url
-                       :colbert-key-present? (some? colbert-key)
-                       :colbert-key-length (when colbert-key (count colbert-key))
-                       :chunks-to-rerank (count retrieved-chunks)}]))
-     (try
-       (let [{:keys [used-chunks used-docs full-prompt]} (rag/rerank-chunks retrieved-chunks params)]
-         (t/log! :info [:playground/rerank-success
-                        {:reranked-count (count used-chunks)}])
-         (update-execution-results! execution-id :reranked-results used-chunks)
-         (update-execution-results! execution-id :full-prompt full-prompt)
-         {:used-chunks used-chunks
-          :used-docs used-docs
-          :full-prompt full-prompt})
-       (catch Exception e
-         (t/log! :error [:playground/rerank-error
-                         {:error-message (.getMessage e)
-                          :error-type (type e)}])
-         (throw e)))))
-
-#?(:clj
-   (defn stream-playground-generation
-     "Execute streaming LLM generation"
-     [execution-id full-prompt config]
-     (update-execution! execution-id {:stage :generate})
-     (let [use-azure? (llm/use-azure-openai)
-           azure-deployment (cfg/get :services :azure-openai :deployment-name)
-           ;; For Azure, always use the deployment name; for OpenAI, use config or default
-           model (if use-azure?
-                   azure-deployment
-                   (or (:model config) "gpt-4o"))
-           system-prompt (rag/system-prompt-with-date)
-           azure-endpoint (cfg/get :services :azure-openai :api-endpoint)
-           azure-key (cfg/get :services :azure-openai :api-key)]
-       (t/log! :info [:playground/llm-config
-                      {:use-azure? use-azure?
-                       :model model
-                       :azure-deployment azure-deployment
-                       :azure-endpoint azure-endpoint
-                       :azure-key-present? (some? azure-key)
-                       :prompt-length (count full-prompt)}])
-       (if use-azure?
-         ;; Azure OpenAI (non-streaming - streaming not well supported with Azure)
-         (try
-           (t/log! :info [:playground/llm-starting {:execution-id execution-id}])
-           (let [response (openai/create-chat-completion
-                           {:model model
-                            :messages [{:role "system" :content system-prompt}
-                                       {:role "user" :content full-prompt}]
-                            :temperature (or (:temperature config) 0.1)}
-                           {:api-key azure-key
-                            :api-endpoint azure-endpoint
-                            :impl :azure})
-                 content (get-in response [:choices 0 :message :content])]
-             (t/log! :info [:playground/llm-complete
-                            {:execution-id execution-id
-                             :content-length (count content)}])
-             (append-streaming-content! execution-id content)
-             content)
-           (catch Exception e
-             (t/log! :error [:playground/llm-error
-                             {:execution-id execution-id
-                              :error-message (.getMessage e)
-                              :error-type (str (type e))}])
-             (throw e)))
-         ;; Non-streaming fallback for other providers
-         (let [response (openai/create-chat-completion
-                         {:model model
-                          :messages [{:role "system" :content system-prompt}
-                                     {:role "user" :content full-prompt}]
-                          :temperature (or (:temperature config) 0.1)
-                          :max_tokens (:max-tokens config)})
-               content (get-in response [:choices 0 :message :content])]
-           (append-streaming-content! execution-id content)
-           content)))))
-
-#?(:clj
-   (defn execute-playground-pipeline
-     "Execute the full playground pipeline, storing results at each stage.
-      Returns the execution-id for tracking."
-     [{:keys [entity-id query config query-relax-prompt rag-generate-prompt filter-by]}]
-     (let [execution-id (nano-id)
-           entity (get-entity-by-id entity-id)
-           _ (when-not entity
-               (throw (ex-info (str "Entity not found: " entity-id) {:entity-id entity-id})))
-
-           ;; Initialize execution state
-           _ (swap! !playground-executions assoc execution-id
-                    {:status :running
-                     :stage :init
-                     :streaming-content ""
-                     :results {}
-                     :error nil
-                     :started-at (str (java.time.Instant/now))
-                     :entity-id entity-id
-                     :query query})
-
-           ;; Build params for reranking (similar to api-rag-handler)
-           ;; Uses 3-level precedence: playground config > entity config > global default
-           rag-params {:conversation-id execution-id
-                       :entity-id entity-id
-                       :original_user_query query
-                       :translated_user_query query
-                       :selected-model (:model config)
-                       ;; Rerank parameters
-                       :rerankTopkChunks (or (:rerank-top-k config)
-                                             (:rerank-top-k entity))
-                       :rerankMaxChunkLength (or (:rerank-max-chunk-length config)
-                                                 (:rerank-max-chunk-length entity))
-                       :rerankMaxLength (or (:rerank-max-total-length config)
-                                            (:rerank-max-total-length entity))
-                       ;; Context parameters
-                       :contextTopkChunks (or (:context-top-k config)
-                                              (:context-top-k entity))
-                       :contextMaxChunkLength (or (:context-max-chunk-length config)
-                                                  (:context-max-chunk-length entity))
-                       :maxContextLength (or (:context-max-total-length config)
-                                             (:context-max-total-length entity))
-                       ;; Collection names
-                       :docsCollectionName (:docs-collection entity)
-                       :chunksCollectionName (:chunks-collection entity)
-                       :phrasesCollectionName (:phrases-collection entity)
-                       ;; Prompts (use new kebab-case property names)
-                       :promptRagQueryRelax (or query-relax-prompt (:prompt-query-relax entity))
-                       :promptRagGenerate (or rag-generate-prompt (:prompt-rag-generate entity))}]
-
-       ;; Execute pipeline in a future to not block
-       (future
-         (try
-           ;; Stage 1: Query relaxation
-           (let [search-phrases (execute-query-relaxation
-                                 execution-id
-                                 query
-                                 (:promptRagQueryRelax rag-params))]
-
-             ;; Stage 2: Run all three searches
-             (let [phrase-results (execute-phrase-search
-                                   execution-id
-                                   (:phrasesCollectionName rag-params)
-                                   (:docsCollectionName rag-params)
-                                   search-phrases
-                                   (:phrase-gen-prompt entity)
-                                   filter-by)
-                   metadata-results (execute-metadata-search
-                                     execution-id
-                                     (:chunksCollectionName rag-params)
-                                     (:docsCollectionName rag-params)
-                                     search-phrases
-                                     filter-by)
-                   content-results (execute-content-search
-                                    execution-id
-                                    (:chunksCollectionName rag-params)
-                                    (:docsCollectionName rag-params)
-                                    search-phrases
-                                    filter-by)]
-
-               ;; Stage 3: Merge results (with optional threshold filtering)
-               (let [merged (execute-merge-results
-                             execution-id
-                             phrase-results
-                             metadata-results
-                             content-results
-                             (:rerank-threshold config))]
-
-                 ;; Stage 4: Retrieve chunks
-                 (let [retrieved (execute-retrieve-chunks
-                                  execution-id
-                                  (:docsCollectionName rag-params)
-                                  (:chunksCollectionName rag-params)
-                                  merged)]
-
-                   ;; Stage 5: Rerank
-                   (let [{:keys [used-chunks full-prompt]} (execute-rerank
-                                                            execution-id
-                                                            retrieved
-                                                            rag-params)]
-
-                     ;; Stage 6: Generate response
-                     (stream-playground-generation execution-id full-prompt config)
-
-                     ;; Store used chunks
-                     (update-execution-results! execution-id :used-chunks used-chunks)
-
-                     ;; Mark complete
-                     (update-execution! execution-id
-                                        {:status :complete
-                                         :stage :complete
-                                         :completed-at (str (java.time.Instant/now))}))))))
-           (catch Exception e
-             (println "Playground execution error:" (.getMessage e))
-             (update-execution! execution-id
-                                {:status :error
-                                 :error (.getMessage e)
-                                 :completed-at (str (java.time.Instant/now))}))))
-
-       ;; Return execution ID immediately
-       execution-id)))
 
 #?(:clj
    (defn get-execution
@@ -484,18 +209,146 @@
 
 #?(:clj
    (defn messages->context
-     "Convert persisted messages to format expected by query-relaxation.
+         "Convert persisted messages to format expected by query-planner.
       Filters to only user and assistant messages with text content."
      [messages]
      (->> messages
           (filter #(#{:user :assistant} (:message/role %)))
-          (filter #(not (str/blank? (:message/text %))))
-          (mapv #(select-keys % [:message/role :message/text])))))
+          (filter #(not (clojure.string/blank? (:message/text %))))
+          (mapv (fn [m]
+                  {:role (:message/role m)
+                   :text (:message/text m)
+                   :message/role (:message/role m)
+                   :message/text (:message/text m)})))))
 
 #?(:clj
-   (defn execute-skills-pipeline
-     "Execute the playground pipeline using the skills system.
-      This is an experimental alternative to the classic pipeline.
+   (defn- split-chunks-by-search-type
+     "Split chunks into per-search-type lists based on :search-types metadata."
+     [chunks]
+     {:phrase (filterv #(contains? (:search-types %) :phrase) chunks)
+      :metadata (filterv #(contains? (:search-types %) :metadata) chunks)
+      :content (filterv #(contains? (:search-types %) :content) chunks)}))
+
+#?(:clj
+   (defn- aggregate-search-attributions
+     "Aggregate multiple retrieval attributions into one summary map."
+     [attributions]
+     (let [entries (filter map? (or attributions []))]
+       (when (seq entries)
+         (let [sum-key (fn [k] (reduce + 0 (map #(long (or (get % k) 0)) entries)))
+               first-match (fn [k]
+                             (some #(when (some? (get % k)) (get % k)) entries))]
+           {:phrase (sum-key :phrase)
+            :metadata (sum-key :metadata)
+            :content (sum-key :content)
+            :merged (sum-key :merged)
+            :chunks-before-diversity (sum-key :chunks-before-diversity)
+            :chunks-after-diversity (sum-key :chunks-after-diversity)
+            :auto-filter-applied (first-match :auto-filter-applied)
+            :auto-filter-fallback (boolean (some :auto-filter-fallback entries))})))))
+
+#?(:clj
+   (defn- normalize-rag-params
+     "Normalize mixed naming conventions to one internal kebab-case map."
+     [rag-params]
+     (let [kebab (into {}
+                       (map (fn [[k v]]
+                              [(-> (name k)
+                                   (clojure.string/replace "_" "-")
+                                   (clojure.string/replace #"([a-z0-9])([A-Z])" "$1-$2")
+                                   clojure.string/lower-case
+                                   keyword)
+                               v]))
+                       (or rag-params {}))
+           aliases {:docs-collection-name :docs-collection
+                    :chunks-collection-name :chunks-collection
+                    :phrases-collection-name :phrases-collection
+                    :prompt-rag-query-relax :prompt-query-relax
+                    :retrieve-topk-chunks :retrieve-top-k
+                    :context-topk-chunks :context-top-k
+                    :rerank-topk-chunks :rerank-top-k}]
+       (reduce-kv (fn [acc k v]
+                    (assoc acc (get aliases k k) v))
+                  {}
+                  kebab))))
+
+#?(:clj
+   (defn- typesense-diagnostics->backend-issues
+     "Convert startup Typesense diagnostics into structured backend issues."
+     [typesense-diagnostics]
+     (let [diag (or typesense-diagnostics {})
+           missing-collections (vec (or (:missing-collections diag) []))
+           expected-collections (vec (or (:expected-collections diag) []))
+           available-collections (vec (or (:available-collections diag) []))]
+       (vec
+        (concat
+         (when-let [diagnostic-error (:diagnostic-error diag)]
+           [{:source :typesense
+             :tool "startup-check"
+             :issue-type :typesense-diagnostics-failed
+             :message diagnostic-error
+             :details {:expected-collections expected-collections}}])
+         (when (false? (:connected diag))
+           [{:source :typesense
+             :tool "startup-check"
+             :issue-type :typesense-unreachable
+             :message (or (:error diag) "Typesense connection failed")
+             :details {:uri (:uri diag)
+                       :expected-collections expected-collections}}])
+         (when (seq missing-collections)
+           [{:source :typesense
+             :tool "startup-check"
+             :issue-type :missing-collections
+             :message "Expected Typesense collections are missing"
+             :details {:missing-collections missing-collections
+                       :expected-collections expected-collections
+                       :available-collections available-collections}}]))))))
+
+#?(:clj
+   (defn- playground-config->api-params
+     "Translate playground UI config keys to the shape api.util/build-rag-skill-params
+      expects as `params` (HTTP body overrides). Most keys pass through; the playground
+      UI uses :context-max-total-length where the API uses :max-context-length."
+     [config]
+     (cond-> {}
+       (contains? config :rerank-top-k) (assoc :rerank-top-k (:rerank-top-k config))
+       (contains? config :rerank-max-chunk-length) (assoc :rerank-max-chunk-length (:rerank-max-chunk-length config))
+       (contains? config :rerank-max-total-length) (assoc :rerank-max-total-length (:rerank-max-total-length config))
+       (contains? config :context-top-k) (assoc :context-top-k (:context-top-k config))
+       (contains? config :context-min-chunks) (assoc :context-min-chunks (:context-min-chunks config))
+       (contains? config :context-relative-score-threshold) (assoc :context-relative-score-threshold (:context-relative-score-threshold config))
+       (contains? config :context-max-chunk-length) (assoc :context-max-chunk-length (:context-max-chunk-length config))
+       (contains? config :context-max-total-length) (assoc :max-context-length (:context-max-total-length config)))))
+
+#?(:clj
+   (defn build-playground-skill-params
+     "Build the nested :skill-params map for the playground.
+
+      Delegates to api.util/build-rag-skill-params so the API and playground produce
+      identical skill-params shapes — preventing the kind of silent divergence where
+      e.g. the playground's rerank skill fell back to literal defaults (1000/10000/etc.)
+      while the API delivered the configured :rerank-rag-* values.
+
+      `agent-skill-params` is the resolved agent's :skill-params field (a map
+      like `{:builtin/retrieval {:strategy-weights ...}}`). It slots between
+      the dataset-config defaults and the per-call UI overrides — agent
+      settings beat the dataset, UI controls still beat the agent. Pass `{}`
+      (or omit) to skip the agent layer."
+     ([dataset-config ui-config query-relax-prompt rag-generate-prompt]
+      (build-playground-skill-params dataset-config ui-config
+                                     query-relax-prompt rag-generate-prompt
+                                     {}))
+     ([dataset-config ui-config query-relax-prompt rag-generate-prompt agent-skill-params]
+      (let [shaped-config (cond-> (or dataset-config {})
+                            query-relax-prompt (assoc :query-planner-prompt query-relax-prompt)
+                            rag-generate-prompt (assoc :synthesis-generation-prompt rag-generate-prompt))]
+        (api-util/build-rag-skill-params shaped-config
+                                         (playground-config->api-params (or ui-config {}))
+                                         (or agent-skill-params {}))))))
+
+#?(:clj
+   (defn execute-skill-graph
+     "Execute the playground skill graph.
 
       Parameters:
         execution-id - Execution ID for tracking
@@ -505,114 +358,336 @@
         config - Playground config (model, temperature, etc.)
         ts-opts - TypeSense options
 
-      Returns: Map with :response and :diagnostics"
+     Returns: Map with :response and :diagnostics"
      [execution-id query all-messages rag-params config ts-opts]
-     (t/log! :info [:skills-pipeline/starting {:execution-id execution-id}])
+     (t/log! :info [:skill-graph/starting {:execution-id execution-id}])
 
      ;; Update stage
-     (update-execution! execution-id {:stage :skills-init})
+     (set-execution-stage! execution-id :skills-init "Initializing skills")
 
      (try
        ;; Initialize skills system (safe to call multiple times)
        (skills-api/initialize!)
 
-       ;; Build inputs for the simple-qa template
-       (let [collections {:docs-collection (:docsCollectionName rag-params)
-                          :chunks-collection (:chunksCollectionName rag-params)
-                          :phrases-collection (:phrasesCollectionName rag-params)}
-             opts {:tenant (:tenant rag-params)
-                   :environment (:environment rag-params)
-                   :parameters {:model (:selected-model rag-params)
-                                :temperature (or (:temperature config) 0.1)
-                                :context-top-k (or (:contextTopkChunks rag-params) 10)
-                                :rerank-top-k (or (:rerankTopkChunks rag-params) 40)}}]
+       ;; Build inputs for the simple-qa skill graph
+       (let [rag-params (normalize-rag-params rag-params)
+             collections {:docs-collection (:docs-collection rag-params)
+                          :chunks-collection (:chunks-collection rag-params)
+                          :phrases-collection (:phrases-collection rag-params)}
+             expected-collections (vec (remove nil? [(:docs-collection collections)
+                                                     (:chunks-collection collections)
+                                                     (:phrases-collection collections)]))
+             typesense-diagnostics (try
+                                     (get-typesense-diagnostics expected-collections ts-opts)
+                                     (catch Exception diag-e
+                                       {:diagnostic-error (.getMessage diag-e)
+                                        :expected-collections expected-collections}))
+             startup-backend-issues (typesense-diagnostics->backend-issues typesense-diagnostics)
+             _ (update-execution-results! execution-id :typesense-startup-diagnostics typesense-diagnostics)
+             _ (when (seq startup-backend-issues)
+                 (update-execution-results! execution-id :backend-issues startup-backend-issues)
+                 (t/log! :warn [:skill-graph/typesense-startup-issues
+                                {:execution-id execution-id
+                                 :issues startup-backend-issues}]))
+             progress-fn (fn [progress]
+                           (doseq [execution-event (skill-events/progress->execution-events progress)]
+                             (emit-execution-event! execution-id execution-event))
+                           ;; Graph steps enter one canonical action trace. The
+                           ;; same records feed the live view and are persisted
+                           ;; with the completed diagnostics below.
+                           (when-let [action (action-trace/progress->action progress)]
+                             (swap! !playground-executions
+                                    update-in [execution-id :action-trace]
+                                    action-trace/upsert-action
+                                    action))
+                           (case (:event progress)
+                             :agent/thinking
+                             (swap! !playground-executions
+                                    update execution-id
+                                    (fnil (fn [execution]
+                                            (assoc execution :live-thinking
+                                                   {:iteration (:iteration progress)
+                                                    :reasoning (:reasoning progress)}))
+                                          {}))
+
+                             :agent/turn-completed
+                             ;; Note: we intentionally do NOT clear :live-thinking here.
+                             ;; It stays sticky until the next :agent/thinking event
+                             ;; overwrites it, so users keep seeing the most recent
+                             ;; reasoning even during turns that produce no new thinking
+                             ;; text. The panel stops rendering once :waiting? flips
+                             ;; to false at the end of the execution.
+                             (swap! !playground-executions
+                                    update execution-id
+                                    (fnil (fn [execution]
+                                            (-> execution
+                                                (update :live-agent-trace
+                                                        (fnil conj [])
+                                                        {:iteration (:iteration progress)
+                                                         :reasoning (:reasoning progress)
+                                                         :tool-calls (:tool-calls progress)})
+                                                (update :live-agent-stage-timings
+                                                        (fnil into [])
+                                                        (vec (or (:stage-timings progress) [])))))
+                                          {}))
+
+                             nil))
+             ;; Pass :model only when the user actively picked one. Leaving
+             ;; it unset lets the synthesis skill honor its runtime config
+             ;; (:synthesis-model) — execution-overrides in resolve-step-
+             ;; parameters runs LAST in the merge order, so an unconditional
+             ;; opts.model would shadow the per-skill value.
+             opts (cond-> {:tenant (:tenant rag-params)
+                           :dataset-config-key (:dataset-config-key rag-params)
+                           :temperature (or (:temperature config) 0.1)
+                           :conversation-history (messages->context all-messages)
+                           :progress-fn progress-fn
+                           :skill-params (:skill-params rag-params)}
+                    (:user-model rag-params) (assoc :model (:user-model rag-params))
+                    ;; assoc-execution-scope inside `run-skill-graph` lifts
+                    ;; this into skill-params so the agent skill's
+                    ;; ambient-ctx :agent-id is populated.
+                    (:agent-id rag-params) (assoc :agent-id (:agent-id rag-params)))
+             ;; E2E scaffold: record the resolved skill-params for the
+             ;; Layer-C Playwright tests. No-op when capture is not
+             ;; explicitly enabled, so production traffic doesn't pay
+             ;; the atom-swap cost.
+             _ (debug/record-last-invocation!
+                 (:agent-id rag-params)
+                 {:user-query query
+                  :skill-params (:skill-params rag-params)
+                  :skill-graph-id (:skill-graph config)
+                  :source :playground})]
 
          ;; Update stage: query planning
-         (update-execution! execution-id {:stage :skills-query-planning})
+         (set-execution-stage! execution-id :skills-query-planning "Planning queries")
 
-         ;; Execute the simple-qa template which runs:
-         ;; query-planner -> retrieval -> rerank -> synthesis
-         (t/log! :info [:skills-pipeline/executing-template
-                        {:template :builtin/simple-qa
-                         :query query
-                         :collections collections}])
-
-         (let [result (skills-api/simple-qa query collections opts)
-               _ (t/log! :debug [:skills-pipeline/raw-result
+         ;; Execute the selected skill graph via the canonical invoke-rag entry
+         ;; point. Playground keeps the rich, UI-coupled diagnostics shaping
+         ;; below; the core call + output-fallback semantics live in
+         ;; digdir.skills.invoke so the MCP server gets the same behavior.
+         (let [skill-graph-id (keyword (or (:skill-graph config) "builtin/agent-rag-graph-bundled"))
+               _ (t/log! :info [:skill-graph/executing-skill-graph
+                                {:skill-graph skill-graph-id
+                                 :query query
+                                 :collections collections}])
+               invoke-result (skills-invoke/invoke-rag
+                              {:user-query query
+                               :claim query
+                               :conversation-history (:conversation-history opts)
+                               :collections collections
+                               :skill-graph-id skill-graph-id
+                               :skill-params (:skill-params opts)
+                               :execution-scope {:tenant (:tenant opts)
+                                                 :dataset-config-key (:dataset-config-key opts)
+                                                 :agent-id (:agent-id opts)}
+                               :model (:model opts)
+                               :temperature (:temperature opts)
+                               :progress-fn progress-fn})
+               result (:raw-result invoke-result)
+               agent-step-result (or (get-in result [:step-results :agent])
+                                     (some (fn [[_ step-result]]
+                                             (when (contains? (or (:outputs step-result) {}) :trace)
+                                               step-result))
+                                           (:step-results result)))
+               _ (t/log! :debug [:skill-graph/raw-result
                                  {:result-type (type result)
                                   :result-keys (when (map? result) (keys result))
                                   :outputs-keys (when (map? result) (keys (:outputs result)))
                                   :search-attribution (get-in result [:outputs :search-attribution])}])]
-           (if (skills-core/result-error? result)
+           (if (= :error (:status invoke-result))
              ;; Handle error
-             (let [error (skills-core/get-result-error result)]
-               (t/log! :error [:skills-pipeline/failed {:error error}])
+             (let [error (:error invoke-result)]
+               (t/log! :error [:skill-graph/failed {:error error}])
                (update-execution! execution-id
                                   {:status :error
                                    :error (:error-message error)
                                    :error-type (str (:error-type error))})
+               (emit-execution-event! execution-id
+                                      (skill-events/request-failed (:error-message error)))
                {:response nil
                 :error error
                 :diagnostics {:skills-error error}})
 
              ;; Handle success
-             (let [outputs (skills-core/get-result-outputs result)
-                   response (:response outputs)
-                   chunks (:chunks outputs)
-                   search-phrases (:search-phrases outputs)
+             (let [outputs (get-in invoke-result [:diagnostics :outputs])
+                   clarification-request (:clarification-request outputs)
+                   response-status (if clarification-request
+                                     :needs_clarification
+                                     :complete)
+                   backend-issues (vec (concat startup-backend-issues
+                                               (or (:backend-issues outputs) [])))
+                   response (:response invoke-result)
+                   chunks (:chunks invoke-result)
+                   queries (:queries invoke-result)
+                   agent-trace (:trace outputs)
+                   canonical-actions (action-trace/normalize-action-trace
+                                      (get-in @!playground-executions
+                                              [execution-id :action-trace]))
+                   is-agentic (some? agent-trace)
+                   agent-stage-timings (vec (or (get-in agent-step-result [:metadata :stage-timings]) []))
                    ;; Extract search attribution for UI diagnostics
-                   search-attribution (or (:search-attribution outputs) {})
-                   ;; Format chunks for diagnostics (compatible with classic pipeline)
+                   search-attributions (or (:search-attributions outputs) [])
+                   search-attribution (or (:search-attribution outputs)
+                                          (aggregate-search-attributions search-attributions)
+                                          {})
+                   search-history (:search-history outputs)
+                   latest-search-entry (last search-history)
+                   agentic-merged-results (mapv (fn [summary]
+                                                 {:chunk_id (:chunk-id summary)
+                                                  :doc_num (:doc-num summary)
+                                                  :chunk_index (:chunk-index summary)
+                                                  :content_length (:content-length summary)
+                                                  :total_chunks (:total-chunks summary)
+                                                  :title (:title summary)
+                                                  :metadata (:headers summary)
+                                                  :search-types (:search-types summary)
+                                                  :retrieval-boosts (:retrieval-boosts summary)})
+                                               (or (:chunk-summaries latest-search-entry) []))
+                   ;; Format chunks for diagnostics using the established Playground shape.
                    format-chunk (fn [c]
-                                  (select-keys c [:chunk_id :rank :search-types :hit-count
-                                                  :title :metadata :content_markdown]))]
+                                  (select-keys c [:chunk_id :doc_num :chunk_index :content_length
+                                                  :total_chunks :rank :search-types :hit-count
+                                                  :title :metadata :content_markdown :type-ranks
+                                                  :retrieval-boosts]))
+                   ;; For agentic graphs, extract search phrases from trace if not provided
+                   effective-queries (if (and is-agentic (empty? queries))
+                                       (let [trace-phrases (pg-timeline/extract-search-phrases-from-trace agent-trace)]
+                                         (if (seq trace-phrases) trace-phrases [query]))
+                                       (or queries [query]))
+                   ;; For non-agentic graphs, split chunks by search type
+                   chunks-by-type (when (and (not is-agentic) (seq chunks))
+                                    (split-chunks-by-search-type chunks))
+                   ;; Build per-type search results
+                   agentic-by-type (when is-agentic (split-chunks-by-search-type agentic-merged-results))
+                   phrase-results (cond
+                                    chunks-by-type (mapv format-chunk (:phrase chunks-by-type))
+                                    agentic-by-type (:phrase agentic-by-type)
+                                    :else (vec (repeat (get search-attribution :phrase 0) {:search-type :phrase})))
+                   metadata-results (cond
+                                      chunks-by-type (mapv format-chunk (:metadata chunks-by-type))
+                                      agentic-by-type (:metadata agentic-by-type)
+                                      :else (vec (repeat (get search-attribution :metadata 0) {:search-type :metadata})))
+                   content-results (cond
+                                     chunks-by-type (mapv format-chunk (:content chunks-by-type))
+                                     agentic-by-type (:content agentic-by-type)
+                                     :else (vec (repeat (get search-attribution :content 0) {:search-type :content})))
+                   merged-count (if is-agentic
+                                  (count agentic-merged-results)
+                                  (get search-attribution :merged (count chunks)))
+                   retrieval-filters (pg-diagnostics/collect-retrieval-filters
+                                       search-attribution
+                                       search-attributions
+                                       agent-trace)]
 
-               (t/log! :info [:skills-pipeline/completed
+               (t/log! :info [:skill-graph/completed
                               {:execution-id execution-id
                                :response-length (count response)
                                :chunks-count (count chunks)
-                               :search-attribution search-attribution}])
+                               :search-attribution search-attribution
+                               :is-agentic is-agentic}])
 
                ;; Store results in execution state for UI display
-               (update-execution-results! execution-id :query-relaxation (or search-phrases [query]))
-               (update-execution-results! execution-id :phrase-search
-                                          (vec (repeat (get search-attribution :phrase 0) {:search-type :phrase})))
-               (update-execution-results! execution-id :metadata-search
-                                          (vec (repeat (get search-attribution :metadata 0) {:search-type :metadata})))
-               (update-execution-results! execution-id :content-search
-                                          (vec (repeat (get search-attribution :content 0) {:search-type :content})))
-               (update-execution-results! execution-id :merged-results (mapv format-chunk (take 20 chunks)))
+               (update-execution-results! execution-id :query-relaxation effective-queries)
+               (update-execution-results! execution-id :phrase-search phrase-results)
+               (update-execution-results! execution-id :metadata-search metadata-results)
+               (update-execution-results! execution-id :content-search content-results)
+               (update-execution-results! execution-id :merged-results (if is-agentic
+                                                                         agentic-merged-results
+                                                                         (mapv format-chunk (take 20 chunks))))
                (update-execution-results! execution-id :retrieved-chunks chunks)
                (update-execution-results! execution-id :used-chunks (mapv format-chunk chunks))
+               (update-execution-results! execution-id :backend-issues backend-issues)
 
                ;; Stream the response to execution state
-               (update-execution! execution-id
-                                  {:stage :skills-generating
-                                   :streaming-content response})
+               (set-execution-stage! execution-id :skills-generating "Generating response")
+               (update-execution! execution-id {:streaming-content response})
+               (emit-execution-event! execution-id
+                                      (skill-events/response-chunk response))
+               (emit-execution-event! execution-id
+                                      (skill-events/stage-completed :skills-generating
+                                                                    "Generating response"))
 
                {:response response
                 :chunks chunks
-                :diagnostics {:query-relaxation (or search-phrases [query])
+               :status response-status
+               :clarification-request clarification-request
+               :diagnostics {:status response-status
+                              :clarification-request clarification-request
+                              :query-relaxation effective-queries
+                              :query-intent (:query-intent outputs)
+                              :budget-state (:budget-state outputs)
+                              :typesense-startup-diagnostics typesense-diagnostics
+                              :search-history search-history
+                              :read-history (:read-history outputs)
+                              :search-errors (:search-errors outputs)
+                              :backend-issues backend-issues
+                              :sufficiency-decisions (:sufficiency-decisions outputs)
+                              :last-insufficiency (:last-insufficiency outputs)
+                              :last-response-validation-insufficiency (:last-response-validation-insufficiency outputs)
                               ;; Search counts for UI display
-                              :phrase-search-count (get search-attribution :phrase 0)
-                              :metadata-search-count (get search-attribution :metadata 0)
-                              :content-search-count (get search-attribution :content 0)
-                              :merged-count (get search-attribution :merged 0)
-                              ;; Detailed results (use chunks as proxy for merged results)
-                              :merged-results (mapv format-chunk (take 20 chunks))
+                              :phrase-search-count (count phrase-results)
+                              :metadata-search-count (count metadata-results)
+                              :content-search-count (count content-results)
+                              :merged-count merged-count
+                              ;; Detailed results
+                              :phrase-search phrase-results
+                              :metadata-search metadata-results
+                              :content-search content-results
+                              :merged-results (if is-agentic
+                                                agentic-merged-results
+                                                (mapv format-chunk (take 20 chunks)))
                               :used-chunks-count (count chunks)
                               :used-chunks (mapv format-chunk chunks)
-                              ;; Additional skill metadata
-                              :skill-execution-metadata (skills-core/get-result-metadata result)}}))))
+                              ;; Additional skill metadata (graph-level execution metadata)
+                              :skill-execution-metadata (:execution-metadata result)
+                              ;; Execution timing from graph runner
+                              :execution-timing (get-in result [:execution-metadata :step-timings])
+                              :execution-stage-timings (get-in result [:execution-metadata :stage-timings])
+                              :agent-stage-timings agent-stage-timings
+                              :total-duration-ms (get-in result [:execution-metadata :total-duration-ms])
+                              ;; Agent trace (only present for agentic skill graphs)
+                              :agent-trace agent-trace
+                              :action-trace canonical-actions
+                              ;; Graph-variant self-improve agents emit a
+                              ;; structured stats map alongside the
+                              ;; Markdown :report. Plumbed through so
+                              ;; the side drawer can render kept /
+                              ;; reverted counts as chips without
+                              ;; re-parsing the report text.
+                              :report-structured (:report-structured outputs)
+                              :agent-trace-count (count agent-trace)
+                              ;; Retrieval filters (applies to all skill graph types)
+                              :retrieval-filters retrieval-filters
+                              ;; Citation data. Agent-rag graphs stash these on
+                              ;; the workspace via the generate_response tool
+                              ;; (agent/tools.clj:1092), so they don't appear at
+                              ;; the top of `outputs` — only inside
+                              ;; `workspace-final`. Older/non-agent graphs
+                              ;; surface them directly. Check both.
+                              :citations (or (get-in outputs [:workspace-final :citations])
+                                             (:citations outputs))
+                              :citation-index (or (get-in outputs [:workspace-final :citation-index])
+                                                  (:citation-index outputs))
+                              ;; Auto-filter info
+                              :auto-filter-applied (:auto-filter-applied search-attribution)
+                              :auto-filter-fallback (:auto-filter-fallback search-attribution)}}))))
 
        (catch Exception e
-         (t/log! :error [:skills-pipeline/exception
+         (t/log! :error [:skill-graph/exception
                          {:execution-id execution-id
-                          :error (.getMessage e)}])
+                          :error (.getMessage e)
+                          :ex-data (ex-data e)}])
+         (emit-execution-event! execution-id
+                                (skill-events/request-failed (.getMessage e)))
          {:response nil
           :error {:error-type :exception
                   :error-message (.getMessage e)}
-          :diagnostics {:exception (.getMessage e)}}))))
+          :diagnostics {:exception (.getMessage e)
+                        :ex-data (ex-data e)
+                        :action-trace (action-trace/normalize-action-trace
+                                       (get-in @!playground-executions
+                                               [execution-id :action-trace]))}}))))
 
 #?(:clj
    (defn execute-playground-chat-pipeline
@@ -622,43 +697,82 @@
       Parameters:
         :conversation-id - ID of the conversation (creates new if nil)
         :tenant - Explicit tenant for config resolution (optional, uses env var if nil)
-        :environment - Explicit environment for config resolution (optional, uses env var if nil)
-        :entity-id - Entity configuration ID
+        :dataset-config-key - Explicit dataset-config-key for dataset resolution (optional, uses env var if nil)
         :query - Current user query
-        :config - Pipeline configuration (model, temperature, etc.)
+        :config - Playground execution overrides (model, temperature, etc.)
         :parent-msg-id - Parent message ID for branching (nil for continuation)
         :branch-index - Branch index when creating alternative branches
         :query-relax-prompt - Optional custom query relaxation prompt
         :rag-generate-prompt - Optional custom RAG generation prompt
-        :filter-by - Optional Typesense filter
         :user-id - User ID for conversation ownership
 
       Returns the execution-id for tracking."
-     [{:keys [conversation-id tenant environment entity-id query config parent-msg-id branch-index
-              query-relax-prompt rag-generate-prompt filter-by user-id]}]
+     [{:keys [conversation-id tenant dataset-config-key runtime-config-key agent-id query config parent-msg-id branch-index
+              query-relax-prompt rag-generate-prompt user-id]}]
      (let [execution-id     (nano-id)
            conn             (db/get-conn)
-           ;; Use explicit tenant/environment if provided, otherwise fall back to env vars
-           effective-tenant (or tenant (digdir.config.core/get-tenant))
-           effective-env    (or environment (digdir.config.core/get-environment))
-           ;; Get entity with explicit scope
-           entity           (when entity-id
-                              (when-let [config-conn (digdir.config.db/get-conn)]
-                                (digdir.config.db/get-entity
-                                 @config-conn
-                                 effective-tenant
-                                 effective-env
-                                 entity-id
-                                 (digdir.config.core/get-master-key))))
-           _                (when-not entity
-                              (throw (ex-info (str "Entity not found: " entity-id) {:entity-id   entity-id
-                                                                                    :tenant      effective-tenant
-                                                                                    :environment effective-env})))
+           effective-agent-id agent-id
+           _ (when-not effective-agent-id
+               (throw (ex-info "Missing required field: agent-id" {:status 400})))
+           effective-tenant tenant
+           effective-dataset-config-key dataset-config-key
+           effective-runtime-config-key (or runtime-config-key "default")
+           runtime-config-result
+                           (try
+                             (let [runtime-opts (cond-> {:tenant effective-tenant
+                                                         :agent-id effective-agent-id
+                                                         :tenant-config-key effective-runtime-config-key}
+                                                  (:runtime-node-id config) (assoc :node-id (:runtime-node-id config))
+                                                  (:runtime-config-key config) (assoc :tenant-config-key (:runtime-config-key config))
+                                                  (:runtime-tenant-config-key config) (assoc :tenant-config-key (:runtime-tenant-config-key config))
+                                                  (and (not (:runtime-node-id config))
+                                                       (not (:runtime-config-key config))
+                                                       (not (:runtime-tenant-config-key config)))
+                                                  (assoc :tenant-config-key "default")
+                                                  (:dataset-id config) (assoc :dataset-id (:dataset-id config)))]
+                               (assoc (cfg/get-runtime-skill-config-v2-with-trace runtime-opts)
+                                      :source :v2))
+                             (catch Exception e
+                               (throw (ex-info "Runtime config resolution failed"
+                                               {:tenant effective-tenant
+                                                :dataset-config-key effective-dataset-config-key
+                                                :runtime-config-key effective-runtime-config-key
+                                                :agent-id effective-agent-id
+                                                :runtime-config-error {:message (.getMessage e)
+                                                                       :type (str (type e))}}
+                                               e))))
+           ;; Get dataset config with explicit scope
+           dataset-ref      {:tenant effective-tenant
+                             :dataset-config-key effective-dataset-config-key}
+           dataset-config   (when-let [config-conn (digdir.config.db/get-conn)]
+                              (let [master-key (digdir.config.core/get-master-key)]
+                                (some-> (digdir.config.db/get-dataset-by-ref
+                                         @config-conn
+                                         dataset-ref
+                                         master-key)
+                                        (merge (:config runtime-config-result)))))
+           canonical-dataset-config-key
+                           (or (:dataset-config-key dataset-config)
+                               effective-dataset-config-key)
+           _                (when-not dataset-config
+                              (throw (ex-info "Dataset not found"
+                                              {:dataset-ref dataset-ref
+                                               :tenant effective-tenant
+                                               :dataset-config-key effective-dataset-config-key})))
 
            ;; Create conversation if not provided
            actual-convo-id  (or conversation-id
                                 (:conversation-id
-                                 (db/create-playground-conversation conn entity-id user-id)))
+                                 (db/create-playground-conversation conn effective-agent-id
+                                   {:user-id user-id
+                                    :tenant effective-tenant
+                                    :dataset-config-key canonical-dataset-config-key
+                                    :skill-graph-id (or (:skill-graph config) "builtin/agent-rag-graph-bundled")})))
+
+           ;; Persist user message IMMEDIATELY so it appears in UI before pipeline runs
+           user-msg-result  (db/transact-playground-user-msg
+                              conn actual-convo-id query config parent-msg-id branch-index)
+           user-msg-id      (:message/id user-msg-result)
 
            ;; Get message lineage for context (if we have a parent)
            context-messages (when parent-msg-id
@@ -666,265 +780,242 @@
 
            ;; Build full message history for query relaxation
            all-messages     (-> (messages->context (or context-messages []))
-                                (conj {:message/role :user
+                                (conj {:role :user
+                                       :text query
+                                       :message/role :user
                                        :message/text query}))
 
            ;; Initialize execution state
            _                (swap! !playground-executions assoc execution-id
-                                   {:status            :running
-                                    :stage             :init
-                                    :streaming-content ""
-                                    :results           {}
-                                    :error             nil
-                                    :started-at        (str (java.time.Instant/now))
-                                    :tenant            effective-tenant
-                                    :environment       effective-env
-                                    :entity-id         entity-id
-                                    :conversation-id   actual-convo-id
-                                    :query             query
+                                    {:status            :running
+                                     :stage             :init
+                                     :streaming-content ""
+                                     :events            []
+                                     :action-trace      []
+                                     :results           {}
+                                     :live-status       nil
+                                     :error             nil
+                                     :started-at        (str (java.time.Instant/now))
+                                     :tenant            effective-tenant
+                                     :dataset-config-key canonical-dataset-config-key
+                                     :agent-id          effective-agent-id
+                                     :conversation-id   actual-convo-id
+                                     :query             query
+                                     :user-id           user-id
+                                    :user-msg-id       user-msg-id
                                     :parent-msg-id     parent-msg-id
                                     :branch-index      branch-index})
 
            ;; Build params for reranking
-           ;; Uses 3-level precedence: playground config > entity config > global default
+           ;; Uses 3-level precedence: playground config > pipeline config > global default
            rag-params       {:conversation-id       actual-convo-id
                              :execution-id          execution-id
                              :tenant                effective-tenant
-                             :environment           effective-env
-                             :entity-id             entity-id
+                             :dataset-config-key    canonical-dataset-config-key
+                             ;; Carry the agent identity into rag-params so
+                             ;; `execute-skill-graph` can thread it into the
+                             ;; skills layer's `opts` (and from there into
+                             ;; ambient-ctx :agent-id). Without this the agent
+                             ;; skill sees `:agent-id nil` and any code that
+                             ;; differentiates by agent (e.g. the loop's
+                             ;; `enrichment-mode-agent?` predicate) silently
+                             ;; falls back to default behavior — exactly the
+                             ;; failure mode observed in the self-improve-agent
+                             ;; playground smoke traces 2026-05-18T15-21-26 / 15-42-59.
+                             :agent-id              effective-agent-id
+                             ;; Resolve the agent's :skill-params and let
+                             ;; build-playground-skill-params layer it
+                             ;; between dataset-config defaults and UI
+                             ;; overrides. `agents-db/get-agent` returns
+                             ;; nil for unknown agent-ids; we fall back
+                             ;; to {} so the merge still has the right
+                             ;; shape (no behaviour change vs the
+                             ;; pre-agent-skill-params world).
+                             :skill-params          (build-playground-skill-params
+                                                      dataset-config
+                                                      config
+                                                      query-relax-prompt
+                                                      rag-generate-prompt
+                                                      (or (:skill-params
+                                                            (agents-db/get-agent
+                                                              @conn
+                                                              effective-agent-id))
+                                                          {}))
                              :original_user_query   query
                              :translated_user_query query
-                             :selected-model        (:model config)
+                             ;; :user-model = the user's explicit override
+                             ;; (nil if the picker is on "Default"). :selected-model
+                             ;; is the resolved value used purely for display
+                             ;; (response payload, conversation topic) and always
+                             ;; carries something — it doesn't drive opts.model.
+                             :user-model            (when-let [m (:model config)]
+                                                      (when-not (clojure.string/blank? m) m))
+                             :selected-model        (if (llm/use-azure-openai effective-tenant)
+                                                    (cfg/get {:tenant effective-tenant} :services :azure-openai :deployment-name)
+                                                    (or (:model config)
+                                                        (:synthesis-model dataset-config)
+                                                        "gpt-4o"))
                              ;; Rerank parameters
                              :rerankTopkChunks      (or (:rerank-top-k config)
-                                                        (:rerank-top-k entity))
+                                                        (:rerank-top-k dataset-config))
+                             ;; Playground exercises full-RAG flow → :rag-* values.
                              :rerankMaxChunkLength  (or (:rerank-max-chunk-length config)
-                                                        (:rerank-max-chunk-length entity))
+                                                        (:rerank-rag-max-chunk-length dataset-config))
                              :rerankMaxLength       (or (:rerank-max-total-length config)
-                                                        (:rerank-max-total-length entity))
+                                                        (:rerank-rag-max-total-length dataset-config))
                              ;; Context parameters
                              :contextTopkChunks     (or (:context-top-k config)
-                                                        (:context-top-k entity))
+                                                        (:rerank-rag-context-top-k dataset-config))
+                             :contextMinChunks      (or (:context-min-chunks config)
+                                                        (:rerank-context-min-chunks dataset-config)
+                                                        8)
+                             :contextRelativeScoreThreshold (or (:context-relative-score-threshold config)
+                                                                (:rerank-context-relative-score-threshold dataset-config)
+                                                                0.85)
                              :contextMaxChunkLength (or (:context-max-chunk-length config)
-                                                        (:context-max-chunk-length entity))
+                                                        (:rerank-rag-context-max-chunk-length dataset-config))
                              :maxContextLength      (or (:context-max-total-length config)
-                                                        (:context-max-total-length entity))
+                                                        (:rerank-rag-max-context-length dataset-config))
                              ;; Collection names
-                             :docsCollectionName    (:docs-collection entity)
-                             :chunksCollectionName  (:chunks-collection entity)
-                             :phrasesCollectionName (:phrases-collection entity)
+                             :docsCollectionName    (:docs-collection dataset-config)
+                             :chunksCollectionName  (:chunks-collection dataset-config)
+                             :phrasesCollectionName (:phrases-collection dataset-config)
                              ;; Prompts (use new kebab-case property names)
-                             :promptRagQueryRelax   (or query-relax-prompt (:prompt-query-relax entity))
-                             :promptRagGenerate     (or rag-generate-prompt (:prompt-rag-generate entity))}
+                             :promptRagQueryRelax   (or query-relax-prompt
+                                                        (:query-planner-prompt dataset-config))
+                             :promptRagGenerate     (or rag-generate-prompt
+                                                        (:synthesis-generation-prompt dataset-config))
+                             ;; Retrieval merge overrides
+                             :retrieveStrategyWeights           (:retrieval-strategy-weights dataset-config)
+                             :retrieveStrategyContributionCaps  (:retrieval-strategy-contribution-caps dataset-config)}
 
-           ;; Build Typesense opts for config resolution with explicit tenant/environment
+           ;; Build Typesense opts for config resolution with explicit tenant/dataset-config-key
            ts-opts          {:tenant      effective-tenant
-                             :environment effective-env}]
+                             :runtime-config-key effective-runtime-config-key}
+           resolved-runtime-context
+                            {:execution-id execution-id
+                             :tenant effective-tenant
+                             :dataset-config-key canonical-dataset-config-key
+                             :runtime-config-key effective-runtime-config-key
+                             :agent-id effective-agent-id
+                             :runtime-config-source (:source runtime-config-result)
+                             :runtime-node-id (get-in runtime-config-result [:node :config.node/id])
+                             :runtime-config-traces (:traces runtime-config-result)
+                             :runtime-config-error nil
+                             :collections {:docs-collection (:docs-collection dataset-config)
+                                           :chunks-collection (:chunks-collection dataset-config)
+                                           :phrases-collection (:phrases-collection dataset-config)}}]
+
+      (update-execution-results! execution-id :resolved-runtime-context resolved-runtime-context)
+      (t/log! :debug [:playground-chat/resolved-runtime-context resolved-runtime-context])
+      (emit-execution-event! execution-id
+                             (skill-events/request-started execution-id query))
 
        ;; Execute pipeline in a future to not block
        (future
          (try
-           ;; Check if skills mode is enabled
-           (if (:use-skills config)
-             ;; === SKILLS-BASED EXECUTION ===
-             (do
-               (t/log! :info [:playground-chat/using-skills {:execution-id execution-id}])
-               (let [result        (execute-skills-pipeline
-                                    execution-id
-                                    query
-                                    all-messages
-                                    rag-params
-                                    config
-                                    ts-opts)
-                     response-text (:response result)
-                     diagnostics   (:diagnostics result)]
+           (t/log! :info [:playground-chat/using-skills {:execution-id execution-id}])
+           (let [result        (execute-skill-graph
+                                execution-id
+                                query
+                                all-messages
+                                rag-params
+                                config
+                                ts-opts)
+                 response-text (:response result)
+                 diagnostics   (:diagnostics result)]
 
-                 (if (:error result)
-                   ;; Skills execution failed
-                   (update-execution! execution-id
-                                      {:status     :error
-                                       :error      (get-in result [:error :error-message])
-                                       :error-type (str (get-in result [:error :error-type]))})
+             (if (:error result)
+               (do
+                 (update-execution! execution-id
+                                    {:status     :error
+                                     :error      (get-in result [:error :error-message])
+                                     :error-type (str (get-in result [:error :error-type]))})
+                 (emit-execution-event! execution-id
+                                        (skill-events/request-failed
+                                         (get-in result [:error :error-message]))))
 
-                   ;; Skills execution succeeded - persist messages
-                   (let [;; Persist user message
-                         user-msg-result      (db/transact-playground-user-msg
-                                               conn
-                                               actual-convo-id
-                                               query
-                                               config
-                                               parent-msg-id
-                                               branch-index)
-                         user-msg-id          (:message/id user-msg-result)
+               (let [assistant-msg-result (db/queue-playground-assistant-msg!
+                                           actual-convo-id
+                                           response-text
+                                           diagnostics
+                                           execution-id
+                                           user-msg-id
+                                           0
+                                           ;; After the background-worker
+                                           ;; actually transacts the
+                                           ;; assistant msg, stamp
+                                           ;; :assistant-msg-committed-at
+                                           ;; on the execution. The
+                                           ;; playground UI watches this
+                                           ;; key as a reactive trigger
+                                           ;; for refetching
+                                           ;; `fetch-conversation-tree`,
+                                           ;; so the assistant bubble
+                                           ;; appears as soon as the row
+                                           ;; lands in Datahike rather
+                                           ;; than only after a full page
+                                           ;; reload (bug #74,
+                                           ;; 2026-05-19).
+                                           {:callback
+                                            (fn [_]
+                                              (update-execution! execution-id
+                                                                 {:assistant-msg-committed-at
+                                                                  (str (java.time.Instant/now))}))})]
+                 (update-execution! execution-id
+                                    {:assistant-msg-id (:message/id assistant-msg-result)})
+                 (update-execution! execution-id
+                                    {:status       (or (:status result) :complete)
+                                     :stage        :complete
+                                     :completed-at (str (java.time.Instant/now))})
+                 (doseq [issue (:backend-issues diagnostics)]
+                   (emit-execution-event! execution-id
+                                          (skill-events/warning-raised
+                                           {:code (or (:issue-type issue) :backend-issue)
+                                            :message (or (:message issue) "Backend issue detected")
+                                            :details issue})))
+                 (when (:auto-filter-fallback diagnostics)
+                   (emit-execution-event! execution-id
+                                          (skill-events/warning-raised
+                                           {:code :auto-filter-fallback
+                                            :message "Auto-filter fallback used unfiltered retrieval"})))
+                 (emit-execution-event! execution-id
+                                        (skill-events/response-finalized
+                                         {:text response-text
+                                          :status (:status result)
+                                          :clarification-request (:clarification-request result)
+                                          :diagnostics diagnostics})))))
+            (catch Exception e
+              (t/log! :error [:playground-chat/pipeline-error
+                              {:execution-id  execution-id
+                               :error-message (.getMessage e)
+                               :error-type    (str (type e))}])
+              ;; Gather Typesense diagnostics on error
+              (let [expected-collections [(:docs-collection dataset-config)
+                                          (:chunks-collection dataset-config)
+                                          (:phrases-collection dataset-config)]
+                    ts-diagnostics       (try
+                                           (get-typesense-diagnostics expected-collections ts-opts)
+                                           (catch Exception diag-e
+                                             {:diagnostic-error (.getMessage diag-e)}))]
+                (update-execution! execution-id
+                                   {:status                :error
+                                    :error                 (.getMessage e)
+                                    :error-type            (str (type e))
+                                    :typesense-diagnostics ts-diagnostics
+                                    ;; Add runtime dataset scope info for debugging config resolution
+                                    :debug-info            {:dataset-ref       {:tenant effective-tenant
+                                                                                 :dataset-config-key effective-dataset-config-key}
+                                                            :effective-tenant effective-tenant
+                                                            :dataset-config-key effective-dataset-config-key
+                                                            :runtime-config-key effective-runtime-config-key
+                                                            :dataset-config   (select-keys dataset-config [:id :name :docs-collection
+                                                                                                           :chunks-collection :phrases-collection])}
+                                    :completed-at          (str (java.time.Instant/now))})
+                (emit-execution-event! execution-id
+                                       (skill-events/request-failed (.getMessage e)))))))
 
-                         ;; Persist assistant response
-                         assistant-msg-result (db/transact-playground-assistant-msg
-                                               conn
-                                               actual-convo-id
-                                               response-text
-                                               diagnostics
-                                               execution-id
-                                               user-msg-id
-                                               0)]
-
-                     ;; Store message IDs in execution state
-                     (update-execution! execution-id
-                                        {:user-msg-id      user-msg-id
-                                         :assistant-msg-id (:message/id assistant-msg-result)})
-
-                     ;; Mark complete
-                     (update-execution! execution-id
-                                        {:status       :complete
-                                         :stage        :complete
-                                         :completed-at (str (java.time.Instant/now))})))))
-
-             ;; === CLASSIC EXECUTION (else branch of skills if) ===
-             ;; Stage 1: Query relaxation with full history
-             (let [search-phrases (execute-query-relaxation-with-history
-                                   execution-id
-                                   all-messages
-                                   (:promptRagQueryRelax rag-params))]
-
-               ;; Stage 2: Run all three searches (pass ts-opts for config resolution)
-               (let [phrase-results   (execute-phrase-search
-                                       execution-id
-                                       (:phrasesCollectionName rag-params)
-                                       (:docsCollectionName rag-params)
-                                       search-phrases
-                                       (:phrase-gen-prompt entity)
-                                       filter-by
-                                       ts-opts)
-                     metadata-results (execute-metadata-search
-                                       execution-id
-                                       (:chunksCollectionName rag-params)
-                                       (:docsCollectionName rag-params)
-                                       search-phrases
-                                       filter-by
-                                       ts-opts)
-                     content-results  (execute-content-search
-                                       execution-id
-                                       (:chunksCollectionName rag-params)
-                                       (:docsCollectionName rag-params)
-                                       search-phrases
-                                       filter-by
-                                       ts-opts)]
-
-                 ;; Stage 3: Merge results (with optional threshold filtering)
-                 (let [merged (execute-merge-results
-                               execution-id
-                               phrase-results
-                               metadata-results
-                               content-results
-                               (:rerank-threshold config))]
-
-                   ;; Stage 4: Retrieve chunks
-                   (let [retrieved (execute-retrieve-chunks
-                                    execution-id
-                                    (:docsCollectionName rag-params)
-                                    (:chunksCollectionName rag-params)
-                                    merged
-                                    ts-opts)]
-
-                     ;; Stage 5: Rerank
-                     (let [{:keys [used-chunks full-prompt]} (execute-rerank
-                                                              execution-id
-                                                              retrieved
-                                                              rag-params)]
-
-                       ;; Stage 6: Generate response
-                       (stream-playground-generation execution-id full-prompt config)
-
-                       ;; Store used chunks in execution state
-                       (update-execution-results! execution-id :used-chunks used-chunks)
-
-                       ;; === PERSISTENCE ===
-                       ;; Now persist the user message and assistant response to Datahike
-                       (let [response-text        (get-in @!playground-executions
-                                                          [execution-id :streaming-content])
-                             ;; Build lookup for title/metadata from retrieved chunks
-                             docs-coll-key        (keyword (:docsCollectionName rag-params))
-                             chunk-lookup         (into {}
-                                                        (map (fn [c]
-                                                               [(:chunk_id c)
-                                                                {:title    (get-in c [docs-coll-key :title])
-                                                                 :metadata (:metadata c)}])
-                                                             retrieved))
-                             ;; Enrich result with title/metadata from lookup
-                             enrich-result        (fn [r]
-                                                    (let [chunk-id    (:chunk_id r)
-                                                          lookup-data (get chunk-lookup chunk-id)]
-                                                      (-> (select-keys r [:chunk_id :rank :search-types :hit-count])
-                                                          (assoc :title (:title lookup-data))
-                                                          (assoc :metadata (or (:metadata lookup-data)
-                                                                               (:metadata r))))))
-                             diagnostics          {:query-relaxation      search-phrases
-                                                   :phrase-search-count   (count phrase-results)
-                                                   :phrase-search         (mapv enrich-result (take 20 phrase-results))
-                                                   :metadata-search-count (count metadata-results)
-                                                   :metadata-search       (mapv enrich-result (take 20 metadata-results))
-                                                   :content-search-count  (count content-results)
-                                                   :content-search        (mapv enrich-result (take 20 content-results))
-                                                   :merged-count          (count merged)
-                                                   :merged-results        (mapv enrich-result (take 20 merged))
-                                                   :used-chunks-count     (count used-chunks)
-                                                   :used-chunks           (mapv enrich-result used-chunks)}
-
-                             ;; Persist user message
-                             user-msg-result      (db/transact-playground-user-msg
-                                                   conn
-                                                   actual-convo-id
-                                                   query
-                                                   config
-                                                   parent-msg-id
-                                                   branch-index)
-                             user-msg-id          (:message/id user-msg-result)
-
-                             ;; Persist assistant response (parent is the user message)
-                             assistant-msg-result (db/transact-playground-assistant-msg
-                                                   conn
-                                                   actual-convo-id
-                                                   response-text
-                                                   diagnostics
-                                                   execution-id
-                                                   user-msg-id
-                                                   0)]  ; Assistant always branch-index 0 under its parent
-                         
-                         ;; Store message IDs in execution state
-                         (update-execution! execution-id
-                                            {:user-msg-id      user-msg-id
-                                             :assistant-msg-id (:message/id assistant-msg-result)}))
-
-                       ;; Mark complete
-                       (update-execution! execution-id
-                                          {:status       :complete
-                                           :stage        :complete
-                                           :completed-at (str (java.time.Instant/now))}))))))) 
-           (catch Exception e
-             (t/log! :error [:playground-chat/pipeline-error
-                             {:execution-id  execution-id
-                              :error-message (.getMessage e)
-                              :error-type    (str (type e))}])
-             ;; Gather Typesense diagnostics on error
-             (let [expected-collections [(:docs-collection entity)
-                                         (:chunks-collection entity)
-                                         (:phrases-collection entity)]
-                   ts-diagnostics       (try
-                                          (get-typesense-diagnostics expected-collections ts-opts)
-                                          (catch Exception diag-e
-                                            {:diagnostic-error (.getMessage diag-e)}))]
-               (update-execution! execution-id
-                                  {:status                :error
-                                   :error                 (.getMessage e)
-                                   :error-type            (str (type e))
-                                   :typesense-diagnostics ts-diagnostics
-                                   ;; Add entity/scope info for debugging config resolution
-                                   :debug-info            {:entity-id        entity-id
-                                                           :effective-tenant effective-tenant
-                                                           :effective-env    effective-env
-                                                           :entity-config    (select-keys entity [:id :name :docs-collection
-                                                                                                  :chunks-collection :phrases-collection])}
-                                   :completed-at          (str (java.time.Instant/now))})))))
-
-       ;; Return execution ID and conversation ID immediately
+       ;; Return execution ID, conversation ID, and user message ID immediately
        {:execution-id    execution-id
-        :conversation-id actual-convo-id})))
+        :conversation-id actual-convo-id
+        :user-msg-id     user-msg-id})))

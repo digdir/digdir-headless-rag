@@ -1,5 +1,14 @@
 {:tasks
  {:init (do
+          ;; Deploy host. Single override point, shared with deploy.yml, which
+          ;; reads the same DIGDIR_DEPLOY_HOST variable for `servers:` and
+          ;; `builder.remote`. Unset falls back to the current production host,
+          ;; so existing deploys and port-forwards behave exactly as before.
+          ;; Standing up a second environment means exporting the variable, not
+          ;; editing tracked files.
+          (def deploy-host
+            (or (not-empty (System/getenv "DIGDIR_DEPLOY_HOST")) "5.75.220.232"))
+
           (def valid-destinations
             ["test" "prod"])
 
@@ -24,22 +33,614 @@
              "test" "https://admin.test.kunnskap.digdir.cloud"})
 
           (defn show-integration-test-error []
-            (println "Error: environment is required.")
-            (println "\nUsage: bb integration-test <environment>")
-            (println "\nAvailable environments:")
+            (println "Error: config-key is required.")
+            (println "\nUsage: bb integration-test <config-key>")
+            (println "\nAvailable config-keys:")
             (doseq [env (keys api-base-urls)]
-              (println (str "  - " env)))))
+              (println (str "  - " env))))
 
-  dev {:description "Starts admin in dev mode with port forwarding"
+          (def read-edn (fn [s]
+                          (clojure.edn/read-string {:readers {'sorted/map identity}} s)))
+          (def write-json (requiring-resolve 'cheshire.core/generate-string))
+          (def status-line-re (re-pattern "\\n__STATUS__:(\\d{3})\\s*$"))
+          (def status-strip-re (re-pattern "\\n__STATUS__:\\d{3}\\s*$"))
+
+          (defn debug-api-base-url []
+            (or (System/getenv "RAG_API_BASE_URL")
+                "http://localhost:8081"))
+
+          (defn debug-api-key []
+            (System/getenv "RAG_DEBUG_API_KEY"))
+
+          (defn call-debug-endpoint
+            [endpoint params]
+            (let [api-key (debug-api-key)
+                  _ (when-not api-key
+                      (throw (ex-info "Missing debug API key: set RAG_DEBUG_API_KEY" {})))
+                  url (str (debug-api-base-url) endpoint)
+                  query-args (->> params
+                                  (remove (fn [[_ v]]
+                                            (or (nil? v)
+                                                (and (string? v) (clojure.string/blank? v)))))
+                                  (mapcat (fn [[k v]]
+                                            ["--data-urlencode" (str (name k) "=" v)])))
+                  curl-args (concat ["curl" "-sS" "--get" url
+                                     "-H" (str "X-Debug-Api-Key: " api-key)
+                                     "-w" "\n__STATUS__:%{http_code}"]
+                                    query-args)
+                  result (apply shell {:out :string :err :out :continue true} curl-args)
+                  out (:out result)
+                  status-match (re-find status-line-re out)
+                  status (some-> status-match second Integer/parseInt)
+                  body (clojure.string/replace out status-strip-re "")]
+              (when-not (zero? (:exit result))
+                (throw (ex-info "curl failed" {:exit (:exit result) :body body})))
+              (when (or (nil? status) (>= status 400))
+                (throw (ex-info "Debug endpoint request failed" {:status status :body body})))
+              body))
+
+          (defn call-debug-endpoint-edn
+            [endpoint params]
+            (read-edn (call-debug-endpoint endpoint params)))
+
+          (defn call-debug-endpoint-post
+            [endpoint body]
+            (let [api-key (debug-api-key)
+                  _ (when-not api-key
+                      (throw (ex-info "Missing debug API key: set RAG_DEBUG_API_KEY" {})))
+                  url (str (debug-api-base-url) endpoint)
+                  payload (write-json body)
+                  curl-args ["curl" "-sS" "-X" "POST" url
+                             "-H" (str "X-Debug-Api-Key: " api-key)
+                             "-H" "Content-Type: application/json"
+                             "--data-raw" payload
+                             "-w" "\n__STATUS__:%{http_code}"]
+                  result (apply shell {:out :string :err :out :continue true} curl-args)
+                  out (:out result)
+                  status-match (re-find status-line-re out)
+                  status (some-> status-match second Integer/parseInt)
+                  body (clojure.string/replace out status-strip-re "")]
+              (when-not (zero? (:exit result))
+                (throw (ex-info "curl failed" {:exit (:exit result) :body body})))
+              (when (or (nil? status) (>= status 400))
+                (throw (ex-info "Debug endpoint request failed" {:status status :body body})))
+              body))
+
+          (defn call-debug-endpoint-post-edn
+            [endpoint body]
+            (read-edn (call-debug-endpoint-post endpoint body)))
+
+          (defn parse-last-edn-line
+            [s]
+            (let [lines (reverse (clojure.string/split-lines (or s "")))]
+              (or
+               (some (fn [line]
+                       (let [line (clojure.string/trim line)]
+                         (when (seq line)
+                           (try
+                             (read-edn line)
+                             (catch Throwable _ nil)))))
+                     lines)
+               (throw (ex-info "No EDN payload found in command output" {:output s})))))
+
+          (defn edn-line?
+            [line]
+            (let [line (clojure.string/trim (str (or line "")))]
+              (when (seq line)
+                (try
+                  (read-edn line)
+                  true
+                  (catch Throwable _ false)))))
+
+          (defn ensure-cli-flag
+            [cli-opts flag value]
+            (if (some (fn [x] (= flag x)) cli-opts)
+              (vec cli-opts)
+              (vec (concat cli-opts [flag value]))))
+
+          (defn dataset-ref-params
+            [tenant config-key pipeline]
+            {:tenant tenant
+             :config-key config-key
+             :pipeline pipeline})
+
+          (defn parse-cli-flags
+            "Parse a vec of `--key value` pairs into a map.
+             Bare flags (no value) become `true`.
+             Unknown trailing tokens are placed under `:_positional`."
+            [tokens]
+            (loop [m {} positional [] xs (vec tokens)]
+              (cond
+                (empty? xs)
+                (cond-> m (seq positional) (assoc :_positional positional))
+
+                (clojure.string/starts-with? (str (first xs)) "--")
+                (let [k (keyword (subs (str (first xs)) 2))
+                      next-tok (second xs)
+                      val? (and next-tok
+                                (not (clojure.string/starts-with? (str next-tok) "--")))]
+                  (if val?
+                    (recur (assoc m k next-tok) positional (drop 2 xs))
+                    (recur (assoc m k true) positional (drop 1 xs))))
+
+                :else
+                (recur m (conj positional (first xs)) (rest xs)))))
+
+          (def diataxis-universe
+            "Canonical Diátaxis docs-framework values used by the
+             website pipeline's Hugo frontmatter. Hardcoded because
+             this is a closed set defined by the framework, not data
+             from the corpus."
+            ["explanation" "how-to-guides" "reference" "tutorials"])
+
+          (defn diataxis-filter-clause
+            "Build a Typesense filter_by clause for matching one or more
+             diataxis values, with optional inclusion of docs that have
+             NO diataxis value set.
+
+             - When `permissive?` is true, uses `diataxis:!=[<others>]`
+               which matches both the requested values AND docs without
+               any diataxis field (~32% of the corpus). Recommended.
+             - When `permissive?` is false, uses strict
+               `diataxis:=[<requested>]`.
+
+             Returns nil if `values` is empty or covers the full universe
+             (no filter needed)."
+            [values permissive?]
+            (let [requested (->> (clojure.string/split (str values) (re-pattern ","))
+                                 (map clojure.string/trim)
+                                 (remove clojure.string/blank?)
+                                 set)]
+              (when (and (seq requested)
+                         (not= requested (set diataxis-universe)))
+                (if permissive?
+                  (let [others (->> diataxis-universe
+                                    (remove requested)
+                                    (clojure.string/join ","))]
+                    (str "diataxis:!=[" others "]"))
+                  (str "diataxis:=[" (clojure.string/join "," requested) "]")))))
+
+          (defn merge-filter-clauses
+            "Combine N filter_by clauses with `&&`, skipping nil/blank ones."
+            [& clauses]
+            (let [non-empty (->> clauses
+                                 (remove nil?)
+                                 (remove clojure.string/blank?))]
+              (when (seq non-empty)
+                (clojure.string/join " && " non-empty))))
+
+          (defn ts-search-params
+            "Build query params for /api/debug/typesense-search from positional
+             args + parsed --flag map.
+
+             Special handling for --diataxis / --diataxis-strict: builds a
+             filter clause that matches the named diataxis value(s).
+             By default the filter is *permissive* — it also includes docs
+             that have no diataxis value set (a content gap; ~32% of the
+             corpus). Pass --diataxis-strict to require an explicit match."
+            [tenant config-key role q flags]
+            (let [diataxis-clause (when (:diataxis flags)
+                                    (diataxis-filter-clause
+                                     (:diataxis flags)
+                                     (not (:diataxis-strict flags))))
+                  combined-filter (merge-filter-clauses
+                                   (:filter-by flags)
+                                   diataxis-clause)]
+              (cond-> {:tenant tenant
+                       :dataset-config-key config-key
+                       :role role
+                       :q q}
+                (:query-by flags)       (assoc :query-by (:query-by flags))
+                combined-filter         (assoc :filter-by combined-filter)
+                (:sort-by flags)        (assoc :sort-by (:sort-by flags))
+                (:facet-by flags)       (assoc :facet-by (:facet-by flags))
+                (:include-fields flags) (assoc :include-fields (:include-fields flags))
+                (:limit flags)          (assoc :limit (:limit flags)))))
+
+          (defn ts-get-params
+            [tenant config-key role flags]
+            (cond-> {:tenant tenant
+                     :dataset-config-key config-key
+                     :role role}
+              (:ids flags)            (assoc :ids (:ids flags))
+              (:range flags)          (assoc :range (:range flags))
+              (:include-fields flags) (assoc :include-fields (:include-fields flags))))
+
+          (defn ts-search-result->text
+            [result]
+            (let [hits (or (:hits result) [])
+                  facets (:facets result)]
+              (str "== TS-SEARCH "
+                   "role=" (name (or (:role result) "?"))
+                   " collection=" (:collection result)
+                   " hits=" (count hits) "/" (or (:found-count result) "?")
+                   " ==\n"
+                   (clojure.string/join
+                    "\n"
+                    (map-indexed (fn [i hit]
+                                   (let [doc (:document hit)
+                                         hl (:highlights hit)
+                                         snippet (or (some :snippet hl)
+                                                     (some :value (mapcat :snippets hl))
+                                                     "")]
+                                     (str (inc i) ". "
+                                          (pr-str (dissoc doc :phrase_vec
+                                                          :question_vec
+                                                          :triple_vec
+                                                          :content_vec))
+                                          (when (seq snippet)
+                                            (str "\n   snippet: " snippet)))))
+                                 hits))
+                   (when facets
+                     (str "\n\n-- facets --\n"
+                          (clojure.string/join
+                           "\n"
+                           (map (fn [[field counts]]
+                                  (str field ": "
+                                       (clojure.string/join ", "
+                                                            (map (fn [{:keys [value count]}]
+                                                                   (str value "(" count ")"))
+                                                                 counts))))
+                                facets)))))))
+
+          (defn ts-get-result->text
+            [result]
+            (let [docs (or (:documents result) [])]
+              (str "== TS-GET "
+                   "role=" (name (or (:role result) "?"))
+                   " collection=" (:collection result)
+                   " found=" (or (:found-count result) (count docs))
+                   " ==\n"
+                   (clojure.string/join
+                    "\n\n"
+                    (map (fn [doc]
+                           (with-out-str
+                             (clojure.pprint/pprint
+                              (dissoc doc :phrase_vec :question_vec
+                                      :triple_vec :content_vec))))
+                         docs)))))
+
+          (defn ts-retrieve-params
+            [tenant config-key flags]
+            (cond-> {:tenant tenant
+                     :dataset-config-key config-key}
+              (:queries flags)            (assoc :queries (:queries flags))
+              (:q flags)                  (assoc :q (:q flags))
+              (:limit flags)              (assoc :limit (:limit flags))
+              (:retrieve-top-k flags)     (assoc :retrieve-top-k (:retrieve-top-k flags))
+              (:max-per-document flags)   (assoc :max-per-document (:max-per-document flags))
+              (:metadata-only flags)      (assoc :metadata-only (:metadata-only flags))
+              (:query-aware-boost flags)  (assoc :query-aware-boost (:query-aware-boost flags))
+              (:rerank-with-colbert flags) (assoc :rerank-with-colbert (:rerank-with-colbert flags))
+              (:auto-filter flags)        (assoc :auto-filter (:auto-filter flags))
+              (:enrichment-types flags)   (assoc :enrichment-types (:enrichment-types flags))
+              (:title-fields flags)       (assoc :title-fields (:title-fields flags))
+              (:doc-title-chunk-fanout flags) (assoc :doc-title-chunk-fanout (:doc-title-chunk-fanout flags))
+              (:auto-filter-rules flags)  (assoc :auto-filter-rules (:auto-filter-rules flags))
+              (:merge-mode flags)         (assoc :merge-mode (:merge-mode flags))
+              (:rrf-k flags)              (assoc :rrf-k (:rrf-k flags))))
+
+          (defn retrieved-chunk-label
+            "Compact label for a chunk returned by the retrieval skill.
+             Uses kebab-case keys (:chunk-id, :doc-num) — note: the
+             skill normalizes some fields, but raw chunks may also have
+             snake-case :chunk_id / :doc_num, so try both."
+            [c]
+            (let [cid (or (:chunk-id c) (:chunk_id c))
+                  doc-num (or (:doc-num c) (:doc_num c))
+                  idx (or (:chunk-index c) (:chunk_index c))
+                  title (or (:title c)
+                            (get-in c [:_doc :title]))
+                  title-trim (when title
+                               (if (> (count title) 36)
+                                 (str (subs title 0 35) "...")
+                                 title))]
+              (str cid
+                   (when title-trim (str " \"" title-trim "\""))
+                   (when (or doc-num (some? idx))
+                     (str " [" (or doc-num "?")
+                          (when (some? idx) (str "#" idx))
+                          "]")))))
+
+          (defn ts-retrieve-result->text
+            [result]
+            (let [chunks (or (:chunks result) [])
+                  attr (:search-attribution result)]
+              (str "== TS-RETRIEVE "
+                   "queries=" (pr-str (:queries result))
+                   " chunks=" (count chunks)
+                   " ==\n"
+                   "attribution: " (pr-str attr) "\n\n"
+                   (clojure.string/join
+                    "\n"
+                    (map-indexed
+                     (fn [i c]
+                       (str (inc i) ". " (retrieved-chunk-label c)
+                            " types=" (pr-str (or (:search-types c) []))
+                            " hits=" (or (:hit-count c) 0)
+                            (when-let [rr (:rerank-score c)]
+                              (str " rerank=" rr))))
+                     chunks)))))
+
+          (defn agent-budget-benchmark-eval
+            [tenant config-root config-key cli-opts]
+            (str "(require 'digdir.tools.diagnostics)"
+                 "(digdir.tools.diagnostics/agent-budget-benchmark "
+                 (pr-str {:tenant tenant
+                          :config-root config-root
+                          :config-key config-key
+                          :cli-opts cli-opts})
+                 ")"
+                 "(System/exit 0)"))
+
+          (defn run-command-live
+            ([cmd]
+             (run-command-live nil cmd))
+            ([dir cmd]
+            (let [pb (ProcessBuilder. ^java.util.List (java.util.ArrayList. ^java.util.Collection cmd))
+                  _ (when dir
+                      (.directory pb (java.io.File. dir)))
+                  proc (.start pb)
+                  consume-stream (fn [stream on-line]
+                                   (let [sb (StringBuilder.)]
+                                     (with-open [reader (java.io.BufferedReader.
+                                                         (java.io.InputStreamReader. stream))]
+                                       (loop []
+                                         (if-let [line (.readLine reader)]
+                                           (do
+                                             (.append sb line)
+                                             (.append sb "\n")
+                                             (when on-line
+                                               (on-line line))
+                                             (recur))
+                                           (str sb))))))
+                  stdout-fut (future (consume-stream (.getInputStream proc) nil))
+                  stderr-fut (future (consume-stream (.getErrorStream proc)
+                                                    (fn [line]
+                                                      (println line)
+                                                      (flush))))
+                  exit (.waitFor proc)]
+              {:exit exit
+               :out (deref stdout-fut)
+               :err (deref stderr-fut)})))
+
+          (defn infra-error?
+            [payload]
+            (= :infra-unavailable (get-in payload [:error :error-type])))
+
+          (defn print-infra-error!
+            [payload]
+            (let [err (:error payload)]
+              (println (str "INFRA service=" (or (some-> (:service err) name) "unknown")
+                            " message=" (or (:message err) "Infrastructure unavailable")))))
+
+          (defn truncate-text
+            [s n]
+            (let [s (str (or s ""))]
+              (if (> (count s) n)
+                (str (subs s 0 (max 0 (- n 1))) "...")
+                s)))
+
+          (defn chunk-label
+            [chunk]
+            (let [chunk-id (:chunk-id chunk)
+                  title (some-> (:title chunk) (truncate-text 36))
+                  doc-num (:doc-num chunk)
+                  chunk-index (:chunk-index chunk)]
+              (str chunk-id
+                   (when title (str " \"" title "\""))
+                   (when (or doc-num (some? chunk-index))
+                     (str " [" (or doc-num "?")
+                          (when (some? chunk-index)
+                            (str "#" chunk-index))
+                          "]")))))
+
+          (defn format-search-summary
+            [entry]
+            (let [queries (or (:queries entry) [])
+                  query-text (if (seq queries)
+                               (clojure.string/join " | " queries)
+                               "(no queries)")
+                  top-chunks (or (:top-chunks entry) [])]
+              (str "#" (:pass entry)
+                   " " (truncate-text query-text 80)
+                   " hits=" (or (:result-count entry) 0)
+                   (when (contains? entry :new-count)
+                     (str " new=" (or (:new-count entry) 0)))
+                   (when (:fallback? entry)
+                     " fallback")
+                   (when (seq top-chunks)
+                     (str " top=[" (clojure.string/join "; " (map chunk-label top-chunks)) "]")))))
+
+          (defn format-read-summary
+            [entry]
+            (let [target (cond
+                           (seq (:chunk-ids entry))
+                           (str "chunk-ids=" (pr-str (:chunk-ids entry)))
+                           (and (:doc-num entry) (:chunk-range entry))
+                           (str "doc=" (:doc-num entry) " range=" (pr-str (:chunk-range entry)))
+                           (:doc-num entry)
+                           (str "doc=" (:doc-num entry))
+                           :else nil)
+                  returned (or (:returned-chunks entry) [])]
+              (str "#" (:operation entry)
+                   " " (name (or (:mode entry) :unknown))
+                   (when target (str " " target))
+                   " returned=" (or (:returned-count entry) 0)
+                   " chars=" (or (:content-length entry) 0)
+                   (when (seq returned)
+                     (str " -> [" (clojure.string/join "; " (map chunk-label returned)) "]")))))
+
+          (defn print-agent-profile-details!
+            [label profile]
+            (let [inspection (:inspection profile)
+                  searches (or (:searches inspection) [])
+                  reads (or (:reads inspection) [])
+                  top-hits (or (:top-retrieved-chunks inspection) [])
+                  largest-read (:largest-read inspection)]
+              (println (str label
+                            ": " (if (:pass profile) "PASS" "FAIL")
+                            " status=" (or (some-> (:latest-status profile) name) "unknown")
+                            (when-let [action (:latest-action profile)]
+                              (str "/" (name action)))
+                            " searches=" (or (:search-passes profile) 0)
+                            " reads=" (or (:read-operations profile) 0)
+                            " chars=" (or (:read-content-length profile) 0)))
+              (when (seq top-hits)
+                (println (str "    top-hits: "
+                              (clojure.string/join "; " (map chunk-label top-hits)))))
+              (when (seq searches)
+                (println (str "    search-path: "
+                              (clojure.string/join " || " (map format-search-summary searches)))))
+              (when (seq reads)
+                (println (str "    reads: "
+                              (clojure.string/join " || " (map format-read-summary reads)))))
+              (when largest-read
+                (println (str "    largest-read: " (format-read-summary largest-read))))))
+
+          (defn chunk-result->text
+            [chunk-res]
+            (if (:found? chunk-res)
+              (str "== CHUNK == " (:chunk-id chunk-res) "\n\n"
+                   "[title] " (or (:title chunk-res) "(none)") "\n"
+                   "[doc_num] " (:doc-num chunk-res) "\n"
+                   "[url] " (or (:url chunk-res) "(none)") "\n"
+                   "[metadata] " (:metadata chunk-res) "\n\n"
+                   "== CONTENT ==\n"
+                   (:content-markdown chunk-res))
+              (str "No chunk found with id: " (:chunk-id chunk-res) "\n"
+                   "Collections searched: " (:chunks-collection chunk-res) " " (:docs-collection chunk-res))))
+
+          (defn parse-bool
+            [v]
+            (contains? #{"1" "true" "yes" "on"}
+                       (clojure.string/lower-case (str (or v "false")))))
+
+          (defn pid-alive?
+            "Is this pid still running? `kill -0` sends no signal and exits 0
+             while the process exists.
+
+             Exit 1 means 'not there' OR 'not permitted', which are different
+             things — but every pid here came from pgrep on our own `bb dev`
+             processes, so the second cannot arise. Worth knowing before reusing
+             this on a pid from somewhere else."
+            [pid]
+            (zero? (:exit (shell {:out :string :err :string :continue true}
+                                 "kill" "-0" (str pid)))))
+
+          (defn stop-pid!
+            "Stop `pid` and CONFIRM it stopped. Returns a report map:
+
+               {:outcome :term | :kill | :alive, :waited-ms n}
+
+             SIGTERM first, then poll; escalate to SIGKILL if it is still
+             there, then poll again. The point is the polling: `kill` exits 0
+             when the signal was DELIVERED, which says nothing about whether
+             the process died, and reporting success on that exit code is the
+             defect this replaces (#187). A dev JVM currently ignores SIGTERM
+             entirely — measured at 30s, still alive — so the escalation is
+             the path that actually runs, not a rare fallback."
+            [pid {:keys [term-grace-ms kill-grace-ms poll-ms]
+                  :or {term-grace-ms 5000 kill-grace-ms 5000 poll-ms 250}}]
+            (let [start (System/currentTimeMillis)
+                  ;; (fn [] ...) not #(...): bb.edn is read as EDN, which has
+                  ;; no anonymous-function reader macro.
+                  elapsed (fn [] (- (System/currentTimeMillis) start))
+                  wait-gone (fn [budget-ms]
+                              (loop []
+                                (cond
+                                  (not (pid-alive? pid)) true
+                                  (> (elapsed) budget-ms) false
+                                  :else (do (Thread/sleep poll-ms) (recur)))))]
+              (shell {:out :string :err :string :continue true} "kill" (str pid))
+              (if (wait-gone term-grace-ms)
+                {:outcome :term :waited-ms (elapsed)}
+                (do
+                  (shell {:out :string :err :string :continue true} "kill" "-9" (str pid))
+                  (if (wait-gone (+ term-grace-ms kill-grace-ms))
+                    {:outcome :kill :waited-ms (elapsed)}
+                    {:outcome :alive :waited-ms (elapsed)})))))
+
+          (defn resolve-from-repo-root
+            "Absolutise a user-supplied path while we are still in bb's cwd.
+
+             bb runs at the repo root — which is where the docs tell you to
+             stand — but the tasks below launch their JVM with `:dir \"server\"`.
+             A bare `config/foo.json` handed straight through would therefore
+             resolve against `server/`, and either fail with
+             FileNotFoundException on read or write to the wrong place on
+             export. Resolving here fixes both. Absolute paths pass through
+             unchanged, and nil stays nil so usage messages still print."
+            [path]
+            (when path
+              (.getAbsolutePath (java.io.File. (str path)))))
+
+          (defn ensure-datahike-file-path!
+            "Abort the current task when DATAHIKE_FILE_PATH is unset.
+
+             bb config-get / config-set / pipeline-config each spawn a
+             fresh JVM that reads this env var to decide which Datahike
+             directory to open. When unset the JVM silently falls through
+             to the default path (./local-db/dh_bb_dev_20260418) — which
+             is almost always *not* the path bb dev is using when this
+             repo sets DATAHIKE_FILE_PATH in mise.local.toml. The mismatch
+             writes go to a ghost DB and never reach the running server.
+
+             The bash shells that invoke these tasks don't necessarily
+             have mise activated (e.g. tooling-spawned subshells), so we
+             can't rely on environment inheritance. Refuse to run instead,
+             and surface the value from mise.local.toml as a copy-paste
+             hint so the user can fix their shell."
+            [task-name]
+            (when (clojure.string/blank? (System/getenv "DATAHIKE_FILE_PATH"))
+              (let [mise-content (try (slurp "mise.local.toml")
+                                      (catch Exception _ nil))
+                    hint-pattern (re-pattern "DATAHIKE_FILE_PATH\\s*=\\s*\"([^\"]+)\"")
+                    hint (when mise-content
+                           (let [m (re-find hint-pattern mise-content)]
+                             (when m (second m))))]
+                (binding [*out* *err*]
+                  (println (str "ERROR: bb " task-name
+                                " requires DATAHIKE_FILE_PATH to be set."))
+                  (println "")
+                  (println "Without it the spawned JVM falls back to the default")
+                  (println "Datahike path, silently targeting a different DB from")
+                  (println "the one bb dev is using. See ensure-datahike-file-path!")
+                  (println "in bb.edn for the back-story.")
+                  (println "")
+                  (if hint
+                    (do
+                      (println "Detected DATAHIKE_FILE_PATH in mise.local.toml:")
+                      (println (str "  " hint))
+                      (println "")
+                      (println "Fix by running via mise (preferred):")
+                      (println (str "  mise exec -- bb " task-name " ..."))
+                      (println "Or set the var inline for this command only:")
+                      (println (str "  DATAHIKE_FILE_PATH=" hint " bb " task-name " ...")))
+                    (println (str "Set DATAHIKE_FILE_PATH to the dev Datahike directory "
+                                  "(e.g. ./local-db/dh_bb_dev_v1).")))
+                  (println ""))
+                (System/exit 2)))))
+
+  dev {:doc "Starts the server in dev mode, BACKEND ONLY: no Electric client build, no Hyperfiddle activation token needed. Serves a prebuilt client if one exists (run `bb build-client` once), and tells you what to run if not. For UI work with hot reload use `bb dev-fullstack`. (#330)"
        :task (run '-dev {:parallel true})}
-         admin-dev {:description "Starts admin in dev mode"
-                    :task (run '-admin-dev {:parallel true})}
-         port-forward {:description "Sets up port forwarding to test accessories"
+  dev-fullstack {:doc "Starts the server in dev mode WITH the Electric client watch build — what `bb dev` did before #330. Needs the Hyperfiddle activation token; a new worktree may prompt you to activate. Use this for UI development."
+                 :task (run '-dev-fullstack {:parallel true})}
+  build-client {:doc "Build the Electric client once, as a :prod release bundle. Needs NO activation token — the Electric build hook is on the :dev build only (measured: docs/investigations/330-dev-client-decoupling-measurement.md). Takes ~100s. Writes resources/public/admin_app/js, which the :dev watch build also writes, so the two overwrite each other."
+                :task (clojure {:dir "server"} "-X:build:prod build-client")}
+         server-dev {:doc "Starts server in dev mode, backend only (see `bb dev`)"
+                     :task (run '-server-dev {:parallel true})}
+         server-dev-fullstack {:doc "Starts server in dev mode with the client watch build (see `bb dev-fullstack`)"
+                               :task (run '-server-dev-fullstack {:parallel true})}
+         port-forward {:doc "Sets up port forwarding to test accessories"
                        :task (run '-port-forward {:parallel true})}
-         kill-all {:description "Kill all processes listening on forwarded ports (8108, 5432)"
+         kill-all {:doc "Kill the SSH port-forwards started by `bb port-forward` (Typesense 8108 prod / 8208 test / 8308 dev, Postgres 5432). Only kills our own tunnels; anything else holding the port is reported and left alone."
                    :task (do
                            (println "\nChecking for processes on forwarded ports...")
-                           (doseq [[port name] [[8108 "Typesense"] [5432 "Postgres"]]]
+                           (doseq [[port name] [[8108 "Typesense prod"]
+                                                [8208 "Typesense test"]
+                                                [8308 "Typesense dev"]
+                                                [5432 "Postgres"]]]
                              (let [result (shell {:out :string :continue true}
                                                 "bash" "-c"
                                                 (str "lsof -ti :" port " 2>/dev/null"))
@@ -48,152 +649,1670 @@
                                (if (seq pids)
                                  (do
                                    (println (str "\n[" name " - Port " port "]"))
-                                   (doseq [pid pids]
-                                     (let [proc-info (shell {:out :string :continue true}
-                                                           "bash" "-c"
-                                                           (str "ps -p " pid " -o pid,comm,args | tail -n 1"))]
-                                       (when (zero? (:exit proc-info))
-                                         (println (str "  " (clojure.string/trim (:out proc-info)))))))
-                                   (shell "bash" "-c" (str "kill -9 " (clojure.string/join " " pids)))
-                                   (println (str "  ✓ Killed " (count pids) " process(es)")))
+                                   ;; A BUSY PORT DOES NOT MEAN WE PUT SOMETHING THERE.
+                                   ;; On macOS a published container port is held by Colima's
+                                   ;; ssh multiplexer, which is ALSO named `ssh` - so the old
+                                   ;; unconditional `kill -9` on whatever lsof returned would
+                                   ;; take down every local container. Match our own tunnel
+                                   ;; positively and leave anything else alone.
+                                   (let [described (for [pid pids]
+                                                     (let [{:keys [exit out]}
+                                                           (shell {:out :string :continue true}
+                                                                  "bash" "-c"
+                                                                  (str "ps -p " pid " -o args= | tail -n 1"))]
+                                                       {:pid pid
+                                                        :args (if (zero? exit)
+                                                                (clojure.string/trim out) "")}))
+                                         ours? (fn [{:keys [args]}]
+                                                 (and (clojure.string/includes? args "ssh")
+                                                      (re-find (re-pattern (str "-L\\s*" port ":localhost:"))
+                                                               args)))
+                                         mine (filter ours? described)
+                                         others (remove ours? described)]
+                                     (doseq [{:keys [pid args]} others]
+                                       (println (str "  \u26a0 SKIPPED " pid " - not a bb port-forward: " args)))
+                                     (if (seq mine)
+                                       (do
+                                         (doseq [{:keys [pid args]} mine]
+                                           (println (str "  " pid " " args)))
+                                         (shell "bash" "-c"
+                                                (str "kill -9 "
+                                                     (clojure.string/join " " (map :pid mine))))
+                                         (println (str "  ✓ Killed " (count mine) " forward(s)")))
+                                       (println "  nothing of ours to kill"))))
                                  (println (str "[" name " - Port " port "] No process found")))))
                            (println "\n✓ Done checking all ports\n"))}
+
+         ;; Find running dev JVMs by their main-fn signature
+         ;; (`clojure.run.exec dev/-main`). Each row carries pid, uptime,
+         ;; and the worktree the JVM was launched from (via lsof cwd).
+         ;; Shared helper used by `dev-ps` and `dev-stop`.
+         ;;
+         ;; The pattern is a PREFIX and that is load-bearing since #330: it
+         ;; matches both `dev/-main` (`bb dev`) and `dev/-main-fullstack`
+         ;; (`bb dev-fullstack`). Anchoring it with `$` would silently stop
+         ;; finding fullstack JVMs — they would still be running, and this
+         ;; would report none.
+         dev-ps {:doc "List running `bb dev` / `bb dev-fullstack` instances (pid, uptime, worktree)"
+                 :task
+                 (let [{:keys [out]} (shell {:out :string :continue true}
+                                            "bash" "-c"
+                                            "pgrep -f 'clojure.run.exec dev/-main' || true")
+                       pids (->> (clojure.string/split-lines out)
+                                 (map clojure.string/trim)
+                                 (remove clojure.string/blank?))]
+                   (if (empty? pids)
+                     (println "No running `bb dev` / `bb dev-fullstack` instances found.")
+                     (do
+                       (println (format "%-7s %-12s %s" "PID" "UPTIME" "WORKTREE"))
+                       (doseq [pid pids]
+                         (let [etime (-> (shell {:out :string :continue true}
+                                                "bash" "-c"
+                                                (str "ps -o etime= -p " pid))
+                                         :out clojure.string/trim)
+                               cwd (-> (shell {:out :string :continue true}
+                                              "bash" "-c"
+                                              (str "lsof -p " pid " 2>/dev/null"
+                                                   " | awk '$4==\"cwd\" {print $NF}'"))
+                                       :out clojure.string/trim)]
+                           (println (format "%-7s %-12s %s" pid etime (or (not-empty cwd) "?"))))))))}
+
+         dev-stop {:doc "Interactively stop running `bb dev` / `bb dev-fullstack` instances. Confirms each one actually stopped, escalating SIGTERM -> SIGKILL, and exits non-zero if any survived (#187)."
+                   :task
+                   (let [{:keys [out]} (shell {:out :string :continue true}
+                                              "bash" "-c"
+                                              "pgrep -f 'clojure.run.exec dev/-main' || true")
+                         pids (->> (clojure.string/split-lines out)
+                                   (map clojure.string/trim)
+                                   (remove clojure.string/blank?))
+                         rows (mapv (fn [pid]
+                                      (let [etime (-> (shell {:out :string :continue true}
+                                                             "bash" "-c"
+                                                             (str "ps -o etime= -p " pid))
+                                                      :out clojure.string/trim)
+                                            cwd (-> (shell {:out :string :continue true}
+                                                           "bash" "-c"
+                                                           (str "lsof -p " pid " 2>/dev/null"
+                                                                " | awk '$4==\"cwd\" {print $NF}'"))
+                                                    :out clojure.string/trim)]
+                                        {:pid pid :etime etime
+                                         :cwd (or (not-empty cwd) "?")}))
+                                    pids)]
+                     (cond
+                       (empty? rows)
+                       (println "No running `bb dev` / `bb dev-fullstack` instances found.")
+
+                       :else
+                       (do
+                         (println (format "%-4s %-7s %-12s %s" "#" "PID" "UPTIME" "WORKTREE"))
+                         (doseq [[i row] (map-indexed vector rows)]
+                           (println (format "%-4s %-7s %-12s %s"
+                                            (str (inc i))
+                                            (:pid row) (:etime row) (:cwd row))))
+                         (print "\nWhich to stop? (comma-separated #s, 'all', or empty to cancel): ")
+                         (flush)
+                         (let [input (clojure.string/trim (or (read-line) ""))
+                               selection (cond
+                                           (clojure.string/blank? input) #{}
+                                           (= "all" (clojure.string/lower-case input))
+                                           (set (range 1 (inc (count rows))))
+                                           :else
+                                           (->> (clojure.string/split input (re-pattern ","))
+                                                (map clojure.string/trim)
+                                                (keep (fn [s]
+                                                        (try (Integer/parseInt s)
+                                                             (catch Exception _ nil))))
+                                                (filter (fn [n] (and (pos? n) (<= n (count rows)))))
+                                                set))
+                               targets (->> rows
+                                            (map-indexed vector)
+                                            (filter (fn [[i _]] (contains? selection (inc i))))
+                                            (map second))]
+                           (if (empty? targets)
+                             (println "Nothing selected; no processes stopped.")
+                             (let [results
+                                   (doall
+                                     (for [{:keys [pid cwd]} targets]
+                                       (let [{:keys [outcome waited-ms]} (stop-pid! pid {})]
+                                         (println
+                                           (case outcome
+                                             :term (format "  ✓ %s stopped after %sms (SIGTERM) (%s)"
+                                                           pid waited-ms cwd)
+                                             :kill (format "  ✓ %s stopped after %sms — SIGTERM ignored, escalated to SIGKILL (%s)"
+                                                           pid waited-ms cwd)
+                                             :alive (format "  ✗ %s STILL RUNNING after SIGTERM and SIGKILL (%sms) (%s)"
+                                                            pid waited-ms cwd)))
+                                         outcome)))]
+                               ;; The tick is earned by the process being gone,
+                               ;; not by a signal having been delivered (#187),
+                               ;; and a survivor is worth a non-zero exit: it
+                               ;; still holds the port the caller wanted back.
+                               (when (some #{:alive} results)
+                                 (println "\nAt least one process survived. It still holds its port —")
+                                 (println "check with: lsof -nP -iTCP:<port> -sTCP:LISTEN")
+                                 (System/exit 1))))))))}
 
          ;; Port forwarding tasks
          -port-forward {:depends [-port-forward-test-typesense
                                   -port-forward-test-postgres]}
-         -port-forward-dev-typesense (shell
-"ssh -N -L 8108:localhost:8308 -o ServerAliveInterval=60
+         -port-forward-dev-typesense (do
+           (println "→ dev Typesense will be reachable at localhost:8308"
+                    "(set services.typesense.api-host accordingly)")
+           (shell
+(str "ssh -N -L 8308:localhost:8308 -o ServerAliveInterval=60
                                -o ServerAliveCountMax=17
                                -o ExitOnForwardFailure=yes
-                               root@5.75.220.232")
-         -port-forward-test-typesense (shell
-"ssh -N -L 8108:localhost:8208 -o ServerAliveInterval=60
+                               root@" deploy-host)))
+         -port-forward-test-typesense (do
+           (println "→ test Typesense will be reachable at localhost:8208"
+                    "(set services.typesense.api-host accordingly)")
+           (shell
+(str "ssh -N -L 8208:localhost:8208 -o ServerAliveInterval=60
                                -o ServerAliveCountMax=17
                                -o ExitOnForwardFailure=yes
-                               root@5.75.220.232")
-         -port-forward-prod-typesense (shell
-"ssh -N -L 8108:localhost:8108 -o ServerAliveInterval=60
+                               root@" deploy-host)))
+         -port-forward-prod-typesense (do
+           (println "→ prod Typesense will be reachable at localhost:8108"
+                    "(set services.typesense.api-host accordingly)")
+           (shell
+(str "ssh -N -L 8108:localhost:8108 -o ServerAliveInterval=60
                                -o ServerAliveCountMax=17
                                -o ExitOnForwardFailure=yes
-                               root@5.75.220.232")
+                               root@" deploy-host)))
          -port-forward-test-postgres (shell
-"ssh -N -L 5432:localhost:5433 -o ServerAliveInterval=60
+(str "ssh -N -L 5432:localhost:5433 -o ServerAliveInterval=60
                                -o ServerAliveCountMax=17
                                -o ExitOnForwardFailure=yes
-                               root@5.75.220.232")
+                               root@" deploy-host))
          
-         ;; Main dev task with port forwarding
-         -dev {:depends [port-forward admin-dev]}
+         ;; Main dev task. Deliberately does NOT depend on port-forward: local
+         ;; Typesense now comes from docker-compose.dev.yml, so `bb dev` must not
+         ;; silently SSH into the shared deploy box -- a credential a day-one
+         ;; contributor does not have. Run `bb port-forward` yourself when you
+         ;; specifically want to borrow the shared, populated corpus.
+         -dev {:depends [server-dev]}
+         -dev-fullstack {:depends [server-dev-fullstack]}
 
          ;; Parameterized deploy tasks
-         deploy-admin {:description "Deploy admin (usage: bb deploy-admin <destination>, e.g., bb deploy-admin prod)"
+         deploy-server {:doc "Deploy server (usage: bb deploy-server <destination>, e.g., bb deploy-server prod)"
                        :task (let [dest (first *command-line-args*)]
                                (if dest
                                  (let [kamal-dest (kamal-destination dest)]
                                    (if (= kamal-dest "prod")
-                                     (shell "kamal" "deploy" "--config-file=deploy-admin.yml")
-                                     (shell "kamal" "deploy" "--config-file=deploy-admin.yml" (str "--destination=" kamal-dest))))
-                                 (show-destination-error "deploy-admin")))}
+                                     (shell "kamal" "deploy" "--config-file=deploy.yml")
+                                     (shell "kamal" "deploy" "--config-file=deploy.yml" (str "--destination=" kamal-dest))))
+                                 (show-destination-error "deploy-server")))}
 
          ;; Parameterized boot tasks
-         boot-admin {:description "Boot admin (usage: bb boot-admin <destination>, e.g., bb boot-admin prod)"
+         boot-server {:doc "Boot server (usage: bb boot-server <destination>, e.g., bb boot-server prod)"
                      :task (let [dest (first *command-line-args*)]
                              (if dest
                                (let [kamal-dest (kamal-destination dest)]
                                  (if (= kamal-dest "prod")
-                                   (shell "kamal" "app" "boot" "--config-file=deploy-admin.yml")
-                                   (shell "kamal" "app" "boot" "--config-file=deploy-admin.yml" (str "--destination=" kamal-dest))))
-                               (show-destination-error "boot-admin")))}
+                                   (shell "kamal" "app" "boot" "--config-file=deploy.yml")
+                                   (shell "kamal" "app" "boot" "--config-file=deploy.yml" (str "--destination=" kamal-dest))))
+                               (show-destination-error "boot-server")))}
 
          ;; Parameterized exec tasks
-         exec-admin {:description "Interactive shell in admin container (usage: bb exec-admin <destination> [command...], e.g., bb exec-admin prod bash)"
+         exec-server {:doc "Interactive shell in server container (usage: bb exec-server <destination> [command...], e.g., bb exec-server prod bash)"
                      :task (let [dest (first *command-line-args*)
                                  rest-args (rest *command-line-args*)]
                              (if dest
                                (let [kamal-dest (kamal-destination dest)]
                                  (if (= kamal-dest "prod")
-                                   (apply shell "kamal" "app" "--config-file=deploy-admin.yml" "exec" "--reuse" "--interactive" rest-args)
-                                   (apply shell "kamal" "app" "--config-file=deploy-admin.yml" (str "--destination=" kamal-dest) "exec" "--reuse" "--interactive" rest-args)))
-                               (show-destination-error "exec-admin <command...>")))}
+                                   (apply shell "kamal" "app" "--config-file=deploy.yml" "exec" "--reuse" "--interactive" rest-args)
+                                   (apply shell "kamal" "app" "--config-file=deploy.yml" (str "--destination=" kamal-dest) "exec" "--reuse" "--interactive" rest-args)))
+                               (show-destination-error "exec-server <command...>")))}
 
          ;; Parameterized log viewing tasks
-         logs-admin {:description "View admin container logs (usage: bb logs-admin <destination>, e.g., bb logs-admin prod)"
+         logs-server {:doc "View server container logs (usage: bb logs-server <destination>, e.g., bb logs-server prod)"
                      :task (let [dest (first *command-line-args*)]
                              (if dest
                                (let [kamal-dest (kamal-destination dest)]
                                  (if (= kamal-dest "prod")
-                                   (shell "kamal" "app" "logs" "--config-file=deploy-admin.yml" "--lines" "300" "--follow")
-                                   (shell "kamal" "app" "logs" "--config-file=deploy-admin.yml" (str "--destination=" kamal-dest) "--lines" "300" "--follow")))
-                               (show-destination-error "logs-admin")))}
+                                   (shell "kamal" "app" "logs" "--config-file=deploy.yml" "--lines" "300" "--follow")
+                                   (shell "kamal" "app" "logs" "--config-file=deploy.yml" (str "--destination=" kamal-dest) "--lines" "300" "--follow")))
+                               (show-destination-error "logs-server")))}
 
          ;; Lock release tasks
-         release-admin-lock {:description "Release kamal admin deploy lock (usage: bb release-admin-lock <destination>, e.g., bb release-admin-lock prod)"
+         release-server-lock {:doc "Release kamal server deploy lock (usage: bb release-server-lock <destination>, e.g., bb release-server-lock prod)"
                              :task (let [dest (first *command-line-args*)]
                                      (if dest
                                        (let [kamal-dest (kamal-destination dest)]
                                          (if (= kamal-dest "prod")
-                                           (shell "kamal" "lock" "release" "--config-file=deploy-admin.yml")
-                                           (shell "kamal" "lock" "release" "--config-file=deploy-admin.yml" (str "--destination=" kamal-dest))))
-                                       (show-destination-error "release-admin-lock")))}
+                                           (shell "kamal" "lock" "release" "--config-file=deploy.yml")
+                                           (shell "kamal" "lock" "release" "--config-file=deploy.yml" (str "--destination=" kamal-dest))))
+                                       (show-destination-error "release-server-lock")))}
 
-         ;; Accessory log tasks
-         logs-typesense {:description "View typesense logs"
-                         :task (shell "kamal" "accessory" "logs" "typesense" "--config-file=accessories.yml" "--lines" "300" "--follow")}
-         logs-typesense-test {:description "View typesense-test logs"
-                              :task (shell "kamal" "accessory" "logs" "typesense-test" "--config-file=accessories.yml" "--lines" "300" "--follow")}
-         logs-postgres {:description "View postgres logs"
-                        :task (shell "kamal" "accessory" "logs" "postgres" "--config-file=accessories.yml" "--lines" "300" "--follow")}
+         ;; Internal server dev tasks. `-server-dev` is BACKEND ONLY and does not
+         ;; depend on `-server-dev:electric`, which is the whole point of #330:
+         ;; the client build needs an activation token a newcomer does not have,
+         ;; and it gates nothing the backend needs. `-server-dev-fullstack` keeps
+         ;; the coupled chain, token step included.
+         -server-dev {:task (clojure {:dir "server"} "-X:personal/dev:dev dev/-main")}
+         -server-dev-fullstack {:depends [-server-dev:electric]}
+         ;; Restores the Hyperfiddle Electric activation token before the client
+         ;; build runs. The token lives INSIDE the shadow build cache
+         ;; (hooks3/reload-clj passes {cache-dir}/hyperfiddle.electric.token to
+         ;; ensure-user-auth!, with no env override and no fallback path), so it
+         ;; CANNOT be made persistent — only re-established. This covers both a
+         ;; brand-new worktree and a cleared .shadow-cljs, in one code path.
+         ;; NOTE: clearing .cpcache or ~/.m2 does NOT remove it — those are
+         ;; sibling trees, measured, not assumed.
+         -ensure-electric-token
+         {:doc "Link the Electric activation token into this worktree's shadow build cache, if a source exists and the slot is empty. Never overwrites."
+          :requires ([babashka.fs :as fs])
+          :task (let [src (fs/path (System/getProperty "user.home")
+                                   ".config" "hyperfiddle" "electric.token")
+                      tgt (fs/path "server" ".shadow-cljs" "builds" "dev" "dev"
+                                   "hyperfiddle.electric.token")]
+                  (cond
+                    ;; No source configured: silent no-op. The activation prompt
+                    ;; is the correct fallback, not an error.
+                    (not (fs/exists? src)) nil
 
-         ;; Accessory exec tasks
-         exec-typesense {:description "Interactive shell in typesense container"
-                         :task (apply shell "kamal" "accessory" "exec" "typesense" "--config-file=accessories.yml" "--reuse" "--interactive" *command-line-args*)}
-         exec-postgres {:description "Interactive shell in postgres container"
-                        :task (apply shell "kamal" "accessory" "exec" "postgres" "--config-file=accessories.yml" "--reuse" "--interactive" *command-line-args*)}
+                    ;; fs/exists? FOLLOWS symlinks, so a DANGLING link reads as
+                    ;; absent here rather than as an occupied slot. That is
+                    ;; deliberate: a dangling symlink is a file-shaped absence.
+                    (fs/exists? tgt) nil
 
-         ;; Internal admin dev task
-         -admin-dev {:depends [-admin-dev:electric]}
-         -admin-dev:electric {:task (clojure {:dir "server"} "-X:personal/dev:dev dev/-main")}
+                    :else
+                    (do
+                      ;; Clear a dangling link before relinking; create-sym-link
+                      ;; fails on an existing path.
+                      (when (fs/sym-link? tgt) (fs/delete tgt))
+                      (fs/create-dirs (fs/parent tgt))
+                      (fs/create-sym-link tgt src)
+                      (println "Electric activation token linked from" (str src)))))}
 
-         import-kudos {:description "Import kudos documents"
+         -server-dev:electric {:depends [-ensure-electric-token]
+                               :task (clojure {:dir "server"} "-X:personal/dev:dev dev/-main-fullstack")}
+
+         import-kudos {:doc "Import kudos documents"
                        :task (clojure {:dir "server"} "-X:personal/dev:dev electric-starter-app.document-loading/-main")}
 
-         import-kudos-doc {:description "Import a single Kudos document by ID (usage: bb import-kudos-doc <doc-id>)"
+         import-kudos-doc {:doc "Import a single Kudos document by ID (usage: bb import-kudos-doc <doc-id>)"
                            :task (clojure {:dir "server"}
                                           "-X:personal/dev:dev"
                                           "electric-starter-app.document-loading/-main-single"
                                           ":doc-id"
                                           (first *command-line-args*))}
 
-         server-jar {:description "Build server uberjar and run it"
+         chunk {:doc "Fetch and display a chunk via local API endpoint (usage: bb chunk <tenant> <env> <chunk-id> [pipeline], default pipeline: kudos)"
+                :task (let [args *command-line-args*]
+                        (if (>= (count args) 3)
+                          (let [result (call-debug-endpoint-edn
+                                        "/api/debug/chunk"
+                                        (assoc (dataset-ref-params (nth args 0)
+                                                                   (nth args 1)
+                                                                   (or (nth args 3 nil) "kudos"))
+                                               :chunk-id (nth args 2)))]
+                            (println (chunk-result->text result)))
+                          (do
+                            (println "Usage: bb chunk <tenant> <env> <chunk-id> [pipeline]")
+                            (println "Default pipeline: kudos")
+                            (println "Example: bb chunk ka dev 792beec82d38"))))}
+
+         ts-search {:doc "Search a Typesense collection via local API endpoint (usage: bb ts-search <tenant> <env> <role> \"<query>\" [--query-by ...] [--filter-by ...] [--diataxis <values>] [--diataxis-strict] [--sort-by ...] [--facet-by ...] [--include-fields f1,f2] [--limit N])"
+                    :task (let [args *command-line-args*]
+                            (if (>= (count args) 4)
+                              (let [tenant (nth args 0)
+                                    env (nth args 1)
+                                    role (nth args 2)
+                                    q (nth args 3)
+                                    flags (parse-cli-flags (drop 4 args))
+                                    params (ts-search-params tenant env role q flags)
+                                    result (call-debug-endpoint-edn
+                                            "/api/debug/typesense-search" params)]
+                                (println (ts-search-result->text result)))
+                              (do
+                                (println "Usage: bb ts-search <tenant> <env> <role> \"<query>\" [flags]")
+                                (println)
+                                (println "Roles:")
+                                (println "  docs | chunks | phrases")
+                                (println "  enrichment/hypothetical-questions")
+                                (println "  enrichment/verified-phrases")
+                                (println "  enrichment/fact-assertions")
+                                (println "  enrichment/knowledge-graph")
+                                (println)
+                                (println "Flags:")
+                                (println "  --query-by <fields>       Override default query_by per role")
+                                (println "  --filter-by <expr>         Raw Typesense filter expression")
+                                (println "  --diataxis <values>        Filter by diataxis value(s) (comma-sep).")
+                                (println "                             Permissive by default: ALSO matches docs")
+                                (println "                             with no diataxis value set (~32% of corpus")
+                                (println "                             lacks the frontmatter field).")
+                                (println "                             Combined with --filter-by via &&.")
+                                (println "                             Universe: explanation, how-to-guides, reference, tutorials")
+                                (println "  --diataxis-strict          Require explicit diataxis match (exclude")
+                                (println "                             docs with no diataxis value).")
+                                (println "  --sort-by <expr>           Raw Typesense sort expression")
+                                (println "  --facet-by <fields>        Comma-separated facet fields")
+                                (println "  --include-fields <list>    Explicit projection (default: small fields per role)")
+                                (println "  --limit <n>                Per-page limit, default 20, max 100")
+                                (println)
+                                (println "Examples:")
+                                (println "  bb ts-search digdir public-docs chunks \"altinn 3\"")
+                                (println "  bb ts-search digdir public-docs chunks \"*\" --facet-by orgs_long --limit 0")
+                                (println "  bb ts-search digdir public-docs docs \"subscription\" --diataxis how-to-guides")
+                                (println "  bb ts-search digdir public-docs docs \"data\" --diataxis reference --diataxis-strict")
+                                (println "  bb ts-search digdir public-docs enrichment/hypothetical-questions \"Når ble Altinn 3 lansert?\""))))}
+
+         ts-get {:doc "Fetch documents by id from a Typesense collection (usage: bb ts-get <tenant> <env> <role> --ids <id1,id2,...> | --range <doc_num>:<start>-<end> [--include-fields f1,f2])"
+                 :task (let [args *command-line-args*]
+                         (if (>= (count args) 3)
+                           (let [tenant (nth args 0)
+                                 env (nth args 1)
+                                 role (nth args 2)
+                                 flags (parse-cli-flags (drop 3 args))
+                                 params (ts-get-params tenant env role flags)
+                                 result (call-debug-endpoint-edn
+                                         "/api/debug/typesense-get" params)]
+                             (println (ts-get-result->text result)))
+                           (do
+                             (println "Usage: bb ts-get <tenant> <env> <role> --ids <id1,id2,...>")
+                             (println "       bb ts-get <tenant> <env> chunks --range <doc_num>:<start>-<end>")
+                             (println)
+                             (println "Roles: same enum as bb ts-search")
+                             (println)
+                             (println "Flags:")
+                             (println "  --ids <id1,id2,...>      Comma-separated IDs (doc_num for docs, chunk_id otherwise)")
+                             (println "  --range <doc>:<s>-<e>    Chunk-index range, only valid for role=chunks")
+                             (println "  --include-fields <list>  Explicit projection (default: small fields per role)")
+                             (println)
+                             (println "Examples:")
+                             (println "  bb ts-get digdir public-docs chunks --ids abc123,def456")
+                             (println "  bb ts-get digdir public-docs chunks --ids abc123 --include-fields content_markdown")
+                             (println "  bb ts-get digdir public-docs chunks --range 42:0-9"))))}
+
+         ts-retrieve {:doc "Run multi-strategy retrieval skill (phrase+metadata+content [+enrichments] [+ColBERT rerank]) via local API endpoint. DISABLED by default — set RAG_TS_RETRIEVE_ENABLED=true to enable. (usage: bb ts-retrieve <tenant> <env> \"<query>[,<query2>,...]\" [flags])"
+                      :task (let [args *command-line-args*]
+                              (if (>= (count args) 3)
+                                (let [tenant (nth args 0)
+                                      env (nth args 1)
+                                      queries (nth args 2)
+                                      flags (-> (parse-cli-flags (drop 3 args))
+                                                (assoc :queries queries))
+                                      params (ts-retrieve-params tenant env flags)
+                                      result (call-debug-endpoint-edn
+                                              "/api/debug/typesense-retrieve" params)]
+                                  (println (ts-retrieve-result->text result)))
+                                (do
+                                  (println "Usage: bb ts-retrieve <tenant> <env> \"<query>[,<query2>,...]\" [flags]")
+                                  (println)
+                                  (println "Disabled by default. Enable with: RAG_TS_RETRIEVE_ENABLED=true")
+                                  (println "(default-off is deliberate during isolation sweeps —")
+                                  (println " see plans/proposed/typesense-filesystem-tools-plan.md)")
+                                  (println)
+                                  (println "Flags:")
+                                  (println "  --limit <n>                 Per-strategy per-query cap (default 30)")
+                                  (println "  --retrieve-top-k <n>        Merged-top-k cap (default 100)")
+                                  (println "  --max-per-document <n>      Diversity cap (skill default ~10)")
+                                  (println "  --metadata-only <bool>      Strip content_markdown (default true)")
+                                  (println "  --query-aware-boost <bool>  Title/year/org boosts (default true)")
+                                  (println "  --rerank-with-colbert <bool> Run ColBERT rerank pass (default false)")
+                                  (println "  --auto-filter <bool>        Detect org/year filters from query (default false here)")
+                                  (println "  --enrichment-types <list>   e.g. hypothetical-questions,verified-phrases,fact-assertions")
+                                  (println)
+                                  (println "Examples:")
+                                  (println "  bb ts-retrieve digdir public-docs \"altinn 3 launch date\"")
+                                  (println "  bb ts-retrieve digdir public-docs \"q1,q2,q3\" --limit 50 --retrieve-top-k 200")
+                                  (println "  bb ts-retrieve digdir public-docs \"altinn\" --enrichment-types hypothetical-questions,verified-phrases"))))}
+
+         demo-corpus {:doc "Fetch the demo NorQuAD corpus (352 Wikipedia articles + distractors) into DEMO_CORPUS_DIR (default ./demo-corpus). Nothing is checked in: NorQuAD's CC0 covers its questions and answers, not the Wikipedia prose, so the text is fetched from Wikipedia under CC BY-SA at setup. Resumable — an article already written is not refetched. (usage: bb demo-corpus [distractor-count])"
+                      :task (let [dir (or (System/getenv "DEMO_CORPUS_DIR") "./demo-corpus")
+                                  n (or (first *command-line-args*) "800")]
+                              (println (str "  fetching demo corpus into " dir))
+                              (shell (str "bb server/scripts/corpus/rehydrate_norquad.clj " dir " " n)))}
+         v3-score {:doc "Score ts-retrieve against the v3-baseline cited chunks. Reports both chunk-level (strict v3) and doc-level (slice-21) recall at top-10 and top-30. When --user-intent-first-pass true, also runs an intent-only pass and merges via --union-mode (cap|interleave|rrf, default cap per slice-22 measurement). Cap mode takes --intent-cap N (default 3); RRF mode takes --union-rrf-k K (default 60). --server-side-union true delegates the union to the production retrieval skill via one debug-endpoint call (slice 23 verification). (usage: bb v3-score [--top-k 30] [--expand-queries N] [--user-intent-first-pass true] [--server-side-union true] [--union-mode cap|interleave|rrf] [--intent-cap N] [--union-rrf-k K] [--rerank-with-colbert true] [--title-fields '[\"linktitle\" \"frontmatter_title\"]'] [--doc-title-chunk-fanout 3] [--auto-filter-rules '<edn>'] [--expansion-mode blind|corpus-aware-1hop|corpus-aware-2hop] [--expansion-variant two-call|one-call] [--expansion-compare true] [--auto-filter true|false] [--enrichment-types hypothetical-questions,verified-phrases,...] [--tenant digdir] [--env public-docs] [--v3-dir <path>])"
+                   :task (let [flags (parse-cli-flags *command-line-args*)
+                               tenant (or (:tenant flags) "digdir")
+                               env (or (:env flags) "public-docs")
+                               top-k-int (Integer/parseInt (str (or (:top-k flags) "30")))
+                               title-fields (or (:title-fields flags) "[\"linktitle\" \"frontmatter_title\"]")
+                               chunk-content-fields (:chunk-content-fields flags)
+                               chunk-metadata-fields (:chunk-metadata-fields flags)
+                               retrieval-mode (:retrieval-mode flags)
+                               doc-title-chunk-fanout (or (:doc-title-chunk-fanout flags) "3")
+                               auto-filter-rules (:auto-filter-rules flags)
+                               merge-mode (:merge-mode flags)
+                               rrf-k (:rrf-k flags)
+                               rerank-with-colbert (:rerank-with-colbert flags)
+                               rerank-candidate-k (:rerank-candidate-k flags)
+                               per-strategy-rerank (:per-strategy-rerank flags)
+                               rerank-final-cap (:rerank-final-cap flags)
+                               strategy-weights (:strategy-weights flags)
+                               strategy-contribution-caps (:strategy-contribution-caps flags)
+                               expand-queries-n (when-let [n (:expand-queries flags)]
+                                                  (Integer/parseInt (str n)))
+                               ;; Expansion-mode: blind (default) | corpus-aware-1hop |
+                               ;; corpus-aware-2hop. Corpus-aware modes route through the
+                               ;; PRF planner (passes dataset-config-key + expansion-mode).
+                               expansion-mode-flag (keyword (or (:expansion-mode flags) "blind"))
+                               ;; two-call (default) | one-call — corpus-aware only.
+                               ;; one-call drops the blind-expansion LLM call (single
+                               ;; grounding+intent call); A/B vs two-call by running
+                               ;; the compare twice with each variant.
+                               expansion-variant-flag (:expansion-variant flags)
+                               ;; Comma-separated enrichment types to include as sibling
+                               ;; search strategies (hypothetical-questions,verified-phrases,
+                               ;; fact-assertions). Forwarded to the retrieve endpoint, which
+                               ;; resolves them to collection names.
+                               enrichment-types-flag (:enrichment-types flags)
+                               ;; Auto-filter is ON by default (v3-baseline parity), but it
+                               ;; runs on the (varying) expanded queries and on org-tagged
+                               ;; corpora can exclude goldens — a measurement confound. Pass
+                               ;; --auto-filter false to isolate (results.md Phase E, #3).
+                               auto-filter-flag (str (or (:auto-filter flags) "true"))
+                               ;; When true, run ALL THREE modes per question and print a
+                               ;; per-mode block — the standing A/B for the tuning loop.
+                               expansion-compare? (= "true" (str (:expansion-compare flags)))
+                               v3-dir (or (:v3-dir flags) "plans/in-progress/target-optimal-baseline-v3")
+                               qfile-re (re-pattern "^(\\d{2})-.*\\.md$")
+                               chunkid-re (re-pattern "`([0-9a-f]{12})`")
+                               cite-section-re (re-pattern "(?ms)^## Cited chunks\\s*$(.*?)(?=^## |\\z)")
+                               h1-re (re-pattern "(?m)^#\\s+Q\\d+\\s+v\\d+\\s+[\\u2014-]\\s+(.+)$")
+                               parse-cites (fn [content]
+                                             (when-let [m (re-find cite-section-re content)]
+                                               (set (map second (re-seq chunkid-re (second m))))))
+                               parse-question (fn [content]
+                                                (some-> (re-find h1-re content) second clojure.string/trim))
+                               files (->> (.listFiles (java.io.File. v3-dir))
+                                          (filter (fn [f] (re-matches qfile-re (.getName f))))
+                                          (sort-by (fn [f] (.getName f))))
+                               entries (mapv (fn [file]
+                                               (let [content (slurp file)
+                                                     name (.getName file)
+                                                     [_ qnum] (re-find qfile-re name)]
+                                                 {:qnum qnum
+                                                  :question (parse-question content)
+                                                  :cites (or (parse-cites content) #{})}))
+                                             files)
+                               _ (when (empty? entries)
+                                   (throw (ex-info (str "No v3 question files matched in " v3-dir) {})))
+                               ;; Bulk-lookup doc_num for every cited chunk_id. One call
+                               ;; for the whole baseline. Used for doc-level scoring
+                               ;; (see plans/in-progress/target-optimal-baseline-v3/21-*).
+                               all-cite-ids (->> entries (mapcat (comp seq :cites)) distinct vec)
+                               ;; The typesense-get endpoint caps per_page at
+                               ;; min(100, count ids), so a single bulk lookup of
+                               ;; >100 cite-ids silently truncates and collapses
+                               ;; doc-level recall to 0/0 for the unresolved
+                               ;; queries. Batch into groups of 100 and merge.
+                               chunk->doc (into {}
+                                            (mapcat
+                                             (fn [id-batch]
+                                               (let [resp (call-debug-endpoint-edn
+                                                           "/api/debug/typesense-get"
+                                                           {:tenant tenant
+                                                            :dataset-config-key env
+                                                            :role "chunks"
+                                                            :ids (clojure.string/join "," id-batch)
+                                                            :include-fields "chunk_id,doc_num"})]
+                                                 (map (juxt :chunk_id :doc_num)
+                                                      (or (:documents resp) []))))
+                                             (partition-all 100 all-cite-ids)))
+                               ;; Augment entries with cite-doc set (resolved via Typesense
+                               ;; lookup). When a chunk lookup fails (e.g. orphan-deleted
+                               ;; between v3 baseline and now), it's silently absent.
+                               entries (mapv (fn [e]
+                                               (let [docs (->> (:cites e)
+                                                               (keep chunk->doc)
+                                                               set)]
+                                                 (assoc e :cite-docs docs)))
+                                             entries)
+                               ;; Always retrieve a broad pool (≥30) so the scoring threshold
+                               ;; isn't conflated with the server's retrieve-top-k. Scoring
+                               ;; then takes the first `top-k-int` of the returned list.
+                               retrieve-pool-size (max 30 top-k-int)
+                               ;; When --expand-queries N is set, call /api/debug/query-planner
+                               ;; first to get N LLM-generated expansion phrases per question.
+                               ;; Returns a map {:queries "csv" :user-intent "..."} so that
+                               ;; the slice-21 first-pass union mode can retrieve twice
+                               ;; (once with the user-intent only, once with full expansions).
+                               ;; When N is nil, queries=raw question and user-intent=question.
+                               ;; `mode` is the expansion-mode keyword. Corpus-aware modes
+                               ;; always invoke the planner (passing dataset-config-key +
+                               ;; expansion-mode so the PRF harvest can resolve the phrases
+                               ;; collection); blind mode only expands when --expand-queries
+                               ;; N is set. The planner returns the (grounded) :queries vec.
+                               expand-query (fn [question mode]
+                                              (let [corpus-aware? (contains?
+                                                                   #{:corpus-aware-1hop :corpus-aware-2hop}
+                                                                   mode)
+                                                    do-expand? (or corpus-aware?
+                                                                   (and expand-queries-n (pos? expand-queries-n)))]
+                                                (if do-expand?
+                                                  (let [resp (call-debug-endpoint-edn
+                                                              "/api/debug/query-planner"
+                                                              (cond-> {:tenant tenant
+                                                                       :query question
+                                                                       :max-phrases (str (or expand-queries-n 6))}
+                                                                corpus-aware? (assoc :dataset-config-key env
+                                                                                     :expansion-mode (name mode))
+                                                                (and corpus-aware? expansion-variant-flag)
+                                                                (assoc :expansion-variant expansion-variant-flag)))
+                                                        phrases (vec (:queries resp))
+                                                        user-intent (or (:user-intent resp) question)]
+                                                    (if (seq phrases)
+                                                      {:queries (clojure.string/join "," phrases)
+                                                       :user-intent user-intent}
+                                                      {:queries question :user-intent question}))
+                                                  {:queries question :user-intent question})))
+                               ;; Slice 21: --user-intent-first-pass true triggers a second
+                               ;; retrieval pass with ONLY the user-intent string, then
+                               ;; unions with the full multi-query pass. The intent is to
+                               ;; recover Q1-style cases where expansion broadens the
+                               ;; ColBERT candidate pool enough to evict the v3-cited chunks
+                               ;; in favour of same-doc siblings.
+                               ;;
+                               ;; Slice 22: three union modes are now selectable. See
+                               ;; plans/in-progress/target-optimal-baseline-v3/22-*.
+                               ;; - :interleave (slice-21 default) — alternating zip
+                               ;; - :cap        — intent gets first N slots, expansion fills rest
+                               ;; - :rrf        — reciprocal-rank-fusion score-sum across passes
+                               ;; Slice 22 measurement: cap N=3 dominates interleave and RRF.
+                               ;; Strict gains over interleave at every k: +4.3pp top-10
+                               ;; chunks, +2.9pp top-30 chunks, +8.4pp top-10 docs (recovers
+                               ;; the slice-21 top-10 doc regression), tied on top-30 docs.
+                               user-intent-first-pass? (= "true" (str (:user-intent-first-pass flags)))
+                               ;; Slice 23: --server-side-union true sends the union to the
+                               ;; production retrieval skill in ONE call (intent + queries +
+                               ;; mode/cap as parameters). Validates that the server-side
+                               ;; union reproduces slice-22 numbers within variance.
+                               server-side-union? (= "true" (str (:server-side-union flags)))
+                               union-mode (keyword (or (:union-mode flags) "cap"))
+                               intent-cap-n (Integer/parseInt (str (or (:intent-cap flags) "3")))
+                               union-rrf-k (Integer/parseInt (str (or (:union-rrf-k flags) "60")))
+                               ;; Pull retrieved chunks out of one ts-retrieve EDN response
+                               ;; into the [{:chunk-id ... :doc-num ...}] vec we score with.
+                               unpack-chunks (fn [result]
+                                               (->> (or (:chunks result) [])
+                                                    (mapv (fn [c]
+                                                            {:chunk-id (or (:chunk-id c) (:chunk_id c))
+                                                             :doc-num (or (:doc-num c) (:doc_num c))}))))
+                               ;; :interleave — alternate one entry from a, then b, ...,
+                               ;; dedup by chunk-id, preserving first occurrence.
+                               rank-interleave (fn [a b]
+                                                 (loop [out [] seen #{} ai 0 bi 0]
+                                                   (cond
+                                                     (and (>= ai (count a)) (>= bi (count b))) out
+                                                     :else
+                                                     (let [from-a? (and (< ai (count a))
+                                                                        (or (>= bi (count b))
+                                                                            (zero? (mod (+ ai bi) 2))))]
+                                                       (if from-a?
+                                                         (let [x (nth a ai) id (:chunk-id x)]
+                                                           (if (or (nil? id) (contains? seen id))
+                                                             (recur out seen (inc ai) bi)
+                                                             (recur (conj out x) (conj seen id) (inc ai) bi)))
+                                                         (let [x (nth b bi) id (:chunk-id x)]
+                                                           (if (or (nil? id) (contains? seen id))
+                                                             (recur out seen ai (inc bi))
+                                                             (recur (conj out x) (conj seen id) ai (inc bi)))))))))
+                               ;; :cap — intent's top-N chunks lock into the first N slots
+                               ;; of the merged list (dedup ignored — we trust intent for
+                               ;; that prefix). Expansion's full list then fills the
+                               ;; remainder, skipping any chunk already in the intent prefix.
+                               ;; This preserves Q1's intent-rescue without giving up
+                               ;; expansion's top-K from the broader pool.
+                               cap-merge (fn [a b n]
+                                           (let [a-prefix (vec (take n a))
+                                                 a-ids (set (map :chunk-id a-prefix))
+                                                 b-rest (vec (remove (fn [c] (contains? a-ids (:chunk-id c))) b))]
+                                             (vec (concat a-prefix b-rest))))
+                               ;; :rrf — Reciprocal-Rank Fusion. score(c) = sum over passes
+                               ;; of 1/(k+rank). k=60 is the standard from the literature.
+                               ;; Chunks missing from a pass contribute 0. Sort descending
+                               ;; by total score. This is the principled choice when both
+                               ;; passes contribute independent rank signals.
+                               rrf-merge (fn [a b k]
+                                           (let [score-list (fn [lst]
+                                                              (->> lst
+                                                                   (map-indexed (fn [i c]
+                                                                                  [(:chunk-id c)
+                                                                                   (/ 1.0 (+ k (inc i)))]))
+                                                                   (into {})))
+                                                 a-scores (score-list a)
+                                                 b-scores (score-list b)
+                                                 id->chunk (into {} (map (juxt :chunk-id identity)
+                                                                         (concat b a)))
+                                                 all-ids (distinct (concat (map :chunk-id a)
+                                                                           (map :chunk-id b)))]
+                                             (->> all-ids
+                                                  (map (fn [id]
+                                                         {:chunk (get id->chunk id)
+                                                          :score (+ (get a-scores id 0.0)
+                                                                    (get b-scores id 0.0))}))
+                                                  (sort-by (fn [x] (- (:score x))))
+                                                  (map :chunk)
+                                                  vec)))
+                               union-merge (fn [a b]
+                                             (case union-mode
+                                               :interleave (rank-interleave a b)
+                                               :cap (cap-merge a b intent-cap-n)
+                                               :rrf (rrf-merge a b union-rrf-k)
+                                               (cap-merge a b intent-cap-n)))
+                               score-one (fn [{:keys [qnum question cites cite-docs]} mode]
+                                           (let [{:keys [queries user-intent]} (expand-query question mode)
+                                                 base-params (cond-> {:tenant tenant
+                                                                      :dataset-config-key env
+                                                                      :limit (str retrieve-pool-size)
+                                                                      :retrieve-top-k (str retrieve-pool-size)
+                                                                      :auto-filter auto-filter-flag
+                                                                      :title-fields title-fields
+                                                                      :doc-title-chunk-fanout doc-title-chunk-fanout}
+                                                               chunk-content-fields (assoc :chunk-content-fields chunk-content-fields)
+                                                               chunk-metadata-fields (assoc :chunk-metadata-fields chunk-metadata-fields)
+                                                               retrieval-mode (assoc :retrieval-mode retrieval-mode)
+                                                               auto-filter-rules (assoc :auto-filter-rules auto-filter-rules)
+                                                               merge-mode (assoc :merge-mode merge-mode)
+                                                               rrf-k (assoc :rrf-k rrf-k)
+                                                               rerank-with-colbert (assoc :rerank-with-colbert rerank-with-colbert)
+                                                               rerank-candidate-k (assoc :rerank-candidate-k rerank-candidate-k)
+                                                               per-strategy-rerank (assoc :per-strategy-rerank per-strategy-rerank)
+                                                               rerank-final-cap (assoc :rerank-final-cap rerank-final-cap)
+                                                               strategy-weights (assoc :strategy-weights strategy-weights)
+                                                               strategy-contribution-caps (assoc :strategy-contribution-caps strategy-contribution-caps)
+                                                               ;; Enrichment lever: include enrichment collections
+                                                               ;; (hypothetical-questions / verified-phrases /
+                                                               ;; fact-assertions) as sibling search strategies, so
+                                                               ;; the combo (corpus-aware expansion + enrichment) can
+                                                               ;; be scored.
+                                                               enrichment-types-flag (assoc :enrichment-types enrichment-types-flag))
+                                                 ;; Slice 23: server-side-union path sends one request
+                                                 ;; with :user-intent + :user-intent-union-enabled true
+                                                 ;; and lets the production skill do the merge.
+                                                 server-side-result (when (and server-side-union?
+                                                                               user-intent-first-pass?
+                                                                               (not= user-intent queries))
+                                                                      (call-debug-endpoint-edn
+                                                                        "/api/debug/typesense-retrieve"
+                                                                        (cond-> (assoc base-params
+                                                                                       :queries queries
+                                                                                       :user-intent user-intent
+                                                                                       :user-intent-union-enabled "true"
+                                                                                       :user-intent-union-mode (name union-mode)
+                                                                                       :user-intent-union-cap (str intent-cap-n))
+                                                                          (= :rrf union-mode)
+                                                                          (assoc :user-intent-union-rrf-k (str union-rrf-k)))))
+                                                 expanded-result (or server-side-result
+                                                                     (call-debug-endpoint-edn
+                                                                      "/api/debug/typesense-retrieve"
+                                                                      (assoc base-params :queries queries)))
+                                                 expanded-chunks (unpack-chunks expanded-result)
+                                                 retrieved (cond
+                                                             ;; Server already merged; just unpack.
+                                                             server-side-result expanded-chunks
+                                                             ;; Client-side two-call union (slice 21/22 harness flow).
+                                                             (and user-intent-first-pass?
+                                                                  (not= user-intent queries))
+                                                             (let [intent-result (call-debug-endpoint-edn
+                                                                                  "/api/debug/typesense-retrieve"
+                                                                                  (assoc base-params :queries user-intent))
+                                                                   intent-chunks (unpack-chunks intent-result)]
+                                                               (union-merge intent-chunks expanded-chunks))
+                                                             :else expanded-chunks)
+                                                 result expanded-result
+                                                 ;; Score at both top-10 and top-30 by default.
+                                                 ;; `--top-k N` overrides to a single K.
+                                                 top-k-explicit? (some? (:top-k flags))
+                                                 score-at (fn [k]
+                                                            (let [top (vec (take k retrieved))
+                                                                  top-chunk-set (set (map :chunk-id top))
+                                                                  top-doc-set (set (map :doc-num top))
+                                                                  chunk-hits (clojure.set/intersection cites top-chunk-set)
+                                                                  chunk-misses (clojure.set/difference cites top-chunk-set)
+                                                                  doc-hits (clojure.set/intersection cite-docs top-doc-set)
+                                                                  doc-misses (clojure.set/difference cite-docs top-doc-set)
+                                                                  positions (->> top
+                                                                                 (map-indexed (fn [i c] [(:chunk-id c) (inc i)]))
+                                                                                 (filter (fn [p] (contains? chunk-hits (first p))))
+                                                                                 (into {}))]
+                                                              {:k k
+                                                               :hits chunk-hits
+                                                               :misses chunk-misses
+                                                               :hit-count (count chunk-hits)
+                                                               :hit-positions positions
+                                                               :doc-hits doc-hits
+                                                               :doc-misses doc-misses
+                                                               :doc-hit-count (count doc-hits)}))]
+                                             {:qnum qnum
+                                              :question question
+                                              :total (count cites)
+                                              :total-docs (count cite-docs)
+                                              :scores (if top-k-explicit?
+                                                        [(score-at top-k-int)]
+                                                        [(score-at 10) (score-at 30)])
+                                              :attribution (:search-attribution result)}))
+                               ;; Pretty-print one block per scoring threshold for a
+                               ;; given mode's results. Reports BOTH chunk-level (strict,
+                               ;; original v3) AND doc-level (slice-21: any chunk from a
+                               ;; cited doc counts).
+                               print-at-k (fn [results total-cites total-cite-docs k]
+                                            (let [pull (fn [r] (->> (:scores r) (filter (fn [s] (= k (:k s)))) first))
+                                                  total-hits (reduce + (map (fn [r] (:hit-count (pull r))) results))
+                                                  total-doc-hits (reduce + (map (fn [r] (:doc-hit-count (pull r))) results))
+                                                  rate (if (zero? total-cites) 0.0 (double (/ total-hits total-cites)))
+                                                  doc-rate (if (zero? total-cite-docs) 0.0 (double (/ total-doc-hits total-cite-docs)))]
+                                              (println (str "=== v3 hit-rate (top-" k ") ==="))
+                                              (doseq [r results]
+                                                (let [s (pull r)
+                                                      hits-str (->> (:hit-positions s)
+                                                                    (sort-by val)
+                                                                    (map (fn [[id rk]] (str id "(#" rk ")")))
+                                                                    (clojure.string/join ", "))
+                                                      misses-str (clojure.string/join ", " (sort (:misses s)))
+                                                      doc-misses-str (clojure.string/join ", " (sort (:doc-misses s)))]
+                                                  (println (format "Q%s: chunks=%d/%d  docs=%d/%d  hits=[%s]  miss-chunks=[%s]  miss-docs=[%s]"
+                                                                   (:qnum r) (:hit-count s) (:total r)
+                                                                   (:doc-hit-count s) (:total-docs r)
+                                                                   hits-str misses-str doc-misses-str))))
+                                              (println)
+                                              (println (format "TOTAL chunks (top-%d): %d/%d = %.1f%%"
+                                                               k total-hits total-cites (* 100 rate)))
+                                              (println (format "TOTAL docs   (top-%d): %d/%d = %.1f%%"
+                                                               k total-doc-hits total-cite-docs (* 100 doc-rate)))))
+                               ;; Run scoring for one expansion-mode over all questions.
+                               run-mode (fn [mode]
+                                          (let [results (mapv (fn [e] (score-one e mode)) entries)
+                                                total-cites (reduce + (map :total results))
+                                                total-cite-docs (reduce + (map :total-docs results))
+                                                ks (->> (-> results first :scores) (map :k))]
+                                            (doseq [k ks]
+                                              (print-at-k results total-cites total-cite-docs k)
+                                              (println))))]
+                           (if expansion-compare?
+                             (doseq [mode [:blind :corpus-aware-1hop :corpus-aware-2hop]]
+                               (println (str "\n########## EXPANSION-MODE: " (name mode) " ##########"))
+                               (run-mode mode))
+                             (run-mode expansion-mode-flag)))}
+
+         enrich-apply {:doc "Apply enrichments to chunks from an EDN spec (usage: bb enrich-apply <spec.edn>). Spec: {:tenant \"digdir\" :dataset-config-key \"public-docs\" :enrichment-type :hypothetical-questions|:verified-phrases|:fact-assertions :prompt-hash \"tag\" :proposals [{:chunk-id \"..\" :doc-num \"..\" :items [..]}]}. Shells out to clojure -M:dev (enrichment skills are dev-only)."
+                       :task (let [spec (first *command-line-args*)]
+                               (if spec
+                                 (let [abs (resolve-from-repo-root spec)
+                                       {:keys [exit]} (shell {:dir "server" :continue true}
+                                                             "clojure" "-M:dev" "-m"
+                                                             "digdir.skills.enrichment.manual" "apply" abs)]
+                                   (System/exit (or exit 0)))
+                                 (println "Usage: bb enrich-apply <spec.edn>")))}
+
+         enrich-revert {:doc "Revert enrichments for chunk-ids from an EDN spec (usage: bb enrich-revert <spec.edn>). Spec: {:tenant :dataset-config-key :enrichment-type :chunk-ids [..] :prompt-hash \"tag\" (optional)}."
+                        :task (let [spec (first *command-line-args*)]
+                                (if spec
+                                  (let [abs (resolve-from-repo-root spec)
+                                        {:keys [exit]} (shell {:dir "server" :continue true}
+                                                              "clojure" "-M:dev" "-m"
+                                                              "digdir.skills.enrichment.manual" "revert" abs)]
+                                    (System/exit (or exit 0)))
+                                  (println "Usage: bb enrich-revert <spec.edn>")))}
+
+         chunk-find {:doc "Deterministic chunk diagnostics (usage: bb chunk-find <tenant> <config-root> <config-key> \"<needle>\" [--limit 50] [--exact true|false])"
+                     :task (let [args *command-line-args*
+                                 tenant (nth args 0 nil)
+                                 config-root (nth args 1 nil)
+                                 config-key (nth args 2 nil)
+                                 needle (nth args 3 nil)
+                                 cli-opts (vec (drop 4 args))]
+                             (clojure {:dir "server"}
+                                      "-M:diagnostics"
+                                      "-e"
+                                      (str "(require 'digdir.tools.diagnostics)"
+                                           "(digdir.tools.diagnostics/chunk-find "
+                                           (pr-str {:tenant tenant
+                                                    :config-root config-root
+                                                    :config-key config-key
+                                                    :needle needle
+                                                    :cli-opts cli-opts})
+                                           ")"
+                                           "(System/exit 0)")))}
+
+         retrieve-debug {:doc "Deterministic retrieval diagnostics (usage: bb retrieve-debug <tenant> <config-root> <config-key> \"<user-query>\" [--queries '[\"q1\" \"q2\"]'] [--no-auto-filter] [--limit 120])"
+                         :task (let [args *command-line-args*
+                                     tenant (nth args 0 nil)
+                                     config-root (nth args 1 nil)
+                                     config-key (nth args 2 nil)
+                                     user-query (nth args 3 nil)
+                                     cli-opts (vec (drop 4 args))]
+                                 (clojure {:dir "server"}
+                                          "-M:diagnostics"
+                                          "-e"
+                                          (str "(require 'digdir.tools.diagnostics)"
+                                               "(digdir.tools.diagnostics/retrieve-debug "
+                                               (pr-str {:tenant tenant
+                                                        :config-root config-root
+                                                        :config-key config-key
+                                                        :user-query user-query
+                                                        :cli-opts cli-opts})
+                                               ")"
+                                               "(System/exit 0)")))}
+
+         rerank-debug {:doc "Deterministic rerank diagnostics (usage: bb rerank-debug <tenant> <config-root> <config-key> \"<user-query>\" --from-retrieve-debug <file.edn> [--top-k 100] [--context-top-k 30] [--context-min-chunks N] [--context-relative-score-threshold 0.85])"
+                       :task (let [args *command-line-args*
+                                   tenant (nth args 0 nil)
+                                   config-root (nth args 1 nil)
+                                   config-key (nth args 2 nil)
+                                   user-query (nth args 3 nil)
+                                   cli-opts (vec (drop 4 args))]
+                                   (clojure {:dir "server"}
+                                            "-M:diagnostics"
+                                            "-e"
+                                            (str "(require 'digdir.tools.diagnostics)"
+                                                 "(digdir.tools.diagnostics/rerank-debug "
+                                             (pr-str {:tenant tenant
+                                                      :config-root config-root
+                                                      :config-key config-key
+                                                      :user-query user-query
+                                                      :cli-opts cli-opts})
+                                             ")"
+                                             "(System/exit 0)")))}
+
+         rerank-benchmark {:doc "Benchmark retrieval+rerank quality/latency with gates (usage: bb rerank-benchmark <tenant> <config-root> <config-key> --suite <file.edn> [--top-k 100] [--context-top-k 30] [--context-min-chunks N] [--context-relative-score-threshold 0.85] [--limit 120] [--retrieve-top-k 100] [--max-per-document 10] [--query-aware-boost true|false] [--retrieval-params '{...}'] [--max-acceptable-rank 10] [--require-context true|false] [--fail-on-gate true|false] [--no-auto-filter])"
+                           :task (let [args *command-line-args*
+                                       tenant (nth args 0 nil)
+                                       config-root (nth args 1 nil)
+                                       config-key (nth args 2 nil)
+                                       cli-opts (vec (drop 3 args))]
+                                   (clojure {:dir "server"}
+                                            "-M:diagnostics"
+                                            "-e"
+                                            (str "(require 'digdir.tools.diagnostics)"
+                                                 "(digdir.tools.diagnostics/rerank-benchmark "
+                                                 (pr-str {:tenant tenant
+                                                          :config-root config-root
+                                                          :config-key config-key
+                                                          :cli-opts cli-opts})
+                                                 ")"
+                                                 "(System/exit 0)")))}
+
+         capture-isolation-candidates {:doc "Capture filtered/unfiltered top40/top100 candidate fixtures with metadata (usage: bb capture-isolation-candidates <tenant> <config-root> <config-key> \"<query>\" <golden-chunk-id> [--out server/test/fixtures/rerank/isolation_candidates.edn] [--queries '[\"q1\" \"q2\"]'] [--limit 120] [--retrieve-top-k 100] [--max-per-document 50] [--query-aware-boost true|false])"
+                                       :task (let [args *command-line-args*
+                                                   tenant (nth args 0 nil)
+                                                   config-root (nth args 1 nil)
+                                                   config-key (nth args 2 nil)
+                                                   user-query (nth args 3 nil)
+                                                   golden-chunk-id (nth args 4 nil)
+                                                   cli-opts (vec (drop 5 args))]
+                                               (clojure {:dir "server"}
+                                                        "-M:diagnostics"
+                                                        "-e"
+                                                        (str "(require 'digdir.tools.diagnostics)"
+                                                             "(digdir.tools.diagnostics/capture-isolation-candidates "
+                                                             (pr-str {:tenant tenant
+                                                                      :config-root config-root
+                                                                      :config-key config-key
+                                                                      :user-query user-query
+                                                                      :golden-chunk-id golden-chunk-id
+                                                             :cli-opts cli-opts})
+                                                             ")"
+                                                             "(System/exit 0)")))}
+
+         capture-rerank-language-candidates {:doc "Capture bilingual rerank candidate pools from a suite (usage: bb capture-rerank-language-candidates <tenant> <config-root> <config-key> --suite <file.edn> [--out server/test/fixtures/rerank/language_pairs_arsverk_candidates.edn] [--limit 120] [--retrieve-top-k 100] [--max-per-document 10] [--query-aware-boost true|false] [--no-auto-filter])"
+                                             :task (let [args *command-line-args*
+                                                         tenant (nth args 0 nil)
+                                                         config-root (nth args 1 nil)
+                                                         config-key (nth args 2 nil)
+                                                         cli-opts (vec (drop 3 args))]
+                                                     (clojure {:dir "server"}
+                                                              "-M:diagnostics"
+                                                              "-e"
+                                                              (str "(require 'digdir.tools.diagnostics)"
+                                                                   "(digdir.tools.diagnostics/capture-rerank-language-candidates "
+                                                                   (pr-str {:tenant tenant
+                                                                            :config-root config-root
+                                                                            :config-key config-key
+                                                                            :cli-opts cli-opts})
+                                                                   ")"
+                                                                   "(System/exit 0)")))}
+
+         rerank-language-benchmark {:doc "Run rerank-only bilingual benchmark from captured candidates (usage: bb rerank-language-benchmark <tenant> <config-root> <config-key> --fixture <file.edn> [--top-k 30] [--context-top-k 30] [--context-min-chunks N] [--context-relative-score-threshold 0.85] [--max-acceptable-rank 10] [--require-context true|false] [--fail-on-gate true|false])"
+                                    :task (let [args *command-line-args*
+                                                tenant (nth args 0 nil)
+                                                config-root (nth args 1 nil)
+                                                config-key (nth args 2 nil)
+                                                cli-opts (vec (drop 3 args))]
+                                            (clojure {:dir "server"}
+                                                     "-M:diagnostics"
+                                                     "-e"
+                                                     (str "(require 'digdir.tools.diagnostics)"
+                                                          "(digdir.tools.diagnostics/rerank-language-benchmark "
+                                                          (pr-str {:tenant tenant
+                                                                   :config-root config-root
+                                                                   :config-key config-key
+                                                                   :cli-opts cli-opts})
+                                                          ")"
+                                                          "(System/exit 0)")))}
+
+         rerank-language-report {:doc "Run rerank-language-benchmark and print compact NO vs EN comparison (usage: bb rerank-language-report <tenant> <config-root> <config-key> --fixture <file.edn> [rerank-language-benchmark flags...])"
+                                 :task (let [args *command-line-args*
+                                             tenant (nth args 0 nil)
+                                             config-root (nth args 1 nil)
+                                             config-key (nth args 2 nil)
+                                             cli-opts (vec (drop 3 args))
+                                             fail-on-gate (parse-bool (loop [xs cli-opts out "false"]
+                                                                        (if (empty? xs)
+                                                                          out
+                                                                          (let [[x y & more] xs]
+                                                                            (if (= "--fail-on-gate" x)
+                                                                              (recur more y)
+                                                                              (recur (rest xs) out))))))
+                                             cmd (vec (concat ["bb" "rerank-language-benchmark" tenant config-root config-key]
+                                                              cli-opts))
+                                             result (apply shell {:out :string :err :out :continue true} cmd)]
+                                         (when-not (zero? (:exit result))
+                                           (throw (ex-info "rerank-language-benchmark failed" {:exit (:exit result)
+                                                                                                :output (:out result)})))
+                                         (let [payload (parse-last-edn-line (:out result))
+                                               rows (or (:results payload) [])
+                                               summary (:summary payload)
+                                               lang-summary (or (:summary-by-language payload) {})]
+                                           (println "id | lang | rerank | context | pass")
+                                           (println "---|------|--------|---------|-----")
+                                           (doseq [r rows]
+                                             (let [g (first (:golden r))]
+                                               (println (str (:id r) " | "
+                                                             (or (some-> (:language r) name) "-") " | "
+                                                             (if (:error r) "ERR" (or (:rerank-position g) "-")) " | "
+                                                             (if (:error r) "ERR" (or (:context-position g) "-")) " | "
+                                                             (if (:error r) "ERROR" (if (:pass r) "PASS" "FAIL"))))))
+                                           (println "")
+                                           (println "language | cases | in_rerank | in_context | mrr | p50_rank")
+                                           (println "---------|------|-----------|------------|-----|---------")
+                                           (doseq [[lang s] lang-summary]
+                                             (println (str (name lang) " | "
+                                                           (:cases s) " | "
+                                                           (:golden-present-in-retrank s) " | "
+                                                           (:golden-present-in-context s) " | "
+                                                           (:mrr s) " | "
+                                                           (:p50-rank s))))
+                                           (println "")
+                                           (println (str "gate-pass=" (:gate-pass summary)
+                                                         " cases=" (:cases summary)
+                                                         " failed=" (:cases-failed summary)
+                                                         " mrr=" (:mrr summary)))
+                                           (when (and fail-on-gate (not (:gate-pass summary)))
+                                             (throw (ex-info "Rerank language benchmark gate failed" {:summary summary})))))}
+
+         rerank-benchmark-report {:doc "Run rerank-benchmark and print a compact per-case table (usage: bb rerank-benchmark-report <tenant> <config-root> <config-key> --suite <file.edn> [rerank-benchmark flags...])"
+                                  :task (let [args *command-line-args*
+                                              tenant (nth args 0 nil)
+                                              config-root (nth args 1 nil)
+                                              config-key (nth args 2 nil)
+                                              cli-opts (vec (drop 3 args))
+                                              fail-on-gate (parse-bool (loop [xs cli-opts out "false"]
+                                                                         (if (empty? xs)
+                                                                           out
+                                                                           (let [[x y & more] xs]
+                                                                             (if (= "--fail-on-gate" x)
+                                                                               (recur more y)
+                                                                               (recur (rest xs) out))))))
+                                              cmd (vec (concat ["bb" "rerank-benchmark" tenant config-root config-key]
+                                                               cli-opts))
+                                              result (apply shell {:out :string :err :out :continue true} cmd)]
+                                          (when-not (zero? (:exit result))
+                                            (throw (ex-info "rerank-benchmark failed" {:exit (:exit result)
+                                                                                       :output (:out result)})))
+                                          (let [payload (parse-last-edn-line (:out result))
+                                                rows (or (:results payload) [])
+                                                summary (:summary payload)
+                                                lang-summary (or (:summary-by-language payload) {})
+                                                source-summary (or (:summary-by-source-slice payload) {})
+                                                print-slice-table!
+                                                (fn [label m]
+                                                  (when (seq m)
+                                                    (println "")
+                                                    (println (str label " | cases | in_rerank | in_context | mrr | p50_rank"))
+                                                    (println (str (apply str (repeat (count label) "-"))
+                                                                  "|------|-----------|------------|-----|---------"))
+                                                    (doseq [[k s] m]
+                                                      (println (str (if (nil? k) "-" (name k)) " | "
+                                                                    (:cases s) " | "
+                                                                    (:golden-present-in-retrank s) " | "
+                                                                    (:golden-present-in-context s) " | "
+                                                                    (:mrr s) " | "
+                                                                    (:p50-rank s))))))]
+                                            (when (infra-error? payload)
+                                              (print-infra-error! payload)
+                                              (System/exit 2))
+                                            (println "id | source | lang | merged | retrieved | rerank | context | pass")
+                                            (println "---|--------|------|--------|-----------|--------|---------|-----")
+                                            (doseq [r rows]
+                                              (let [g (first (:golden r))
+                                                    source-col (or (some-> (:source-slice r) name) "-")
+                                                    lang-col (or (some-> (:language r) name) "-")
+                                                    merged-col (if (:error r) "ERR" (or (:merged-position g) "-"))
+                                                    retrieved-col (if (:error r) "ERR" (or (:retrieved-position g) (or (:candidate-position g) "-")))
+                                                    rerank-col (if (:error r) "ERR" (or (:rerank-position g) "-"))
+                                                    context-col (if (:error r) "ERR" (or (:context-position g) "-"))
+                                                    pass-col (if (:error r) "ERROR" (if (:pass r) "PASS" "FAIL"))]
+                                                (println (str (:id r) " | "
+                                                              source-col " | "
+                                                              lang-col " | "
+                                                              merged-col " | "
+                                                              retrieved-col " | "
+                                                              rerank-col " | "
+                                                              context-col " | "
+                                                              pass-col))))
+                                            (print-slice-table! "source" source-summary)
+                                            (print-slice-table! "lang  " lang-summary)
+                                            (println "")
+                                            (println (str "gate-pass=" (:gate-pass summary)
+                                                          " cases=" (:cases summary)
+                                                          " failed=" (:cases-failed summary)
+                                                          " mrr=" (:mrr summary)))
+                                            (when (and fail-on-gate (not (:gate-pass summary)))
+                                              (throw (ex-info "Rerank benchmark gate failed" {:summary summary})))))}
+
+         agent-budget-benchmark {:doc "Run live agent current-vs-relaxed budget comparisons from a suite (usage: bb agent-budget-benchmark <tenant> <config-root> <config-key> --suite <file.edn> [--fail-on-gate true|false] [--graph-variant imperative|bundled|faithful])"
+                                 :task (let [args *command-line-args*
+                                             tenant (nth args 0 nil)
+                                             config-root (nth args 1 nil)
+                                             config-key (nth args 2 nil)
+                                             cli-opts (vec (drop 3 args))]
+                                         (clojure {:dir "server"}
+                                                  "-M:diagnostics"
+                                                  "-e"
+                                                  (agent-budget-benchmark-eval tenant config-root config-key cli-opts)))}
+
+         sweep {:doc "Run a full-agent-loop sweep over a matrix EDN (usage: bb sweep <matrix-path-relative-to-server> [--repeats N]). Writes server/results/sweep-<ts>/runs.csv with golden decomposition + agent-path behavior signals (search-passes, insufficiency-fired?, refinement-corpus-grounded?, enrichment-hits)."
+                :task (let [args *command-line-args*
+                            matrix (nth args 0 nil)
+                            repeats (loop [xs (vec (drop 1 args))]
+                                      (cond
+                                        (empty? xs) nil
+                                        (= "--repeats" (first xs)) (second xs)
+                                        :else (recur (rest xs))))]
+                        (when-not matrix
+                          (println "Usage: bb sweep <matrix-path-relative-to-server> [--repeats N]")
+                          (System/exit 1))
+                        (clojure {:dir "server"}
+                                 "-M:dev"
+                                 "-e"
+                                 (str "(require 'digdir.sweep.runner)"
+                                      "(digdir.sweep.runner/run-from-files {:matrix-path \"" matrix "\""
+                                      (when repeats (str " :repeats " repeats))
+                                      "})"
+                                      "(System/exit 0)")))}
+
+         sweep-judge {:doc "Cloud-judge an already-completed sweep dir as a SEPARATE pass (usage: bb sweep-judge <sweep-dir-relative-to-server> [tenant]). Run AFTER a local agent sweep with the config flipped azure-on (services.azure-openai.use-azure-openai-api true): reads runs.csv, judges each non-empty answer against its reference with gpt-5.5, and writes runs-judged.csv. Idempotent — re-run to fill only the gaps."
+                      :task (let [args *command-line-args*
+                                  sweep-dir (nth args 0 nil)
+                                  tenant (nth args 1 nil)]
+                              (when-not sweep-dir
+                                (println "Usage: bb sweep-judge <sweep-dir-relative-to-server> [tenant]")
+                                (System/exit 1))
+                              (clojure {:dir "server"}
+                                       "-M:dev"
+                                       "-e"
+                                       (str "(require 'digdir.sweep.runner)"
+                                            "(println (digdir.sweep.runner/judge-sweep-dir! \"" sweep-dir "\""
+                                            (when tenant (str " :tenant \"" tenant "\""))
+                                            "))"
+                                            "(System/exit 0)")))}
+
+         agent-budget-report {:doc "Run agent-budget-benchmark and print a compact comparison table (usage: bb agent-budget-report <tenant> <config-root> <config-key> --suite <file.edn> [agent-budget-benchmark flags...])"
+                              :task (let [args *command-line-args*
+                                          tenant (nth args 0 nil)
+                                          config-root (nth args 1 nil)
+                                          config-key (nth args 2 nil)
+                                          cli-opts (vec (drop 3 args))
+                                          cli-opts (ensure-cli-flag cli-opts "--progress" "true")
+                                          fail-on-gate (parse-bool (loop [xs cli-opts out "false"]
+                                                                     (if (empty? xs)
+                                                                       out
+                                                                       (let [[x y & more] xs]
+                                                                         (if (= "--fail-on-gate" x)
+                                                                           (recur more y)
+                                                                           (recur (rest xs) out))))))
+                                          cmd ["clojure" "-M:diagnostics" "-e"
+                                               (agent-budget-benchmark-eval tenant config-root config-key cli-opts)]
+                                          result (run-command-live "server" cmd)]
+                                      (when-not (zero? (:exit result))
+                                        (throw (ex-info "agent-budget-benchmark failed" {:exit (:exit result)
+                                                                                         :output (:out result)})))
+                                      (let [payload (parse-last-edn-line (:out result))
+                                            rows (or (:results payload) [])
+                                            summary (:summary payload)]
+                                        (when (infra-error? payload)
+                                          (print-infra-error! payload)
+                                          (System/exit 2))
+                                        (when-let [err (:error payload)]
+                                          (throw (ex-info "agent-budget-benchmark returned an error payload" err)))
+                                        (println "id | dim | required | current | relaxed | improved")
+                                        (println "---|-----|----------|---------|---------|---------")
+                                        (doseq [r rows]
+                                          (println (str (:id r) " | "
+                                                        (or (some-> (:budget-dimension r) name) "-") " | "
+                                                        (if (:require-improvement? r) "YES" "NO") " | "
+                                                        (if (:error r) "ERROR" (if (get-in r [:current :pass]) "PASS" "FAIL")) " | "
+                                                        (if (:error r) "ERROR" (if (get-in r [:relaxed :pass]) "PASS" "FAIL")) " | "
+                                                        (if (:improved r) "YES" "NO"))))
+                                        (println "")
+                                        (println (str "gate-pass=" (:gate-pass summary)
+                                                      " cases=" (:cases summary)
+                                                      " current-pass=" (:current-pass summary)
+                                                      " relaxed-pass=" (:relaxed-pass summary)
+                                                      " improved=" (:improved summary)
+                                                      " required=" (:required-improvement-cases summary)
+                                                      " missing-required=" (:missing-required-improvement summary)
+                                                      " regressed=" (:regressed summary)))
+                                        (when (seq rows)
+                                          (println "")
+                                          (doseq [r rows]
+                                            (println (str "[" (:id r) "] " (:query r)))
+                                            (if (:error r)
+                                              (println (str "  error=" (pr-str (:error r))))
+                                              (do
+                                                (println (str "  require-improvement=" (boolean (:require-improvement? r))))
+                                                (print-agent-profile-details! "  current" (:current r))
+                                                (print-agent-profile-details! "  relaxed" (:relaxed r))))
+                                            (println "")))
+                                        (when (and fail-on-gate (not (:gate-pass summary)))
+                                          (throw (ex-info "Agent budget benchmark gate failed" {:summary summary})))))}
+
+         config-get {:doc "Get a resolved config value from the current config DB (usage: bb config-get <path> <tenant> <config-root> <config-key> [--dataset-id <id>] [--agent-id <id>] [--pipeline-id <id>], example: bb config-get skills.rerank.top-k digdir runtime default --dataset-id public-docs)"
+                     :task (do
+                             (ensure-datahike-file-path! "config-get")
+                             (let [args *command-line-args*
+                                 path (first args)
+                                 tenant (second args)
+                                 config-root (nth args 2 nil)
+                                 config-key (nth args 3 nil)
+                                 flag-val (fn [flag]
+                                            (loop [xs (drop 4 args)]
+                                              (cond
+                                                (empty? xs) nil
+                                                (= flag (first xs)) (second xs)
+                                                :else (recur (rest xs)))))
+                                 dataset-id (flag-val "--dataset-id")
+                                 agent-id (flag-val "--agent-id")
+                                 pipeline-id (flag-val "--pipeline-id")]
+                             (if (and path tenant config-root config-key)
+                               (clojure {:dir "server"}
+                                        "-M:diagnostics"
+                                        "-e"
+                                        (str "(require 'digdir.tools.config)"
+                                             "(digdir.tools.config/get-value "
+                                             (pr-str (cond-> {:path path
+                                                              :root config-root
+                                                              :tenant tenant
+                                                              :tenant-config-key config-key}
+                                                       dataset-id (assoc :dataset-id dataset-id)
+                                                       agent-id (assoc :agent-id agent-id)
+                                                       pipeline-id (assoc :pipeline-id pipeline-id)))
+                                             ")"
+                                             "(System/exit 0)"))
+                               (do
+                                 (println "Usage: bb config-get <path> <tenant> <config-root> <config-key> [--dataset-id <id>] [--agent-id <id>] [--pipeline-id <id>]")
+                                 (println "Example: bb config-get skills.rerank.context.top-k ka runtime default")
+                                 (println "Example: bb config-get skills.rerank.top-k digdir runtime default --dataset-id public-docs")))))}
+
+         config-set {:doc "Set a config value on the current config DB. After the write, touches a marker file that any running bb dev polls every 5s and best-effort POSTs to /api/debug/config/refresh to invalidate bb dev's in-memory snapshot immediately. (usage: bb config-set <path> <edn-value> <tenant> <config-root> <config-key>, example: bb config-set skills.retrieval.top-k 100 ka runtime default)"
+                     :task (do
+                             (ensure-datahike-file-path! "config-set")
+                             (let [args *command-line-args*
+                                 path (first args)
+                                 value-str (second args)
+                                 tenant (nth args 2 nil)
+                                 config-root (nth args 3 nil)
+                                 config-key (nth args 4 nil)]
+                             (if (and path value-str tenant config-root config-key)
+                               (let [value (read-edn value-str)
+                                     root (keyword config-root)]
+                                 (clojure {:dir "server"}
+                                          "-M:diagnostics"
+                                          "-e"
+                                          (str "(require '[digdir.config.core :as config-core]"
+                                               "         '[digdir.config.db :as config-db]"
+                                               "         '[digdir.config.cache-invalidation :as ci])"
+                                               "(let [conn (config-db/get-conn)"
+                                               "      master-key (config-core/get-master-key)"
+                                               "      tenant " (pr-str tenant)
+                                               "      root " (pr-str root)
+                                               "      config-key " (pr-str config-key)
+                                               "      node (or (config-db/get-config-node-by-tenant-config-key @conn tenant root config-key)"
+                                               "               (throw (ex-info \"Config node not found\" {:tenant tenant :root root :tenant-config-key config-key})))"
+                                               "      result (config-db/set-node-value! conn"
+                                               "                                        {:root root"
+                                               "                                         :tenant tenant"
+                                               "                                         :node-id (:config.node/id node)"
+                                               "                                         :path " (pr-str path)
+                                               "                                         :value " (pr-str value)
+                                               "                                         :master-key master-key})"
+                                               "      marker-path (ci/touch-marker!)]"
+                                               "  (prn {:result result"
+                                               "        :tenant tenant"
+                                               "        :root root"
+                                               "        :tenant-config-key config-key"
+                                               "        :path " (pr-str path)
+                                               "        :marker marker-path})"
+                                               "  (System/exit 0))"))
+                                 ;; Best-effort HTTP push so a running bb dev refreshes its
+                                 ;; in-memory snapshot immediately (sub-second), without
+                                 ;; waiting for the file-marker poll. Silent on failure;
+                                 ;; the marker file is the durable signal.
+                                 (when-let [base-url (System/getenv "RAG_API_BASE_URL")]
+                                   (when-let [debug-key (System/getenv "RAG_DEBUG_API_KEY")]
+                                     (try
+                                       (shell {:continue true :out :string :err :string}
+                                              "curl" "-fsS" "-m" "1" "-X" "POST"
+                                              "-H" (str "X-Debug-Api-Key: " debug-key)
+                                              (str base-url "/api/debug/config/refresh"))
+                                       (catch Exception _ nil)))))
+                               (do
+                                 (println "Usage: bb config-set <path> <edn-value> <tenant> <config-root> <config-key>")
+                                 (println "Example: bb config-set skills.rerank.context.relative-score-threshold 0.85 ka runtime default")))))}
+
+         pipeline-config {:doc "Get resolved dataset materialization config from the current config DB (usage: bb pipeline-config <tenant> <config-key> <pipeline-id>)"
+                          :task (do
+                                  (ensure-datahike-file-path! "pipeline-config")
+                                  (let [args *command-line-args*
+                                      tenant (nth args 0 nil)
+                                      config-key (nth args 1 nil)
+                                      pipeline (nth args 2 nil)]
+                                  (if (and tenant config-key pipeline)
+                                    (clojure {:dir "server"}
+                                             "-M:diagnostics"
+                                             "-e"
+                                             (str "(require 'digdir.tools.config)"
+                                                  "(digdir.tools.config/get-pipeline "
+                                                  (pr-str {:pipeline-id pipeline
+                                                           :tenant tenant
+                                                           :tenant-config-key config-key})
+                                                  ")"
+                                                  "(System/exit 0)"))
+                                    (do
+                                      (println "Usage: bb pipeline-config <tenant> <config-key> <pipeline-id>")
+                                      (println "Example: bb pipeline-config ka dev kudos")))))}
+
+         agents-list {:doc "List enabled agents from the config DB (usage: bb agents-list)"
+                      :task (shell {:dir "server"}
+                                   "clj"
+                                   "-J-Ddigdir.skip-user-dev=true"
+                                   "-M:dev"
+                                   "-e"
+                                   "(require '[digdir.agents.db :as agents-db] '[digdir.config.db :as config-db] '[clojure.pprint :refer [pprint]]) (pprint (mapv (fn [agent] (select-keys agent [:id :name :default-skill-graph :allowed-skill-graphs :allowed-dataset-refs])) (agents-db/list-enabled-agents @(config-db/get-conn)))) (System/exit 0)")}
+
+         schema-drift {:doc "Compare docs_schema.edn against the LIVE documents collection the running system is configured for (usage: bb schema-drift <tenant> <dataset-config-key>, e.g. bb schema-drift public-sector-knowledge kudos). Read-only; reports and never alters. Echoes the host and collection it checked, because collection names are shared across instances."
+                       :task (let [args *command-line-args*
+                                   tenant (or (first args) "digdir")
+                                   dataset-key (or (second args) "public-docs")]
+                               (shell {:dir "server"}
+                                      "clj" "-J-Ddigdir.skip-user-dev=true" "-M:dev" "-e"
+                                      (str "(require '[digdir.docs.schema-drift :as drift]"
+                                           " '[digdir.rag.typesense :as ts-utils]"
+                                           " '[digdir.config.db :as cfg-db]"
+                                           " '[digdir.config.core :as cfg-core])"
+                                           "(let [tenant \"" tenant "\" "
+                                           "      ds (cfg-db/get-dataset-by-ref @(cfg-db/get-conn)"
+                                           "            {:tenant tenant :dataset-config-key \"" dataset-key "\"}"
+                                           "            (cfg-core/get-master-key))"
+                                           "      settings (ts-utils/make-ts-settings {:tenant tenant})"
+                                           "      report (drift/report! settings (:docs-collection ds))]"
+                                           "  (System/exit (if (= :ok (:status report)) 0 1)))")))}
+
+         migration-export {:doc "Export full system migration payload to JSON (usage: bb migration-export <out-file.json> [--include-audit true|false])"
+                           :task (let [args *command-line-args*
+                                       out-file (resolve-from-repo-root (first args))
+                                       include-audit? (parse-bool
+                                                       (loop [xs (rest args) out "true"]
+                                                         (if (empty? xs)
+                                                           out
+                                                           (let [[x y & more] xs]
+                                                             (if (= "--include-audit" x)
+                                                               (recur more y)
+                                                               (recur (rest xs) out))))))]
+                                   (if out-file
+                                     (clojure {:dir "server"}
+                                              "-M:dev"
+                                              "-e"
+                                              (str "(require '[digdir.import-export.system :as migration]"
+                                                   "         '[digdir.config.db :as config-db]"
+                                                   "         '[digdir.data.db :as db]"
+                                                   "         '[digdir.config.core :as config-core])"
+                                                   "(prn (migration/export-to-file (config-db/get-conn) (db/get-conn) "
+                                                   (pr-str out-file)
+                                                   " {:master-key (config-core/get-master-key)"
+                                                   " :include-audit? " (pr-str include-audit?) "}))"
+                                                   "(System/exit 0)"))
+                                     (do
+                                       (println "Usage: bb migration-export <out-file.json> [--include-audit true|false]")
+                                       (println "Example: bb migration-export tmp/system-export.json"))))}
+
+         migration-import {:doc "Import a normalized 2.0 system export from JSON (usage: bb migration-import <input.json> [--on-conflict skip|overwrite])"
+                           :task (let [args *command-line-args*
+                                       input-file (resolve-from-repo-root (first args))
+                                       on-conflict (keyword
+                                                    (loop [xs (rest args) out "skip"]
+                                                      (if (empty? xs)
+                                                        out
+                                                        (let [[x y & more] xs]
+                                                          (if (= "--on-conflict" x)
+                                                            (recur more y)
+                                                            (recur (rest xs) out))))))]
+                                   (if input-file
+                                     (clojure {:dir "server"}
+                                              "-M:dev"
+                                              "-e"
+                                              (str "(require '[digdir.import-export.system :as migration]"
+                                                   "         '[digdir.config.db :as config-db]"
+                                                   "         '[digdir.data.db :as db]"
+                                                   "         '[digdir.config.core :as config-core])"
+                                                   "(prn (migration/import-from-file (config-db/get-conn) (db/get-conn) "
+                                                   (pr-str input-file)
+                                                   " {:master-key (config-core/get-master-key)"
+                                                   " :on-conflict " (pr-str on-conflict) "}))"
+                                                   "(System/exit 0)"))
+                                     (do
+                                       (println "Usage: bb migration-import <input.json> [--on-conflict skip|overwrite]")
+                                       (println "Example: bb migration-import tmp/system-export-v2.json --on-conflict overwrite"))))}
+
+         dump-export {:doc "Export system to a YAML/JSONL dump folder (usage: bb dump-export [out-dir])"
+                      :task (let [args *command-line-args*
+                                  default-dir (str "dumps/"
+                                                   (.format (java.time.format.DateTimeFormatter/ofPattern
+                                                              "yyyy-MM-dd'T'HH-mm-ss'Z'")
+                                                            (.atZone (java.time.Instant/now)
+                                                                     java.time.ZoneOffset/UTC)))
+                                  ;; Both branches go through resolve-from-repo-root: the JVM below
+                                  ;; runs with :dir "server", so neither the default nor a path the
+                                  ;; caller typed at the repo root can be handed over as-is.
+                                  out-dir (resolve-from-repo-root (or (first args) default-dir))]
+                              (clojure {:dir "server"}
+                                       "-M:dev"
+                                       "-e"
+                                       (str "(require '[digdir.import-export.dump :as dump]"
+                                            "         '[digdir.config.db :as config-db]"
+                                            "         '[digdir.data.db :as db]"
+                                            "         '[digdir.config.core :as config-core])"
+                                            "(prn (dump/export-system (config-db/get-conn) (db/get-conn) "
+                                            (pr-str out-dir)
+                                            " {:master-key (config-core/get-master-key)}))"
+                                            "(System/exit 0)")))}
+
+         dump-import {:doc "Import a system from a dump folder. After the import, touches the config-cache-invalidation marker so any running bb dev refreshes its in-memory snapshot at the next poll tick (≤5s). (usage: bb dump-import <dir> [--on-conflict skip|overwrite])"
+                      :task (let [args *command-line-args*
+                                  input-dir (resolve-from-repo-root (first args))
+                                  on-conflict (keyword
+                                               (loop [xs (rest args) out "skip"]
+                                                 (if (empty? xs)
+                                                   out
+                                                   (let [[x y & more] xs]
+                                                     (if (= "--on-conflict" x)
+                                                       (recur more y)
+                                                       (recur (rest xs) out))))))]
+                              (if input-dir
+                                (clojure {:dir "server"}
+                                         "-M:dev"
+                                         "-e"
+                                         (str "(require '[digdir.import-export.dump :as dump]"
+                                              "         '[digdir.config.db :as config-db]"
+                                              "         '[digdir.data.db :as db]"
+                                              "         '[digdir.config.core :as config-core]"
+                                              "         '[digdir.config.cache-invalidation :as ci])"
+                                              "(let [result (dump/import-system (config-db/get-conn) (db/get-conn) "
+                                              (pr-str input-dir)
+                                              " {:master-key (config-core/get-master-key)"
+                                              " :on-conflict " (pr-str on-conflict) "})]"
+                                              "  (ci/touch-marker!)"
+                                              "  (prn result)"
+                                              "  (System/exit 0))"))
+                                (do
+                                  (println "Usage: bb dump-import <dir> [--on-conflict skip|overwrite]")
+                                  (println "Example: bb dump-import dumps/2026-05-08T20-04-55Z"))))}
+
+         server-jar {:doc "Build server uberjar and run it"
                     :task (do
                             (println "Building server uberjar...")
                             (clojure {:dir "server"} "-X:build:prod uberjar :build/jar-name \"app.jar\"")
                             (println "Running server jar...")
                             (shell {:dir "server"} "java" "-cp" "target/app.jar" "clojure.main" "-m" "prod"))}
 
-         test {:description "Run unit tests (usage: bb test)"
-               :task (shell {:dir "server"} "clj" "-M:test" "-d" "test")}
+         smoke {:doc "Unauthenticated deployment smoke tests against a deployed host (usage: bb smoke, or SMOKE_HOST=https://... bb smoke). Defaults to the test host. Exits 2 if the positive control cannot reach the host, so an unreachable target cannot read as a pass."
+         :task (shell "bb" "scripts/smoke_test.clj")}
 
-         test-config {:description "Run config resolution tests (usage: bb test-config)"
-                      :task (shell {:dir "server"} "clj" "-M:test"
+  test {:doc "Run unit tests (usage: bb test)"
+               :task (shell {:dir "server"} "clojure" "-M:test" "-d" "test"
+                            "-r" "^(?!digdir\\.tools\\.diagnostics-test$).*-test$")}
+
+         e2e:up
+         {:doc "Bring up the OpenWebUI + MCPO + dev-server E2E stack (usage: bb e2e:up)"
+          :task (shell {:dir "server/e2e"}
+                       "docker-compose" "-f" "docker-compose.e2e.yml"
+                       "up" "--build" "-d" "--wait")}
+
+         e2e:down
+         {:doc "Tear down the E2E stack and its volumes (usage: bb e2e:down)"
+          :task (shell {:dir "server/e2e"}
+                       "docker-compose" "-f" "docker-compose.e2e.yml"
+                       "down" "-v")}
+
+         e2e:host:up
+         {:doc "Bring up just MCPO + Open WebUI pointed at host bb dev (port 8181). Skips building a digdir-rag container — uses the live local backend. Requires bb dev running with E2E_API_KEY set so the API key MCPO uses gets seeded into the local DB. (usage: bb e2e:host:up)"
+          :task (shell {:dir "server/e2e"}
+                       "docker-compose" "-f" "docker-compose.host.yml"
+                       "up" "-d" "--wait")}
+
+         e2e:host:down
+         {:doc "Tear down the host-pointed Open WebUI stack and its volumes (usage: bb e2e:host:down)"
+          :task (shell {:dir "server/e2e"}
+                       "docker-compose" "-f" "docker-compose.host.yml"
+                       "down" "-v")}
+
+         e2e:install-browsers
+         {:doc "Install Playwright's Chromium binary (run once)"
+          :task (shell {:dir "server/e2e/playwright"}
+                       "npx" "playwright" "install" "chromium")}
+
+         e2e:test
+         {:doc "Run the Playwright E2E suite against the running stack.
+   Requires `bb e2e:up && bb e2e:seed` first. Optional arg = test-name filter."
+          :task (let [args *command-line-args*
+                      pattern (first args)]
+                  (apply shell {:dir "server/e2e/playwright"}
+                         "npx" "playwright" "test"
+                         (cond-> [] pattern (conj "-g" pattern))))}
+
+         test-diagnostics {:doc "Run diagnostics tests that need src-dev on the classpath (usage: bb test-diagnostics)"
+                           :task (shell {:dir "server"} "clojure" "-M:diagnostics:test"
+                                        "-n" "digdir.tools.diagnostics-test")}
+
+         test-config {:doc "Run config resolution tests (usage: bb test-config)"
+                      :task (shell {:dir "server"} "clojure" "-M:test"
+                                   "-n" "digdir.config.accessor-test"
                                    "-n" "digdir.config.db-test"
+                                   "-n" "digdir.config.ops-test"
                                    "-n" "digdir.config.ui-test"
                                    "-n" "digdir.config.permissions-test")}
 
-         integration-test {:description "Run API integration tests against deployed environment (usage: bb integration-test <env>, e.g., bb integration-test test)"
+         diagnose-db-config {:doc "Diagnose local Datahike config vs stored-config mismatch (usage: bb diagnose-db-config)"
+                             :task (clojure {:dir "server"}
+                                            "-M"
+                                            "-e"
+                                            "(do
+                                               (require '[digdir.config.core :as cfg] '[datahike.api :as d] '[clojure.pprint :as pp] '[taoensso.timbre :as timbre])
+                                               (timbre/set-min-level! :fatal)
+                                             (let [bootstrap (cfg/load-bootstrap-config)
+                                                   env (:db-env bootstrap)
+                                                   db-cfg (get bootstrap env)
+                                                   path (System/getenv \"DATAHIKE_FILE_PATH\")]
+                                               (println)
+                                               (println \"Datahike DB Config Diagnostic\")
+                                               (println \"=============================\")
+                                               (println \"DATAHIKE_FILE_PATH:\" (pr-str path))
+                                               (println \"resolved db-env:  \" env)
+                                               (println)
+                                               (cond
+                                                 (nil? db-cfg)
+                                                 (println \"No DB config resolved. Set DATAHIKE_FILE_PATH or ADH_POSTGRES_URL.\")
+
+                                                 (and path (not (.exists (java.io.File. path))))
+                                                 (println (str \"DB path does not exist yet: \" path \" (will be created on first connect).\"))
+
+                                                 :else
+                                                 (do
+                                                   (println \"Attempting connect...\")
+                                                   (try
+                                                     (let [conn (d/connect db-cfg)]
+                                                       (println \"Connected OK. Stored config matches current config.\")
+                                                       (d/release conn))
+                                                     (catch clojure.lang.ExceptionInfo e
+                                                       (let [{:keys [type config stored-config diff]} (ex-data e)]
+                                                         (if (= type :config-does-not-match-stored-db)
+                                                           (do
+                                                             (println)
+                                                             (println \"MISMATCH: config-does-not-match-stored-db\")
+                                                             (println)
+                                                             (println \"current :store identity:\")
+                                                             (pp/pprint (:store config))
+                                                             (println \"stored  :store identity:\")
+                                                             (pp/pprint (:store stored-config))
+                                                             (println)
+                                                             (println \"diff (current-only, stored-only, common):\")
+                                                             (pp/pprint diff)
+                                                             (println)
+                                                             (println \"Remediation:\")
+                                                             (println \"  The :file backend identity includes the host (hostname/IP).\")
+                                                             (println \"  A mismatch usually means the machine's IP/hostname changed since the DB was\")
+                                                             (println \"  created, or the local-db was copied from another host.\")
+                                                             (println)
+                                                             (println \"  Options:\")
+                                                             (println (str \"    1. Delete and reseed from a snapshot:  rm -rf \" path \" && bb migration-import <snapshot.json>\"))
+                                                             (println (str \"    2. Start fresh empty DB:                rm -rf \" path))
+                                                             (println \"    3. Add :allow-unsafe-config true to the bootstrap store config\")
+                                                             (println \"       in digdir.config.core/load-bootstrap-config (advanced, skips this check).\")
+                                                             (System/exit 1))
+                                                           (throw e)))))))))")}
+
+         integration-test {:doc "Run API integration tests against deployed config-key (usage: bb integration-test <env>, e.g., bb integration-test test)"
                            :task (let [env (first *command-line-args*)]
                                    (if-let [base-url (get api-base-urls env)]
                                      (shell {:dir "server"
                                              :extra-env {"RAG_API_BASE_URL" base-url
                                                          "RAG_API_TEST_KEY" (System/getenv "RAG_API_TEST_KEY")}}
-                                            "clj" "-M:test" "-n" "digdir.api.integration-test")
+                                            "clojure" "-M:test" "-n" "digdir.api.integration-test")
                                      (show-integration-test-error)))}
 
-         lint {:description "Run clj-kondo linter (usage: bb lint)"
-               :task (clojure {:dir "server"} "-M:clj-kondo" "--lint" "src" "test")}
+         rerank-eval {:doc "Run ColBERT reranker evaluation tests (usage: bb rerank-eval)"
+                      :task (shell {:dir "server"} "clojure" "-M:test"
+                                   "-n" "digdir.rag.rerank-evaluation-test")}
 
-         clear-config-db {:description "Clear config database (usage: bb clear-config-db --confirm)"
+         rerank-isolation-eval {:doc "Run isolated reranker integration tests on fixed candidate pools (usage: bb rerank-isolation-eval)"
+                                :task (shell {:dir "server"} "clojure" "-M:test"
+                                             "-n" "digdir.rag.rerank-isolation-integration-test")}
+
+         auto-filter-eval {:doc "Run auto-filter integration tests (usage: bb auto-filter-eval)"
+                           :task (shell {:dir "server"} "clojure" "-M:test"
+                                        "-n" "digdir.rag.auto-filter-integration-test")}
+
+         budget-gate-test {:doc "Run budget gate integration tests (usage: bb budget-gate-test)"
+                           :task (shell {:dir "server"} "clojure" "-M:test"
+                                        "-n" "digdir.rag.budget-gate-integration-test")}
+
+         namespace-audit {:doc "Audit a Clojure namespace file for decomposition candidates (usage: bb namespace-audit <file.clj|file.cljc>)"
+                          :task (let [path (first *command-line-args*)]
+                                  (when-not path
+                                    (throw (ex-info "Usage: bb namespace-audit <file.clj|file.cljc>" {})))
+                                  (let [path (if (clojure.string/starts-with? path "server/")
+                                               (subs path (count "server/"))
+                                               path)]
+                                    (clojure {:dir "server"}
+                                             "-M"
+                                             "-m"
+                                             "digdir.tools.namespace-decomposition"
+                                             "audit"
+                                             path)))}
+
+         namespace-inventory {:doc "Rank namespace files by size and form count (usage: bb namespace-inventory <file.clj|file.cljc>...)"
+                              :task (let [paths (map (fn [path]
+                                                       (if (clojure.string/starts-with? path "server/")
+                                                         (subs path (count "server/"))
+                                                         path))
+                                                     *command-line-args*)]
+                                      (when (empty? paths)
+                                        (throw (ex-info "Usage: bb namespace-inventory <file.clj|file.cljc>..." {})))
+                                      (apply clojure {:dir "server"}
+                                             "-M"
+                                             "-m"
+                                             "digdir.tools.namespace-decomposition"
+                                             "inventory"
+                                             paths))}
+
+         namespace-first-split {:doc "Recommend the first extraction slice for a namespace (usage: bb namespace-first-split <file.clj|file.cljc>)"
+                                :task (let [path (first *command-line-args*)]
+                                        (when-not path
+                                          (throw (ex-info "Usage: bb namespace-first-split <file.clj|file.cljc>" {})))
+                                        (let [path (if (clojure.string/starts-with? path "server/")
+                                                     (subs path (count "server/"))
+                                                     path)]
+                                          (clojure {:dir "server"}
+                                                   "-M"
+                                                   "-m"
+                                                   "digdir.tools.namespace-decomposition"
+                                                   "first-split"
+                                                   path)))}
+
+         namespace-extract {:doc "Extract selected top-level forms into a new namespace (usage: bb namespace-extract <source.clj> <target.ns> <form-name>...)"
+                            :task (let [[source-path target-namespace & names] *command-line-args*]
+                                    (when (or (clojure.string/blank? source-path)
+                                              (clojure.string/blank? target-namespace)
+                                              (empty? names))
+                                      (throw (ex-info "Usage: bb namespace-extract <source.clj> <target.ns> <form-name>..." {})))
+                                    (let [source-path (if (clojure.string/starts-with? source-path "server/")
+                                                        (subs source-path (count "server/"))
+                                                        source-path)]
+                                      (apply clojure {:dir "server"}
+                                             "-M"
+                                             "-m"
+                                             "digdir.tools.namespace-decomposition"
+                                             "extract"
+                                             source-path
+                                             target-namespace
+                                             names)))}
+
+         lint {:doc "Run clj-kondo linter; fails on warnings (usage: bb lint)"
+               ;; The ratchet is closed: the tree is at 0 warnings and 0 errors, so
+               ;; --fail-level warning now enforces that. A new warning fails the
+               ;; build rather than joining a backlog (#33).
+               ;;
+               ;; If this starts failing on something that is genuinely a false
+               ;; positive rather than debt, add a NARROW exclusion to
+               ;; server/.clj-kondo/config.edn with the reason — every entry there
+               ;; has one. Do not widen the level back out; the whole value of the
+               ;; gate is that the count cannot drift upward silently.
+               ;;
+               ;; Two things worth knowing before acting on a warning here.
+               ;; Warnings on .cljc files are frequently platform-split false
+               ;; positives: a require or var declared unconditionally and used only
+               ;; inside #?(:clj ...) reads as unused to the :cljs pass, and deleting
+               ;; it breaks the build while lint still reports 0 errors — bb test is
+               ;; what catches that, not this task. And fixing one warning can raise
+               ;; the count: wrapping a defn in a reader conditional can orphan the
+               ;; last cljs-visible use of one of its requires, which then reads as
+               ;; unused on that pass. There is a worked example with the reasoning
+               ;; written next to it at server/src/digdir/data/db.cljc:1183-1196 —
+               ;; wrapping create-folder alone would have gone 1 warning to 2,
+               ;; because it was the only cljs-visible user of nano-id; the fix was
+               ;; to move that require under #?(:clj ...) as well.
+               ;;
+               ;; src-dev is linted too. It was omitted originally, which meant the
+               ;; enrichment skills, the demo skill graphs and the dev tools were
+               ;; never checked — and a genuine "Unresolved var" (a call to a
+               ;; config-db fn deleted by the dataset rename) sat there unnoticed
+               ;; while the gate reported 0 errors.
+               :task (clojure {:dir "server"} "-M:clj-kondo" "--lint" "src" "src-dev" "test" "--fail-level" "warning")}
+
+         atlas-schemas {:doc "Regenerate docs/architecture/schemas/*.json from the :contract malli schemas in docs/architecture/modules/*.edn. Runs on the JVM because babashka cannot load malli. Run this before `bb atlas-build` after editing any contract; `atlas-test` fails if the two drift."
+                        :task (shell {:dir "server"} "bash" "-c" "clojure -M:dev -m digdir.architecture.schemas")}
+
+         atlas-build {:doc "Rebuild the System Atlas from docs/architecture/modules/*.edn into BOTH docs/architecture/system-explorer.html (reviewable, file://-openable) and server/resources/public/system-explorer.html (shipped in the image, served behind admin auth). One build writes both; atlas-test asserts they are byte-identical. The page must stay SELF-CONTAINED for two independent reasons: a file:// page cannot fetch its own data, AND wrap-admin-auth bypasses auth BY FILE EXTENSION (css/js/png/jpg/jpeg/gif/ico/svg), so a sidecar .css or .js would be publicly readable while the .html stays protected."
+                      :task (load-file "script/build_atlas.clj")}
+
+         lint-init {:doc "Re-import clj-kondo library configs (run after changing server/deps.edn)"
+                    :task (shell {:dir "server"} "bash" "-c" "clojure -M:clj-kondo --lint \"$(clojure -Spath)\" --dependencies --copy-configs")}
+
+         clear-config-db {:doc "Clear config database (usage: bb clear-config-db --confirm)"
                           :task (let [args *command-line-args*
                                       has-confirm (some (fn [x] (= x "--confirm")) args)]
                                   (println "")
@@ -215,10 +2334,180 @@
                                       (println "")
                                       (println "⛔ Production databases are blocked from this command."))))}
 
-         setup {:description "Interactive setup wizard for initial configuration"
+         setup {:doc "Interactive setup wizard for initial configuration"
                 :task (clojure {:dir "server"}
                                "-M:dev"
                                "-m" "digdir.setup")}
 
-}}}
+         bootstrap-runtime-tree {:doc "Bootstrap the default V2 runtime tree for a tenant (usage: bb bootstrap-runtime-tree <tenant> [agent-id])"
+                                 :task (let [args *command-line-args*
+                                             tenant (nth args 0 nil)
+                                             agent-id (nth args 1 "builtin/agent-rag-agent")]
+                                         (if tenant
+                                           (clojure {:dir "server"}
+                                                    "-M:dev"
+                                                    "-e"
+                                                    (str "(require '[digdir.setup :as setup])"
+                                                         "(prn (select-keys "
+                                                         "(setup/bootstrap-tenant-runtime-tree! "
+                                                         (pr-str tenant)
+                                                         " {:agent-id " (pr-str agent-id) "}) "
+                                                         "[:tenant :root]))"
+                                                         "(System/exit 0)"))
+                                           (do
+                                             (println "Usage: bb bootstrap-runtime-tree <tenant> [agent-id]")
+                                             (println "Example: bb bootstrap-runtime-tree ka builtin/agent-rag-agent"))))}
 
+         bootstrap-platform-tree {:doc "Bootstrap the default V2 platform tree for a tenant/config-key (usage: bb bootstrap-platform-tree <tenant> [config-key])"
+                                  :task (let [args *command-line-args*
+                                              tenant (nth args 0 nil)
+                                              config-key (nth args 1 nil)]
+                                          (if tenant
+                                            (clojure {:dir "server"}
+                                                     "-M:dev"
+                                                     "-e"
+                                                     (str "(require '[digdir.setup :as setup])"
+                                                          "(prn (select-keys "
+                                                          "(setup/bootstrap-tenant-platform-tree! "
+                                                          (pr-str tenant)
+                                                          " "
+                                                          (pr-str (cond-> {}
+                                                                    config-key (assoc :tenant-config-key config-key)))
+                                                          ") "
+                                                          "[:tenant :root]))"
+                                                          "(System/exit 0)"))
+                                            (do
+                                              (println "Usage: bb bootstrap-platform-tree <tenant> [config-key]")
+                                              (println "Example: bb bootstrap-platform-tree ka prod"))))}
+
+         bootstrap-dataset-tree {:doc "Bootstrap the default V2 dataset tree for a tenant/config-key/pipeline-id (usage: bb bootstrap-dataset-tree <tenant> <config-key> <pipeline-id> [dataset-id])"
+                                 :task (let [args *command-line-args*
+                                             tenant (nth args 0 nil)
+                                             config-key (nth args 1 nil)
+                                             pipeline-id (nth args 2 nil)
+                                             dataset-id (nth args 3 nil)]
+                                         (if (and tenant config-key pipeline-id)
+                                           (clojure {:dir "server"}
+                                                    "-M:dev"
+                                                    "-e"
+                                                    (str "(require '[digdir.setup :as setup])"
+                                                         "(prn (select-keys "
+                                                         "(setup/bootstrap-tenant-dataset-tree! "
+                                                         (pr-str tenant) " "
+                                                         (pr-str config-key) " "
+                                                         (pr-str pipeline-id) " "
+                                                         (pr-str (cond-> {}
+                                                                   dataset-id (assoc :dataset-id dataset-id)))
+                                                         ") "
+                                                         "[:tenant :root]))"
+                                                         "(System/exit 0)"))
+                                           (do
+                                             (println "Usage: bb bootstrap-dataset-tree <tenant> <config-key> <pipeline-id> [dataset-id]")
+                                             (println "Example: bb bootstrap-dataset-tree ka dev kudos"))))} 
+
+         bootstrap-deployment-target-topology {:doc "Bootstrap the deployment target topology for digdir/public-docs and public-sector-knowledge/kudos"
+                                               :task (clojure {:dir "server"}
+                                                              "-M:dev"
+                                                              "-e"
+                                                              (str "(require '[digdir.data.db :as data-db]"
+                                                                   "         '[digdir.config.ops.topology :as ops-topology]"
+                                                                   "         '[digdir.config.core :as config-core])"
+                                                                   "(let [result (ops-topology/bootstrap-deployment-target-topology! "
+                                                                   "               (data-db/get-conn) "
+                                                                   "               {:master-key (config-core/get-master-key)})]"
+                                                                   "  (prn (select-keys result [:target-datasets :target-pipelines :materialization-defaults])))"
+                                                                   "(System/exit 0)"))}
+
+         seed-target-materialization-defaults {:doc "Seed missing Dataset-root materialization defaults for the deployment target tenants (usage: bb seed-target-materialization-defaults [config-key])"
+                                               :task (let [args *command-line-args*
+                                                           config-key (nth args 0 "dev")]
+                                                       (clojure {:dir "server"}
+                                                                "-M:dev"
+                                                                "-e"
+                                                                (str "(require '[digdir.data.db :as data-db]"
+                                                                     "         '[digdir.config.ops.materialization :as ops-materialization]"
+                                                                     "         '[digdir.config.core :as config-core])"
+                                                                     "(prn (ops-materialization/seed-target-materialization-defaults! "
+                                                                     "(data-db/get-conn) "
+                                                                     "{:master-key (config-core/get-master-key)"
+                                                                     " :config-key " (pr-str config-key) "}))"
+                                                                     "(System/exit 0)")))} 
+
+         preview-target-tenant-retirement {:doc "Read-only preview of the original-tenant retirement scope (usage: bb preview-target-tenant-retirement [config-key])"
+                                           :task (let [args *command-line-args*
+                                                       config-key (nth args 0 "dev")]
+                                                   (clojure {:dir "server"}
+                                                            "-M:dev"
+                                                            "-e"
+                                                            (str "(require '[digdir.data.db :as data-db]"
+                                                                 "         '[digdir.config.ops.retirement :as ops-retirement])"
+                                                                 "(prn (ops-retirement/preview-tenant-retirement! "
+                                                                 "(data-db/get-conn) "
+                                                                 "{:config-key " (pr-str config-key) "}))"
+                                                                 "(System/exit 0)")))} 
+
+         retire-source-tenants {:doc "Retire the original source tenants after target verification (usage: bb retire-source-tenants [config-key] [conversation-strategy] [--apply])"
+                                :task (let [args *command-line-args*
+                                            positional-args (filter (fn [arg]
+                                                                      (not (clojure.string/starts-with? arg "--")))
+                                                                    args)
+                                            config-key (or (first positional-args) "dev")
+                                            conversation-strategy (keyword (or (second positional-args)
+                                                                              "retain"))
+                                            dry-run? (not (some #{"--apply"} args))]
+                                        (clojure {:dir "server"}
+                                                 "-M:dev"
+                                                 "-e"
+                                                 (str "(require '[digdir.data.db :as data-db]"
+                                                      "         '[digdir.config.ops.retirement :as ops-retirement])"
+                                                      "(prn (ops-retirement/retire-source-tenants! "
+                                                      "(data-db/get-conn) "
+                                                      "{:config-key " (pr-str config-key)
+                                                      " :conversation-strategy " (pr-str conversation-strategy)
+                                                      " :dry-run? " dry-run? "}))"
+                                                      "(System/exit 0)")))} 
+
+         backfill-schema {:doc "Backfill content_length on chunks and total_chunks on documents for existing collections (usage: bb backfill-schema <tenant> <config-key> <pipeline-id>)"
+                          :task (let [args *command-line-args*
+                                      tenant (nth args 0 nil)
+                                      config-key (nth args 1 nil)
+                                      pipeline (nth args 2 nil)]
+                                  (if (and tenant config-key pipeline)
+                                    (clojure {:dir "server"}
+                                             "-M:dev"
+                                             "-e"
+                                             (str "(require '[digdir.docs.pipeline.storage :as storage]"
+                                                  "         '[digdir.config.db :as config-db]"
+                                                  "         '[digdir.config.core :as config-core]"
+                                                  "         '[digdir.pipeline.collections :as collections])"
+                                                  "(let [conn (config-db/get-conn)"
+                                                  "      db @conn"
+                                                  "      master-key (config-core/get-master-key)"
+                                                  "      pipeline-config (config-db/get-pipeline db "
+                                                  (pr-str tenant) " " (pr-str config-key) " " (pr-str pipeline) " master-key)"
+                                                  "      _ (when-not pipeline-config (throw (ex-info \"Pipeline not found\" {})))"
+                                                  "      colls (collections/get-or-generate-collection-names pipeline-config)"
+                                                  "      opts {:tenant " (pr-str tenant) " :config-key " (pr-str config-key) "}]"
+                                                  "  (println \"Backfilling content_length on chunks:\" (:chunks-collection colls))"
+                                                  "  (println (storage/backfill-content-length! (:chunks-collection colls) opts))"
+                                                  "  (println)"
+                                                  "  (println \"Backfilling total_chunks on documents:\" (:docs-collection colls))"
+                                                  "  (println (storage/backfill-total-chunks! (:docs-collection colls) (:chunks-collection colls) opts))"
+                                                  "  (println)"
+                                                  "  (println \"Done.\"))"
+                                                  "(System/exit 0)"))
+                                    (do
+                                      (println "Usage: bb backfill-schema <tenant> <config-key> <pipeline-id>")
+                                      (println "Example: bb backfill-schema ka test kudos")
+                                      (println "")
+                                      (println "Backfills content_length on chunks and total_chunks on documents")
+                                      (println "for collections that were created before these fields were added.")
+                                      (println "")
+                                      (println "Smoke-run checklist:")
+                                      (println "  1. Port-forward to target Typesense (bb port-forward or ssh tunnel)")
+                                      (println "  2. Run: bb backfill-schema <tenant> test <pipeline-id>")
+                                      (println "  3. Expect output like: {:updated N :skipped M :errors 0}")
+                                      (println "  4. Re-run — second pass should show {:updated 0 :skipped N+M :errors 0}")
+                                      (println "  5. Verify with: bb chunk <tenant> test <any-chunk-id> <pipeline-id>"))))}
+
+    }}

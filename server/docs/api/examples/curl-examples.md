@@ -1,304 +1,179 @@
 # cURL Examples
 
-Command-line examples for all Digdir RAG API endpoints.
+Command-line examples for both the Public API and the internal Operator Console APIs.
 
 ## Setup
 
-Set your API key as an environment variable:
-
 ```bash
-export RAG_API_KEY="rag_your_api_key_here"
 export RAG_BASE_URL="https://admin.kunnskap.digdir.cloud"
+export RAG_API_KEY="rag_your_api_key_here"
+export RAG_JWT_COOKIE="auth-token=YOUR_JWT_TOKEN"
 ```
 
----
+## Public API
 
-## RAG Endpoint
+> **Every `/api/mcp` request needs three request-metadata headers** —
+> `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` on `tools/call`. A request missing
+> any of them is rejected with `400` and JSON-RPC `-32020`. The MCP examples below carry
+> them; see [endpoints/mcp.md](../endpoints/mcp.md#what-a-client-must-send) for the rules.
 
-### Simple Query
+### List Visible Datasets
 
 ```bash
-curl -X POST "$RAG_BASE_URL/api/rag" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $RAG_API_KEY" \
-  -d '{
-    "query": "Hva er Altinn?"
-  }'
+curl -X GET "$RAG_BASE_URL/api/datasets" \
+  -H "X-API-Key: $RAG_API_KEY"
 ```
 
-### With Custom Parameters
+### Get One Dataset
 
 ```bash
-curl -X POST "$RAG_BASE_URL/api/rag" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $RAG_API_KEY" \
-  -d '{
-    "query": "Hva er kravene for universell utforming?",
-    "model": "gpt-4o-2024-11-20",
-    "context-top-k": 5,
-    "rerank-top-k": 20
-  }'
+curl -X GET "$RAG_BASE_URL/api/datasets/public-docs" \
+  -H "X-API-Key: $RAG_API_KEY"
 ```
 
-### Continue Conversation
+### MCP — List Available Tools
 
 ```bash
-curl -X POST "$RAG_BASE_URL/api/rag" \
+curl -sS -X POST "$RAG_BASE_URL/api/mcp" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $RAG_API_KEY" \
-  -d '{
-    "query": "Kan du forklare mer om dette?",
-    "conversation-id": "dPPIA0UWuF4JPMGBUDbjD"
-  }'
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/list" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | jq
 ```
 
----
-
-## Retrieve Endpoint
-
-### Simple Retrieval
+### MCP — Call A Tool (blocking)
 
 ```bash
-curl -X POST "$RAG_BASE_URL/api/retrieve" \
+curl -sS -X POST "$RAG_BASE_URL/api/mcp" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $RAG_API_KEY" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/call" \
+  -H "Mcp-Name: builtin.agent-rag-agent__agent-rag-graph-bundled" \
   -d '{
-    "query": "Hva er Altinn?",
-    "top_k": 5
-  }'
-```
-
-### Without Query Expansion (Faster)
-
-```bash
-curl -X POST "$RAG_BASE_URL/api/retrieve" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $RAG_API_KEY" \
-  -d '{
-    "query": "WCAG 2.1",
-    "top_k": 10,
-    "include_query_expansion": false
-  }'
-```
-
-### With Metadata Filter
-
-```bash
-curl -X POST "$RAG_BASE_URL/api/retrieve" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $RAG_API_KEY" \
-  -d '{
-    "query": "tilgjengelighet",
-    "top_k": 5,
-    "filter": {
-      "fields": [
-        {
-          "field": "owner_short",
-          "selected_options": ["Digdir"],
-          "value_type": "string"
-        }
-      ]
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "builtin.agent-rag-agent__agent-rag-graph-bundled",
+      "arguments": {
+        "query": "Hva er Altinn?",
+        "tenant": "digdir",
+        "dataset_config_key": "public-docs"
+      }
     }
-  }'
+  }' | jq
 ```
 
----
-
-## Conversations
+See [MCP Endpoint](../endpoints/mcp.md) for the streaming (SSE) variant and the full
+method/argument reference.
 
 ### List Conversations
 
 ```bash
 curl -X GET "$RAG_BASE_URL/api/conversations?page_size=10&page_index=0" \
-  -H "X-API-Key: $RAG_API_KEY"
-```
-
-### List Conversations for Specific User
-
-```bash
-curl -X GET "$RAG_BASE_URL/api/conversations" \
   -H "X-API-Key: $RAG_API_KEY" \
-  -H "X-User-Email: user@example.com"
+  -H "X-User-Id: customer-user-123"
 ```
 
-### Create Conversation
+## Operator Console APIs
+
+These endpoints are internal and JWT-authenticated.
+
+### List Datasets
 
 ```bash
-curl -X POST "$RAG_BASE_URL/api/conversations" \
+curl -X GET "$RAG_BASE_URL/console-api/datasets" \
+  --cookie "$RAG_JWT_COOKIE"
+```
+
+### Create Dataset
+
+```bash
+curl -X POST "$RAG_BASE_URL/console-api/datasets" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: $RAG_API_KEY" \
   -H "X-User-Email: user@example.com" \
+  --cookie "$RAG_JWT_COOKIE" \
   -d '{
-    "title": "My New Conversation"
+    "name": "Public Docs",
+    "description": "Shared docs"
   }'
 ```
 
-### Get Conversation with Messages
+### Create Pipeline Under Dataset
 
 ```bash
-curl -X GET "$RAG_BASE_URL/api/conversations/dPPIA0UWuF4JPMGBUDbjD" \
-  -H "X-API-Key: $RAG_API_KEY"
-```
-
-### Update Conversation Title
-
-```bash
-curl -X PUT "$RAG_BASE_URL/api/conversations/dPPIA0UWuF4JPMGBUDbjD" \
+curl -X POST "$RAG_BASE_URL/console-api/datasets/ds_123/pipelines" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: $RAG_API_KEY" \
+  -H "X-User-Email: user@example.com" \
+  --cookie "$RAG_JWT_COOKIE" \
   -d '{
-    "title": "Updated Title"
+    "tenant": "digdir",
+    "dataset-config-key": "public-docs",
+    "pipeline-name": "assistant",
+    "properties": {
+      "name": "Assistant",
+      "sourceType": "website"
+    }
   }'
 ```
 
-### Delete Conversation
+### Get Pipeline Detail
 
 ```bash
-curl -X DELETE "$RAG_BASE_URL/api/conversations/dPPIA0UWuF4JPMGBUDbjD" \
-  -H "X-API-Key: $RAG_API_KEY"
+curl -X GET "$RAG_BASE_URL/console-api/datasets/ds_123/pipelines/assistant?tenant=digdir&dataset-config-key=public-docs" \
+  --cookie "$RAG_JWT_COOKIE"
 ```
 
----
-
-## API Keys (Admin)
-
-These endpoints require JWT authentication. First, obtain a JWT token by logging into the admin interface.
-
-### List Your API Keys
+### Execute Pipeline
 
 ```bash
-curl -X GET "$RAG_BASE_URL/api/keys" \
-  --cookie "auth-token=YOUR_JWT_TOKEN"
+curl -X POST "$RAG_BASE_URL/console-api/datasets/ds_123/pipelines/assistant/execute?tenant=digdir&dataset-config-key=public-docs" \
+  -H "X-User-Email: user@example.com" \
+  --cookie "$RAG_JWT_COOKIE"
 ```
 
-### Create New API Key
+### List Pipeline Executions
 
 ```bash
-curl -X POST "$RAG_BASE_URL/api/keys" \
+curl -X GET "$RAG_BASE_URL/console-api/datasets/ds_123/pipelines/assistant/executions?tenant=digdir&dataset-config-key=public-docs" \
+  --cookie "$RAG_JWT_COOKIE"
+```
+
+### Create API Key
+
+```bash
+curl -X POST "$RAG_BASE_URL/console-api/api-keys" \
   -H "Content-Type: application/json" \
-  --cookie "auth-token=YOUR_JWT_TOKEN" \
+  -H "X-User-Email: user@example.com" \
+  --cookie "$RAG_JWT_COOKIE" \
   -d '{
-    "name": "My Integration Key",
-    "entity-id": "entity-123"
+    "name": "Public Docs Integration",
+    "dataset-scopes": [
+      {"tenant": "digdir", "dataset-config-key": "public-docs"}
+    ],
+    "allowed-config-keys": [
+      {"root": "dataset", "tenant": "digdir", "dataset-config-key": "public-docs"},
+      {"root": "runtime", "tenant": "digdir", "runtime-config-key": "default"}
+    ]
   }'
 ```
-
-### Revoke API Key
-
-```bash
-curl -X POST "$RAG_BASE_URL/api/keys/key_abc123/revoke" \
-  --cookie "auth-token=YOUR_JWT_TOKEN"
-```
-
----
 
 ## Response Processing
 
 ### Pretty Print JSON
 
-Add `| jq .` to format JSON output:
-
 ```bash
-curl -X POST "$RAG_BASE_URL/api/rag" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $RAG_API_KEY" \
-  -d '{"query": "Hva er Altinn?"}' | jq .
+curl -s -X GET "$RAG_BASE_URL/api/datasets" \
+  -H "X-API-Key: $RAG_API_KEY" | jq .
 ```
 
-### Extract Just the Answer
+### Extract the First Dataset ID
 
 ```bash
-curl -s -X POST "$RAG_BASE_URL/api/rag" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $RAG_API_KEY" \
-  -d '{"query": "Hva er Altinn?"}' | jq -r '.answer'
-```
+DATASET_ID=$(curl -s -X GET "$RAG_BASE_URL/api/datasets" \
+  -H "X-API-Key: $RAG_API_KEY" | jq -r '.datasets[0].id')
 
-### Get Conversation ID for Follow-up
-
-```bash
-CONVO_ID=$(curl -s -X POST "$RAG_BASE_URL/api/rag" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $RAG_API_KEY" \
-  -d '{"query": "Hva er Altinn?"}' | jq -r '.["conversation-id"]')
-
-echo "Conversation ID: $CONVO_ID"
-
-# Follow-up question
-curl -X POST "$RAG_BASE_URL/api/rag" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $RAG_API_KEY" \
-  -d "{\"query\": \"Fortell mer\", \"conversation-id\": \"$CONVO_ID\"}"
-```
-
----
-
-## Error Handling
-
-### Check HTTP Status Code
-
-```bash
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-  -X POST "$RAG_BASE_URL/api/rag" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $RAG_API_KEY" \
-  -d '{"query": "test"}')
-
-echo "Status: $HTTP_CODE"
-```
-
-### Verbose Output for Debugging
-
-```bash
-curl -v -X POST "$RAG_BASE_URL/api/rag" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $RAG_API_KEY" \
-  -d '{"query": "Hva er Altinn?"}'
-```
-
----
-
-## Scripting Examples
-
-### Batch Query Script
-
-```bash
-#!/bin/bash
-
-QUERIES=(
-  "Hva er Altinn?"
-  "Hva er universell utforming?"
-  "Forklar WCAG 2.1"
-)
-
-for query in "${QUERIES[@]}"; do
-  echo "Query: $query"
-  curl -s -X POST "$RAG_BASE_URL/api/rag" \
-    -H "Content-Type: application/json" \
-    -H "X-API-Key: $RAG_API_KEY" \
-    -d "{\"query\": \"$query\"}" | jq -r '.answer'
-  echo "---"
-done
-```
-
-### Test API Key Validity
-
-```bash
-#!/bin/bash
-
-response=$(curl -s -w "\n%{http_code}" -X POST "$RAG_BASE_URL/api/rag" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $RAG_API_KEY" \
-  -d '{"query": "test"}')
-
-http_code=$(echo "$response" | tail -n1)
-
-if [ "$http_code" == "401" ]; then
-  echo "ERROR: Invalid API key"
-  exit 1
-elif [ "$http_code" == "200" ]; then
-  echo "OK: API key is valid"
-else
-  echo "WARNING: Unexpected status code: $http_code"
-fi
+echo "$DATASET_ID"
 ```

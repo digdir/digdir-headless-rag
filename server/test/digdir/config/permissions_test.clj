@@ -96,6 +96,7 @@
     ;; Create config definitions
     (config-db/upsert-definition! conn
                                   {:path "services.azure-openai.api-key"
+                                   :root :platform
                                    :value-type :string
                                    :encrypted? true
                                    :category :services
@@ -105,6 +106,7 @@
 
     (config-db/upsert-definition! conn
                                   {:path "chat.system-prompt"
+                                   :root :runtime
                                    :value-type :string
                                    :encrypted? false
                                    :category :chat
@@ -114,6 +116,7 @@
 
     (config-db/upsert-definition! conn
                                   {:path "feature.dark-mode"
+                                   :root :platform
                                    :value-type :boolean
                                    :encrypted? false
                                    :category :features
@@ -272,7 +275,7 @@
 (deftest test-permission-crud
   (let [conn (create-test-db)]
     (try
-      (let [now (System/currentTimeMillis)]
+      (let [_now (System/currentTimeMillis)]
         ;; Create user
         (d/transact conn {:tx-data [{:user/id "test-user"
                                      :user/email "test@digdir.no"}]})

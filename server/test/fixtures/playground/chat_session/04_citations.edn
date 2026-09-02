@@ -1,0 +1,7 @@
+[{:event :request/started :request-id "req-4" :query "Cite this"}
+ {:event :response/finalized
+  :text "See source [1]."
+  :used-chunks [{:chunk_id "c1"
+                 :title "Annual Report"
+                 :metadata {"Header 1" "Governance" "Header 2" "Board"}}]
+  :diagnostics {:citations [{:index 1 :chunk-id "c1"}]}}]

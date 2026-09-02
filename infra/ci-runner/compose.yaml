@@ -1,0 +1,135 @@
+# digdir-headless-rag self-hosted CI runner — ONE container, co-tenant on kamal-1
+# alongside closser's ci-fleet (htz-a1..a4) and the Kamal-deployed prod services.
+#
+# Bring up on the box:
+#   DIGDIR_CI_ROOT=/mnt/HC_Volume_106331869/digdir-ci \
+#   docker compose -f infra/ci-runner/compose.yaml up -d
+#
+# RUNNER_TOKEN comes from the gitignored .env — see .env.example. It is a
+# short-lived (~1h) REGISTRATION token, consumed only when the container is
+# FIRST created; `docker restart` and reboot reuse the credentials already
+# written into /actions-runner/.runner inside the container.
+#
+# ---------------------------------------------------------------------------
+# CO-TENANCY: this box serves rag.digdir.cloud. Every number below is chosen so
+# our CI loses, not wins, a fight with the prod service.
+#
+#   cpuset "24-25"  closser pins htz-a1..a4 to cores 0-23 and NOTHING pins
+#                   24-31, so these two cores overlap no other pinned workload.
+#                   (The ci-fleet compose header calls this "a 24-core box";
+#                   it is 32 — `nproc` and `lscpu` both say so.)
+#   cpu_shares 512  copied from ci-fleet, and the reason is the important part:
+#                   the Kamal co-tenants run at the default ~1024, so under
+#                   contention the prod service outranks CI 2:1. Do not raise
+#                   this to make CI faster.
+#   mem_limit 8g    GitHub's ubuntu-latest is 2 cores / 7 GB and our suite
+#                   already passes there in ~4m30, so this is the envelope we
+#                   have been running on all along, plus a GB of headroom.
+#   memswap 8g      set EQUAL to mem_limit deliberately: this box has ZERO swap
+#                   (`free` reports Swap: 0), so there is no cushion to grant.
+#                   Stating it makes the hard-wall behaviour explicit rather
+#                   than leaving it to docker's default (2x mem_limit), which
+#                   would imply a swap allowance that does not exist.
+#
+# NOT MOUNTED, deliberately: the docker socket. PR code executes on this box —
+# a known and accepted trade — and closser's runners do not mount it either.
+# Adding it would let a workflow reach the prod containers.
+# ---------------------------------------------------------------------------
+
+name: digdir-ci
+
+services:
+  digdir-rag-1:
+    # Reuses the image closser's fleet already runs, per the "copy the pattern"
+    # instruction: it is repo-agnostic (entrypoint.sh drives config.sh purely
+    # from REPO_URL / RUNNER_TOKEN / RUNNER_NAME / RUNNER_LABELS), it is already
+    # on the box, and building our own would spend disk and build time on a
+    # production host for no behavioural difference.
+    #
+    # KNOWN COUPLING, accepted: closser owns this tag. If they rebuild it our
+    # container picks the new image up on the next `up -d` recreate — never
+    # spontaneously. Image ID at adoption is recorded in README.md so drift is
+    # detectable rather than invisible.
+    image: closser-runner:latest
+    container_name: digdir-rag-1
+    hostname: digdir-rag-1
+    restart: always
+    cpuset: "24-25"
+    cpu_shares: 512
+    mem_limit: 8g
+    memswap_limit: 8g
+    environment:
+      REPO_URL: "https://github.com/itonomi/digdir-headless-rag"
+      # PER-RUNNER token variable, and the reason is a real hazard: compose
+      # hashes the RESOLVED service config, so a single shared RUNNER_TOKEN
+      # means writing a fresh token for runner 2 changes runner 1's hash and
+      # `up -d` RECREATES A HEALTHY RUNNER — killing whatever job it is running.
+      # Separate variables make that structurally impossible. Belt and braces:
+      # bring new runners up with `--no-recreate`.
+      RUNNER_TOKEN: "${RUNNER_TOKEN_1:?set RUNNER_TOKEN_1 in infra/ci-runner/.env}"
+      RUNNER_NAME: "digdir-rag-1"
+      # `self-hosted`, `Linux` and `X64` are added by the runner itself. This is
+      # the label that distinguishes ours from closser's four on the same box.
+      RUNNER_LABELS: "digdir-rag"
+      RUNNER_ALLOW_RUNASROOT: "1"
+      LANG: "en_US.UTF-8"
+      LC_ALL: "en_US.UTF-8"
+    volumes:
+      - work:/actions-runner/_work
+      - m2:/root/.m2
+
+  # ---------------------------------------------------------------------------
+  # Runner 2. Deliberately NOT a copy-paste-with-anchors of runner 1: keeping
+  # runner 1's block byte-identical is what guarantees `up -d` leaves it alone.
+  #
+  # ⚠️ WHAT A SECOND RUNNER DOES AND DOES NOT BUY, because it is easy to
+  # over-read. It covers ONE runner being in a reconnect window: the job queues
+  # against the `digdir-rag` label and the idle sibling takes it. It does NOT
+  # cover both restarting together — which is exactly what a `compose restart`,
+  # a host reboot, or an image update does, and those are the common causes.
+  # The `entrypoint` stagger below is what stops the default (compose starts
+  # everything at once) from putting both in the same window.
+  # ---------------------------------------------------------------------------
+  digdir-rag-2:
+    image: closser-runner:latest
+    container_name: digdir-rag-2
+    hostname: digdir-rag-2
+    restart: always
+    # Cores 26-27. Still inside the 24-31 block that nothing else pins; closser
+    # remains untouched on 0-23. Two runners is 4 of the 8 free cores.
+    cpuset: "26-27"
+    cpu_shares: 512
+    mem_limit: 8g
+    memswap_limit: 8g
+    # THE STAGGER. Without this, compose (and the boot-time restart:always
+    # sweep) starts both runners in the same second, so both sit in the
+    # ~2-minute "A session for this runner already exists / Conflict. Retrying"
+    # window simultaneously and the sibling cannot rescue anything. 90s is
+    # comfortably longer than the reconnect window measured on this box.
+    # `exec` so the runner still receives SIGTERM as PID 1 would.
+    entrypoint: ["/bin/sh", "-c", "sleep 90; exec /entrypoint.sh"]
+    environment:
+      REPO_URL: "https://github.com/itonomi/digdir-headless-rag"
+      RUNNER_TOKEN: "${RUNNER_TOKEN_2:?set RUNNER_TOKEN_2 in infra/ci-runner/.env}"
+      RUNNER_NAME: "digdir-rag-2"
+      RUNNER_LABELS: "digdir-rag"
+      RUNNER_ALLOW_RUNASROOT: "1"
+      LANG: "en_US.UTF-8"
+      LC_ALL: "en_US.UTF-8"
+    volumes:
+      - work2:/actions-runner/_work
+      # Its OWN m2, not shared with runner 1. Two concurrent jobs writing one
+      # Maven/gitlibs cache is a rare but genuinely confusing corruption, and
+      # disk is the cheap resource here (111 GB free).
+      - m22:/root/.m2
+
+volumes:
+  # Bind-mounted onto the big Hetzner volume (111 GB free) rather than / (74 GB,
+  # 87% used) — the root filesystem also holds /var/lib/docker and the prod
+  # service's images, so runner checkouts must not compete with it for space.
+  work: {driver: local, driver_opts: {type: none, o: bind, device: "${DIGDIR_CI_ROOT:?set DIGDIR_CI_ROOT}/runner-work-1"}}
+  # Clojure dependency cache. Same rationale as ci-fleet's cargo-home mount:
+  # keeps a recreate from re-downloading the whole dependency tree.
+  m2:   {driver: local, driver_opts: {type: none, o: bind, device: "${DIGDIR_CI_ROOT:?set DIGDIR_CI_ROOT}/m2"}}
+  work2: {driver: local, driver_opts: {type: none, o: bind, device: "${DIGDIR_CI_ROOT:?set DIGDIR_CI_ROOT}/runner-work-2"}}
+  m22:   {driver: local, driver_opts: {type: none, o: bind, device: "${DIGDIR_CI_ROOT:?set DIGDIR_CI_ROOT}/m2-2"}}

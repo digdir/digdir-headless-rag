@@ -1,0 +1,29 @@
+;; Query-variance diagnostic for the retrieval-variance cohort.
+;;
+;; The N=3 baseline + golden-pool-rank showed the upstream "pool-miss" is mostly
+;; query-formulation VARIANCE (broker-03 ranks 1/1/42, api-04 2/7/71) plus one
+;; NB/EN twin-eclipse (events-02) — not a vocab gap or a fixed ranking floor.
+;; This run captures the new `issued-queries` column across these 10 cases at N=5
+;; so we can correlate WHICH query phrasing pools the golden (rank 1-5) vs buries
+;; it (rank 40-70 / never), and decide the lever: query-planner (coverage/
+;; consistency) vs twin-dedup vs display-limit.
+;;
+;; Real agent (empty :skill-params), repeats 5, judge? false (retrieval signal —
+;; pool-rank + issued-queries are what matter). 10 × 5 = 50 runs.
+{:configs
+ [{:id "production" :skill-graph-id :builtin/agent-rag-graph-bundled :skill-params {}}]
+ :repeats 5
+ :judge? false
+ :max-clarification-rounds 1
+ :run-timeout-ms 300000
+ :execution-scope {:tenant "digdir" :dataset-config-key "default" :agent-id "builtin/agent-rag-agent"}
+ :question-filter {:ids #{"ue-events-02-publisere-cloudevents"
+                          "ue-api-04-instances-get-no-list"
+                          "ue-authz-01-delegere-tilgangspakke-api"
+                          "ue-broker-03-store-filer-virusskann"
+                          "ue-broker-05-filstorrelse-grenser-multi"
+                          "ue-corr-01-events-webhook-subscription"
+                          "ue-sys-02-systembrukertoken-pdp-autorisasjon"
+                          "ue-api-06-app-openapi-swagger-spec"
+                          "ue-studio-01-skjul-felt-uttrykk"
+                          "ue-studio-02-pdf-service-task"}}}
