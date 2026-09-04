@@ -5,7 +5,14 @@
             [clojure.string :as str]
             [digdir.docs.website :as website]
             [digdir.docs.folder :as folder]
+            [digdir.rag.typesense :as ts-utils]
             [typesense.client :as ts]))
+
+(def ^:private cfg
+  "#476: the storage functions take the pipeline config so they resolve
+   Typesense for the tenant the pipeline belongs to, instead of a hidden
+   namespace-level default."
+  {:tenant "test-tenant"})
 
 ;; ============================================================================
 ;; Mock TypeSense State
@@ -17,7 +24,18 @@
   (binding [*mock-ts-store* (atom {:collections {} :documents {}})]
     (f)))
 
-(use-fixtures :each with-mock-typesense)
+(defn- stub-resolver
+  "These tests exercise storage LOGIC, not config resolution. #476 made the
+   storage functions resolve Typesense per tenant, so without this they would
+   fail on `cfg` having no platform tree — a fact about the test DB, not about
+   the code under test."
+  [f]
+  (with-redefs [ts-utils/make-ts-settings (fn [_] {:uri "http://stub:8108" :key "stub"})]
+    (f)))
+
+;; Composed, not replaced: two separate `use-fixtures :each` calls would leave
+;; only the second in effect and silently drop the mock Typesense store.
+(use-fixtures :each with-mock-typesense stub-resolver)
 
 ;; ============================================================================
 ;; Schema Tests
@@ -155,7 +173,7 @@
       (with-redefs [ts/create-collection! (fn [_ schema]
                                             (reset! created-schema schema)
                                             schema)]
-        (let [result (website/create-website-docs-coll "test_docs")]
+        (let [result (website/create-website-docs-coll cfg "test_docs")]
           (is (= "test_docs" (:name result)))
           (is (= "test_docs" (:name @created-schema))))))))
 
@@ -163,7 +181,7 @@
   (testing "Returns :already-exists when collection exists"
     (with-redefs [ts/create-collection! (fn [_ _]
                                           (throw (ex-info "Conflict" {:type :typesense.client/conflict})))]
-      (let [result (website/create-website-docs-coll "test_docs")]
+      (let [result (website/create-website-docs-coll cfg "test_docs")]
         (is (= :already-exists result))))))
 
 ;; ============================================================================

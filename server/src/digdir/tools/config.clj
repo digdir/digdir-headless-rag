@@ -1,5 +1,20 @@
 (ns digdir.tools.config
-  "Config inspection helpers for local bb/clj tasks."
+  "Config inspection helpers, shared by the `bb` tasks and the on-jar CLI.
+
+   ## Why this is in `src` and not `src-dev` (#505)
+
+   It used to live in `src-dev`, which the uberjar does not ship —
+   `build.clj` copies `[\"src\" \"src-prod\" \"resources\"]` only. That was
+   fine while the only caller was `bb config-get` on a developer machine.
+
+   `digdir.setup.config-cli` needs the same read inside the runtime image,
+   where there is no source tree. The alternative was a second
+   implementation of \"resolve one config value\", which would own a copy of
+   the pipeline-property special case and the `agent-id`/`pipeline-id`
+   defaults below — the two would then drift about what a read means, which
+   is the class of defect #497 and #500 both were. Moving the one
+   implementation to where both callers can reach it is cheaper than
+   keeping two honest."
   (:require [clojure.string :as str]
             [datahike.api :as d]
             [digdir.config.core :as config-core]
@@ -81,17 +96,23 @@
                (case root
                  :platform (accessor/get-platform-value-with-trace path opts)
                  :runtime  (accessor/get-runtime-value-with-trace path opts)
-                 :dataset  (accessor/get-dataset-value-with-trace path opts))])]
-        (prn (cond-> {:tenant tenant
-                      :tenant-config-key tenant-config-key
-                      :root effective-root
-                      :path path
-                      :resolved? (some? (:value res))
-                      :value (:value res)
-                      :winning-node (get-in res [:trace :winning-node])
-                      :stop-reason (get-in res [:trace :stop-reason])
-                      :traversal (:traversal-path (:trace res))}
-               dataset-id (assoc :dataset-id dataset-id))))
+                 :dataset  (accessor/get-dataset-value-with-trace path opts))])
+              ;; Printed AND returned. `bb config-get` reads the printed form and
+              ;; is unchanged by the return; `digdir.setup.config-cli` needs
+              ;; `:resolved?` as a value so it can exit non-zero on a path that
+              ;; does not resolve instead of printing nil and succeeding.
+              summary (cond-> {:tenant tenant
+                               :tenant-config-key tenant-config-key
+                               :root effective-root
+                               :path path
+                               :resolved? (some? (:value res))
+                               :value (:value res)
+                               :winning-node (get-in res [:trace :winning-node])
+                               :stop-reason (get-in res [:trace :stop-reason])
+                               :traversal (:traversal-path (:trace res))}
+                        dataset-id (assoc :dataset-id dataset-id))]
+          (prn summary)
+          summary)
       (finally
         (cleanup! conn)))))
 

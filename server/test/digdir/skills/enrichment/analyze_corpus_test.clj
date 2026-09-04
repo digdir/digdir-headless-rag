@@ -231,7 +231,7 @@
                                {"chunks" {:found 1
                                           :hits [{:document {:chunk_id "c1"}}]}})
                     enrich-coll/ensure-collection-by-name!
-                    (fn [docs enrich etype]
+                    (fn [_config docs enrich etype]
                       (swap! ensure-calls conj
                              {:docs docs :enrich enrich :etype etype})
                       :stub)]
@@ -257,7 +257,7 @@
                                {"chunks" {:found 1
                                           :hits [{:document {:chunk_id "c1"}}]}})
                     enrich-coll/ensure-collection-by-name!
-                    (fn [docs enrich etype]
+                    (fn [_config docs enrich etype]
                       (swap! ensure-calls conj
                              {:docs docs :enrich enrich :etype etype})
                       :stub)]

@@ -17,7 +17,17 @@
             [digdir.rag.typesense :as tsu]
             [typesense.client :as ts]))
 
-(def ^:private ts-admin storage/ts-admin)
+(def ^:private dev-tenant
+  "This tool already pins tenant \"digdir\" when it resolves its dataset config;
+   #476 removed the resolver's hidden default, so it states the same tenant for
+   its Typesense writes instead of inheriting one."
+  {:tenant "digdir"})
+
+(defn- ts-admin
+  "Resolved per call, not at namespace load: a load-time resolution would throw
+   on a classpath with no config DB and take every src-dev namespace with it."
+  []
+  (tsu/make-ts-settings dev-tenant))
 
 (defn- read-all-phrases [coll]
   (let [settings (tsu/make-ts-settings {:tenant "digdir"})]
@@ -114,13 +124,13 @@
         (println "  sample PRUNED:" (->> pruned (map :search_phrase) (take 10) vec))
         (when (= mode :build)
           (let [keep-rows (mapv #(select-keys % [:id :chunk_id :doc_num :search_phrase]) kept)
-                schema (ts/retrieve-collection ts-admin src)
+                schema (ts/retrieve-collection (ts-admin) src)
                 new-schema (-> (select-keys schema [:fields :default_sorting_field :token_separators
                                                     :symbols_to_index :enable_nested_fields])
                                (assoc :name new-coll))]
             (println (format "\nBUILD -> %s with %d kept rows (re-embeds phrase_vec on upsert)" new-coll (count keep-rows)))
-            (storage/create-collection! new-schema)
+            (storage/create-collection! dev-tenant new-schema)
             (doseq [batch (partition-all 200 keep-rows)]
-              (ts/upsert-documents! ts-admin new-coll (vec batch)))
-            (let [verify (ts/retrieve-collection ts-admin new-coll)]
+              (ts/upsert-documents! (ts-admin) new-coll (vec batch)))
+            (let [verify (ts/retrieve-collection (ts-admin) new-coll)]
               (println "DONE — new collection num_documents:" (:num_documents verify)))))))))

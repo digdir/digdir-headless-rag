@@ -16,9 +16,17 @@
 ;; TypeSense Admin Client
 ;; ============================================================================
 
-(def ts-admin
-  "TypeSense admin client instance."
-  ts-utils/ts-admin)
+(defn- ts
+  "Typesense settings for the tenant this pipeline is running for.
+
+   Resolved per call from `config`, not from a namespace-level value. The old
+   `ts-admin` was a load-time `def` with no tenant that fell back to a hardcoded
+   tenant list, so a pipeline for one tenant wrote using another tenant's
+   credentials (#476). Every function below therefore takes `config` — its
+   callers all already had it, and two of them destructured it as `_config` and
+   threw it away."
+  [config]
+  (ts-utils/make-ts-settings {:tenant (:tenant config)}))
 
 ;; ============================================================================
 ;; Configuration Utilities
@@ -33,12 +41,34 @@
         m))
 
 (defn config-hash
-  "Generates a hash of config values in a specific namespace.
-   Used to create unique collection names based on configuration."
+  "Hash of the `ns`-namespaced config values, used to version collection names.
+
+   ⚠️ THIS RETURNED A CONSTANT UNTIL #501, AND THE BUG IS ONE LINE OF ORDERING.
+   It read:
+
+     (extract-ns-from-map (select-keys config [:hash-changer :strategy]) ns)
+
+   `select-keys` ran FIRST, against a config whose keys are NAMESPACED —
+   `:chunks/strategy`, `:chunks/hash-changer`. There is no bare `:strategy` or
+   `:hash-changer`, so it selected nothing and `extract-ns-from-map` was handed an
+   empty map. Every call hashed `{}` and returned the same twelve characters, for
+   every tenant, every dataset and every collection kind:
+
+     (sha256-short-hash {}) = ab897fbdedfa
+
+   The tell was visible in the output without running anything: `coll-ids` calls
+   this with THREE different `ns` arguments and got ONE suffix back.
+
+   So the suffix — whose entire job is to make a config change land in a NEW
+   collection — never versioned anything, and a re-ingest after a chunking change
+   silently overwrote the collection the old config had built.
+
+   The fix is to extract the namespace from the config itself, which is what
+   `extract-ns-from-map` was always for. ⚠️ COLLECTION NAMES THEREFORE CHANGE, and
+   existing corpora must be re-materialised under the new names — that is the
+   point of the fix, not a side effect of it."
   [config ns]
-  (core/sha256-short-hash
-   (extract-ns-from-map
-    (select-keys config [:hash-changer :strategy]) ns)))
+  (core/sha256-short-hash (extract-ns-from-map config ns)))
 
 (defn coll-ids
   "Generates collection IDs for documents, chunks, and phrases based on config.
@@ -57,9 +87,9 @@
 (defn document-inserted?
   "Checks if a document with the given ID exists in the collection.
    Returns true if found, false otherwise."
-  [coll-name doc]
+  [config coll-name doc]
   (try
-    (ts/retrieve-document ts-admin coll-name (:id doc))
+    (ts/retrieve-document (ts config) coll-name (:id doc))
     true
     (catch Exception _
       false)))
@@ -72,10 +102,10 @@
   "Creates a TypeSense collection with the given schema.
    Returns the created schema on success, :already-exists if collection exists,
    or throws for other errors."
-  [schema]
+  [config schema]
   (try
     (t/event! :pipeline/creating-collection {:data {:name (:name schema)}})
-    (ts/create-collection! ts-admin schema)
+    (ts/create-collection! (ts config) schema)
     (catch clojure.lang.ExceptionInfo e
       (if (= (:type (ex-data e)) :typesense.client/conflict)
         (do
@@ -95,9 +125,9 @@
   [config docs-schema-fn chunks-schema-fn phrases-schema-fn]
   (let [[docs-coll _chunks-coll _phrases-coll :as ids] (coll-ids config)]
     (t/event! :pipeline/creating-stores {:data {:coll-ids ids}})
-    (create-collection! (docs-schema-fn docs-coll))
-    (create-collection! (chunks-schema-fn ids))
-    (create-collection! (phrases-schema-fn ids))
+    (create-collection! config (docs-schema-fn docs-coll))
+    (create-collection! config (chunks-schema-fn ids))
+    (create-collection! config (phrases-schema-fn ids))
     ids))
 
 ;; ============================================================================
@@ -107,17 +137,17 @@
 (defn upsert-document!
   "Upserts a single document into the collection.
    Returns the document on success."
-  [coll-name doc]
+  [config coll-name doc]
   (t/event! :pipeline/upserting-document {:data {:id (:id doc)}})
-  (ts/upsert-document! ts-admin coll-name doc))
+  (ts/upsert-document! (ts config) coll-name doc))
 
 (defn upsert-documents!
   "Upserts multiple documents into the collection.
    Returns the results on success."
-  [coll-name docs]
+  [config coll-name docs]
   (when (seq docs)
     (t/event! :pipeline/upserting-documents {:data {:count (count docs)}})
-    (ts/upsert-documents! ts-admin coll-name docs)))
+    (ts/upsert-documents! (ts config) coll-name docs)))
 
 ;; ============================================================================
 ;; Chunk Storage
@@ -157,11 +187,11 @@
   "Stores chunks for a document into the chunks collection.
    Enforces `:id := :chunk_id` so upsert is keyed correctly even if
    the upstream prepare-fn omitted the field."
-  [chunks-coll chunks]
+  [config chunks-coll chunks]
   (when (seq chunks)
     (let [chunks-with-ids (mapv ensure-chunk-id chunks)]
       (t/event! :pipeline/upserting-chunks {:data {:count (count chunks-with-ids)}})
-      (ts/upsert-documents! ts-admin chunks-coll chunks-with-ids))))
+      (ts/upsert-documents! (ts config) chunks-coll chunks-with-ids))))
 
 (defn- ts-id-list
   "Render a seq of alphanumeric IDs as a Typesense filter list:
@@ -186,7 +216,7 @@
 
    No-op when `current-ids` is empty (defensive: avoid wiping the
    doc's chunks if upstream produced zero)."
-  [chunks-coll doc-num current-ids]
+  [config chunks-coll doc-num current-ids]
   (when (and (seq current-ids) (not (str/blank? (str doc-num))))
     (let [filter-by (str "doc_num:=" doc-num
                          " && id:!=" (ts-id-list current-ids))]
@@ -194,7 +224,7 @@
                 {:data {:doc-num doc-num
                         :keep-count (count current-ids)
                         :filter filter-by}})
-      (ts/delete-documents! ts-admin chunks-coll {:filter_by filter-by}))))
+      (ts/delete-documents! (ts config) chunks-coll {:filter_by filter-by}))))
 
 ;; ============================================================================
 ;; Phrase Storage
@@ -237,12 +267,12 @@
    Enforces a deterministic `:id` per (chunk_id, search_phrase) pair
    so upsert is keyed correctly even if the upstream caller omitted
    the field."
-  [phrases-coll phrases doc-id]
+  [config phrases-coll phrases doc-id]
   (t/event! :pipeline/phrase-count {:data {:count (count phrases) :doc-id doc-id}})
   (when (seq phrases)
     (let [phrases-with-ids (mapv ensure-phrase-id phrases)]
       (try
-        (ts/upsert-documents! ts-admin phrases-coll phrases-with-ids)
+        (ts/upsert-documents! (ts config) phrases-coll phrases-with-ids)
         (catch Exception e
           (t/error! {:id :pipeline/upsert-phrases-error
                      :msg ["Failed to upsert phrases" "doc:" doc-id "count:" (count phrases-with-ids)]}
@@ -261,7 +291,7 @@
        (because their hash isn't in the new keep-set)
 
    No-op when `current-ids` is empty."
-  [phrases-coll doc-num current-ids]
+  [config phrases-coll doc-num current-ids]
   (when (and (seq current-ids) (not (str/blank? (str doc-num))))
     (let [filter-by (str "doc_num:=" doc-num
                          " && id:!=" (ts-id-list current-ids))]
@@ -269,7 +299,7 @@
                 {:data {:doc-num doc-num
                         :keep-count (count current-ids)
                         :filter filter-by}})
-      (ts/delete-documents! ts-admin phrases-coll {:filter_by filter-by}))))
+      (ts/delete-documents! (ts config) phrases-coll {:filter_by filter-by}))))
 
 ;; ============================================================================
 ;; Complete Document Storage
@@ -304,7 +334,7 @@
         doc-num (:doc_num doc)]
     (try
       ;; Store document
-      (upsert-document! docs-coll (prepare-doc-fn config (assoc doc :total_chunks (count (:chunks doc)))))
+      (upsert-document! config docs-coll (prepare-doc-fn config (assoc doc :total_chunks (count (:chunks doc)))))
 
       ;; Store chunks + delete orphan chunks for this doc.
       ;; Apply ensure-chunk-id to the prepared chunks BEFORE both
@@ -313,15 +343,15 @@
       ;; of whether the upstream prepare-fn included :id.
       (let [prepared-chunks (mapv ensure-chunk-id (prepare-chunks-fn (:chunks doc)))
             current-chunk-ids (mapv :id prepared-chunks)]
-        (store-chunks! chunks-coll prepared-chunks)
-        (delete-orphan-chunks! chunks-coll doc-num current-chunk-ids)
+        (store-chunks! config chunks-coll prepared-chunks)
+        (delete-orphan-chunks! config chunks-coll doc-num current-chunk-ids)
 
         ;; Store phrases + delete orphan phrases. Same defense-in-depth:
         ;; pass through ensure-phrase-id before extracting ids.
         (let [phrases (mapv ensure-phrase-id (extract-phrases (:chunks doc) doc-num))
               current-phrase-ids (mapv :id phrases)]
-          (store-phrases! phrases-coll phrases (:id doc))
-          (delete-orphan-phrases! phrases-coll doc-num current-phrase-ids)))
+          (store-phrases! config phrases-coll phrases (:id doc))
+          (delete-orphan-phrases! config phrases-coll doc-num current-phrase-ids)))
 
       (core/say "Stored document")
       (t/event! :pipeline/document-stored {:data {:id (:id doc)}})
@@ -363,7 +393,7 @@
               (let [content (or (:content_markdown doc) "")
                     computed-length (count content)]
                 (try
-                  (ts/upsert-document! ts-admin chunks-coll
+                  (ts/upsert-document! ts-settings chunks-coll
                                        {:id (:id doc)
                                         :content_length computed-length})
                   (swap! stats update :updated inc)
@@ -409,7 +439,7 @@
                                               :per_page 0
                                               :page 1})
                       chunk-count (or (:found chunk-result) 0)]
-                  (ts/upsert-document! ts-admin docs-coll
+                  (ts/upsert-document! ts-settings docs-coll
                                        {:id (:id doc)
                                         :total_chunks chunk-count})
                   (swap! stats update :updated inc))

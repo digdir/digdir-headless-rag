@@ -864,6 +864,32 @@
        (count eids))))
 
 #?(:clj
+   ;; ⚠️ `:keep-history? false` APPLIES HERE TOO, and this is the file people
+   ;; check to find out. It is set once in
+   ;; `digdir.config.core/load-bootstrap-config` — which builds the store config
+   ;; for the DATA database as well as the config ones — so grepping this
+   ;; namespace for `keep-history` finds nothing and reads as "falls through to
+   ;; Datahike's default", which retains history. That inference is wrong, and
+   ;; it generated #520.
+   ;;
+   ;; Measured on a COPY of a real running store (#520), three ways rather than
+   ;; read off the source that created it:
+   ;;   stored config          -> :keep-history? false
+   ;;   (d/history db)         -> refuses: "history is only allowed on temporal
+   ;;                             indexed databases" — a behavioural check, not
+   ;;                             a config read
+   ;;   supplying the default  -> Datahike rejects the connect, diffing
+   ;;                             {:keep-history? true} against the stored false
+   ;;
+   ;; So turning history off is a NO-OP: it is already off. Nothing in this
+   ;; repo calls `d/history`, `d/as-of` or `d/since` either (the `since` hits
+   ;; are prose and an `:audit/timestamp` filter), so nothing depends on it.
+   ;;
+   ;; And the store's size is not history: that same store held 114 MB across
+   ;; 11,666 files for 3,228 live datoms, and still opened in 32 ms cold, 2 ms
+   ;; warm, answering the playground's own queries in 7-21 ms. Whatever makes
+   ;; the playground feel slow, it is not this connection.
+
    (defn init-db!
      "Full one-time boot sequence: connect, register schemas, apply migrations,
       ensure config definitions, audit invariants. Sets `!conn`. Returns the

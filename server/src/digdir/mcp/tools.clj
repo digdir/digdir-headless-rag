@@ -236,7 +236,34 @@
                                      "content_length" {"type" "integer"}
                                      "total_chunks" {"type" "integer"}
                                      "title" {"type" "string"}
-                                     "url" {"type" "string"}
+                                     ;; CONDITIONAL, and said so rather than
+                                     ;; implied (#504). A chunk carries a url
+                                     ;; only when its source has one to give:
+                                     ;; website corpora always do, folder
+                                     ;; corpora only when the dataset supplies a
+                                     ;; base URL to build them from. A local
+                                     ;; markdown corpus has no public address,
+                                     ;; and inventing one would be worse than
+                                     ;; omitting it. Clients must treat this as
+                                     ;; optional — it is absent, not empty.
+                                     ;;
+                                     ;; The WORDING below is unchanged by #506
+                                     ;; and did not need changing: it already
+                                     ;; described this end state. What changed is
+                                     ;; that the folder branch became REACHABLE.
+                                     ;; At #504 "only when the dataset supplies a
+                                     ;; base URL" was true of folder corpora the
+                                     ;; way any statement about an empty set is
+                                     ;; true — there was no route to supply one.
+                                     ;; #506 added `:folder-base-url`, so the
+                                     ;; condition now discriminates between two
+                                     ;; cases that both occur, which is what the
+                                     ;; sentence always claimed.
+                                     "url" {"type" "string"
+                                            "description" (str "Public URL of the source document. PRESENT ONLY when the "
+                                                               "corpus has one: website-sourced chunks always carry it, "
+                                                               "folder-sourced chunks only when the dataset supplies a base "
+                                                               "URL. Absent otherwise — do not build a link without checking.")}
                                      "metadata" {"type" "object"}}}}
     "queries" {"type" "array"
                "description" "Search queries that were run."

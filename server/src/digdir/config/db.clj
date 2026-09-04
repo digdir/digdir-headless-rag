@@ -423,7 +423,8 @@
        vec))
 
 (defn- build-definition-tx-data
-  [{:keys [path root value-type encrypted? description category service sensitivity function multiline? ownership]
+  [{:keys [path root value-type encrypted? description category service sensitivity function multiline? ownership
+           deployment-specific?]
     :as _definition}
    created-at]
   (ensure-present-string! path :path)
@@ -433,6 +434,13 @@
            :config-def/value-type value-type
            :config-def/encrypted? (boolean encrypted?)
            :config-def/multiline? (boolean multiline?)
+           ;; ⚠️ REGISTRATION. A field absent from this destructuring is
+           ;; SILENTLY DROPPED on upsert — the boolean counterpart of
+           ;; `sync/definition-keyword-fields`, where an unregistered keyword is
+           ;; imported as a string instead. Neither announces itself, which is
+           ;; why `deployment-specific-round-trip-test` exercises an export and
+           ;; import rather than reading this and concluding.
+           :config-def/deployment-specific? (boolean deployment-specific?)
            :config-def/created-at created-at}
     (some? description) (assoc :config-def/description description)
     (some? category) (assoc :config-def/category category)
@@ -1579,6 +1587,23 @@
                             {:path path
                              :requested-root root
                              :definition-root (:config-def/root definition)})))
+        ;; ENFORCED, not merely documented. A deployment-specific path has no
+        ;; correct global default, so a __global__ value is wrong by
+        ;; construction rather than by policy — it would be served to every
+        ;; tenant that has not overridden it.
+        ;;
+        ;; Safe to enforce without a migration: measured before this landed,
+        ;; ZERO services.* values exist at __global__, in both the committed
+        ;; snapshot and a live deployment export. Every __global__ value is a
+        ;; skills.rerank.* tuning number, which is exactly the kind that SHOULD
+        ;; have one answer for everyone.
+        _ (when (and (= core/global-tenant tenant)
+                     (:config-def/deployment-specific? definition))
+            (throw (ex-info (str "Refusing a __global__ value for a "
+                                 "deployment-specific path: " path)
+                            {:path path
+                             :tenant tenant
+                             :reason :deployment-specific-has-no-global-default})))
         encoded (encode-value value
                               (:config-def/value-type definition)
                               (:config-def/encrypted? definition)
@@ -2136,6 +2161,7 @@
    :website-sitemap-url       "pipeline.source.website.sitemap-url"
    :website-base-url          "pipeline.source.website.base-url"
    :folder-path               "pipeline.source.folder.path"
+   :folder-base-url           "pipeline.source.folder.base-url"
    :kudos-use-preprod         "pipeline.source.kudos.use-preprod"
    :kudos-starting-page       "pipeline.source.kudos.starting-page"
    :episerver-xml-path        "pipeline.source.episerver.xml-path"
@@ -2436,15 +2462,6 @@
   [db]
   (list-datasets db nil nil))
 
-(defn get-datasets-by-tenant
-  "Get all pipelines grouped by tenant for the pipeline selector."
-  [db tenants]
-  (reduce
-   (fn [acc tenant]
-     (assoc acc tenant (list-datasets db tenant nil)))
-   {}
-   tenants))
-
 (defn get-dataset-names
   "Get a map of pipeline-id -> display name for pipelines through Dataset V2."
   ([db tenant pipeline-ids]
@@ -2643,15 +2660,24 @@
       ;; down — a correct status with a message that cannot say which mistake
       ;; was made.
       ;;
-      ;; Cheap because `get-datasets-by-tenant` is in this namespace and defined
-      ;; above: no new plumbing, one query.
+      ;; ⚠️ ASK THE QUESTION DIRECTLY. This read `(seq (get-datasets-by-tenant db
+      ;; tenant))`, which passed a tenant STRING to a function that reduces over a
+      ;; COLLECTION — so `reduce` walked the characters of "demo" and handed `\d`
+      ;; to `clojure.string/blank?`. Every tools/call and /v1 chat 500'd.
+      ;;
+      ;; The repair is NOT `[tenant]`: that returns `{"demo" []}`, and
+      ;; `(seq {"demo" []})` is TRUTHY with zero datasets, so `any-datasets?`
+      ;; would be permanently true and the "No datasets" branch could never fire
+      ;; again — a crash traded for a message that is always wrong, which is
+      ;; harder to notice. `list-datasets` returns the datasets themselves, so
+      ;; `seq` means what it looks like it means.
       ;;
       ;; ⚠️ This CANNOT mean "the dataset has no indexed content". Resolution is
       ;; purely config-based and never consults Typesense, so a configured
       ;; dataset with an empty corpus resolves fine and never reaches here. That
       ;; is a different state at a different site — see the issue referenced in
       ;; the PR that added this.
-      (let [any-datasets? (boolean (seq (get-datasets-by-tenant db tenant)))]
+      (let [any-datasets? (boolean (seq (list-datasets db tenant nil)))]
         (throw (ex-info (if any-datasets?
                           "Dataset ref does not match any configured dataset"
                           "No datasets are configured for this tenant")

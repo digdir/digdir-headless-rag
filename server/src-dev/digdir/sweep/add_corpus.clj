@@ -49,7 +49,7 @@
         total (count cids)]
     (when create?
       (println "ensure collection:" enrichment-collection
-               (colls/ensure-collection-by-name! dc enrichment-collection enrichment-type)))
+               (colls/ensure-collection-by-name! sp dc enrichment-collection enrichment-type)))
     (println (format "add-corpus: %d chunks -> %s (type %s, count %d)"
                      total enrichment-collection (name enrichment-type) n-items))
     (let [added

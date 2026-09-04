@@ -13,6 +13,7 @@
 
    TWO SETTINGS HERE ARE MEASURED RATHER THAN CHOSEN, and both are guarded."
   (:require [digdir.docs.pipeline.search-phrases :as search-phrases]
+            [digdir.setup.common :as common]
             [digdir.setup.workflow :as workflow]))
 
 (def demo-tenant "demo")
@@ -134,3 +135,55 @@
     :dataset-id demo-dataset-id
     :corpus-directory (corpus-directory)
     :rerank-max-chunk-length rerank-max-chunk-length}))
+
+(defn -main
+  "Seed the demo dataset and runtime trees, as a `-main` on the jar the image
+   ships.
+
+   ## The gap this closes (#493)
+
+   `execute-pipeline-async!` is reachable only through the console route, and
+   that route is fine — MEASURED: with an admin session it returns
+   202 `{\"executionId\": …}` and the pipeline runs. What a fresh container had
+   was nothing to point it at: `GET /console-api/datasets` returned
+   `{\"datasets\":[]}`, because the only seeder was `bb demo-seed` and a
+   container has no `bb` and no source tree.
+
+   This namespace was already on the production classpath — calling `seed!`
+   off the jar seeded the dataset and the trigger then fired. Only the door was
+   missing, so this adds a door and no new mechanism.
+
+       docker compose run --rm --no-deps --entrypoint java digdir-rag \\
+         -cp /app/app.jar clojure.main -m digdir.setup.demo-dataset
+
+   Run `digdir.setup.demo-tenant` first: the dataset is useless without the
+   platform tree's Typesense settings to reach.
+
+   ⚠️ Seeds CONFIGURATION ONLY. Nothing here fetches the corpus, so that a
+   re-seed does not re-download 352 articles. A materialization triggered
+   against an unfetched corpus completes cleanly having processed 0 documents
+   — measured — which is a confusing success, so the corpus path is reported
+   below rather than left implicit."
+  [& _args]
+  (println)
+  (println "digdir — demo dataset (dataset + runtime trees)")
+  (println "==============================================")
+  (common/refuse-if-server-running! "digdir.setup.demo-dataset")
+  (let [result (seed!)
+        dir (java.io.File. ^String (:corpus-directory result))]
+    (println (str "  ✔ tenant '" (:tenant result) "', dataset '" (:dataset-id result) "'"))
+    (println (str "      corpus-directory  " (:corpus-directory result)))
+    (println (str "      rerank-max-chunk-length  " (:rerank-max-chunk-length result)))
+    (println)
+    (if (.isDirectory dir)
+      (println (str "  ✔ corpus present at " (.getAbsolutePath dir)))
+      (do (println (str "  ⚠ NO CORPUS at " (.getAbsolutePath dir)))
+          (println "    Materializing now will FAIL, naming that path (#556).")
+          (println "    It used to COMPLETE having processed 0 documents, which")
+          (println "    is the same outcome as an empty corpus and told you")
+          (println "    nothing; the loader refuses instead. Fetch the corpus")
+          (println "    first (`bb demo-corpus` on a machine with a source tree),")
+          (println "    or mount one at that path.")))
+    (println)
+    (flush)
+    (common/exit! 0)))

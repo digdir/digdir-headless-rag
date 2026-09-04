@@ -12,7 +12,17 @@
             [typesense.client :as ts]
             [valuehash.api]))
 
-(def ^:private ts-admin storage/ts-admin)
+(def ^:private dev-tenant
+  "This tool already pins tenant \"digdir\" when it resolves its dataset config;
+   #476 removed the resolver's hidden default, so it states the same tenant for
+   its Typesense writes instead of inheriting one."
+  {:tenant "digdir"})
+
+(defn- ts-admin
+  "Resolved per call, not at namespace load: a load-time resolution would throw
+   on a classpath with no config DB and take every src-dev namespace with it."
+  []
+  (tsu/make-ts-settings dev-tenant))
 
 (defn- chunk-id [content] (->> content valuehash.api/sha-256-str (take 12) (apply str)))
 
@@ -50,7 +60,7 @@
         new-chunks (vec (mapcat (fn [[_ cs]] (rechunk-doc max-len overlap cs))
                                 (group-by :doc_num all)))
         ;; clone schema verbatim (preserves any join references), new name
-        schema (ts/retrieve-collection ts-admin src)
+        schema (ts/retrieve-collection (ts-admin) src)
         new-schema (-> (select-keys schema [:fields :default_sorting_field :token_separators
                                             :symbols_to_index :enable_nested_fields])
                        (assoc :name new-coll))
@@ -64,8 +74,8 @@
     (println (format "new size dist: max=%d p50=%d over-max=%d | passthrough-ids-preserved=%s"
                      (apply max ls) (nth (sort ls) (quot (count ls) 2))
                      (count (filter #(> % max-len) ls)) passthrough-ok?))
-    (storage/create-collection! new-schema)
+    (storage/create-collection! dev-tenant new-schema)
     (doseq [batch (partition-all 200 new-chunks)]
-      (ts/upsert-documents! ts-admin new-coll (vec batch)))
-    (let [verify (ts/retrieve-collection ts-admin new-coll)]
+      (ts/upsert-documents! (ts-admin) new-coll (vec batch)))
+    (let [verify (ts/retrieve-collection (ts-admin) new-coll)]
       (println "DONE — new collection num_documents:" (:num_documents verify)))))

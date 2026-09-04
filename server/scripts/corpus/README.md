@@ -80,3 +80,86 @@ Fetch the extra articles only if measured scores come back implausibly high, and
 **state the pool composition beside every score** — 352 topics, ~21,000 chunks,
 distractors from the gold articles themselves — so nobody reads a number as
 covering a broader corpus than it does.
+
+## The warm phrase cache
+
+`server/resources/demo-corpus/phrase-cache-folder-v2.edn.gz` — 7,149 pre-generated
+phrase sets, 1.40 MB compressed, unpacked on first run by
+`digdir.boot.phrase-cache/warm!` into `cache/folder-search-phrases/`, which is
+inside the `digdir-cache` volume mounted at `/app/cache` (#495).
+
+Without it, a newcomer's first materialisation of the demo corpus pays one LLM
+call per uncached chunk. With it, the chunks it covers cost nothing.
+
+### Which key version this archive was built under
+
+| segment | value | source |
+|---|---|---|
+| model | `gpt-4o` → `a2a69af70d1b` | `digdir.setup.demo-dataset/dataset-values` |
+| prompt | → `871d369894de` | `search-phrases/default-search-phrases-prompt` |
+| parser version | `v2` | `search-phrases/parser-version` |
+
+Verified **inside the runtime image**, not by inspection: the shipped model and
+prompt hash to exactly the segments the committed keys carry.
+
+**The key is not promised to be stable.** A change to the chunker, the prompt,
+the model constant or `parser-version` orphans every entry — they are simply
+never read again, which is inert rather than wrong. Nothing is designed around
+the key holding. When it changes, re-run a materialisation and rebuild:
+
+```sh
+bb phrase-cache-archive <cache-dir>
+```
+
+That script reproduces the committed archive byte-for-byte from the same input,
+so a diff shows what changed rather than reordering noise.
+
+### Coverage: what it actually warms
+
+Measured against the shipped demo corpus, chunked with the shipped dataset config
+(`:header-based`, minimum 333, no sub-split):
+
+Rebuilt 2026-09-03 from a **complete** materialisation of the freshly fetched
+pinned corpus (351 documents, 7,109 chunks, 82,993 phrases):
+
+| | |
+|---|---|
+| archive entries | **7,149** |
+| chunks the pipeline actually requests phrases for | **7,109** |
+| of those, covered by the archive | **7,109 / 7,109 = 100%** |
+| chunks below the 333-character minimum, dropped before any phrase call | 135 |
+| archive entries not matching a current chunk (inert) | 40 |
+
+**A newcomer re-materialising the demo corpus now pays zero LLM calls for
+phrases.** The previous archive covered 65.6% because it was built over a
+*partial* ingest; that is no longer the case.
+
+⚠️ **The 135 sub-minimum chunks are deliberately not in the denominator.** The
+pipeline drops them before it ever asks for phrases, so an archive cannot cover
+them and counting them understates coverage — that miscount is what produced an
+earlier reading of 98.1%. Coverage is measured against chunks the pipeline
+*requests*, which is the only population an archive can serve.
+
+The 40 surplus entries are orphans carried forward from the previous key epoch.
+They are never read, which is inert rather than wrong — see the key-version note
+above.
+
+### Licence
+
+The phrases are model output over CC BY-SA text, and they are shipped under the
+**same CC BY-SA attribution the corpus already carries** — `ATTRIBUTION.tsv`
+covers them.
+
+That is deliberately the conservative reading. The tempting argument is that
+machine-generated text carries no copyright and the phrases are therefore
+unencumbered; that is jurisdictionally shaky and it is not needed. Measured over
+the archive: 55,920 phrases, median 35 characters, max 114, and **19.2% occur
+verbatim in the source articles** (400 sampled). So roughly four fifths are
+generated description and one fifth is short verbatim fragments — non-contiguous,
+averaging a line each, from which no article can be reconstructed.
+
+Treating the whole set as an attributed derivative costs nothing we were not
+already doing, and does not depend on a claim about authorship of model output
+that we would rather not have to defend. Compare the corpus-side judgement in
+`manifest.edn`, where answer spans were kept on the same reasoning at 0.49% of
+the source; this is ~2.7%, still fragmentary, and the conclusion is the same.

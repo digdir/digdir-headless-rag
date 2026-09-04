@@ -178,11 +178,19 @@
    other way would quietly stop asking for the Azure credentials on exactly the
    installs that need them."
   [tenant]
-  (let [v (try
-            (accessor/get-platform-value [:services :azure-openai :use-azure-openai-api]
-                                         {:tenant tenant :default true})
-            (catch Exception _ true))]
-    (if (false? v) :openai-compatible :azure)))
+  ;; #500: reads through the SAME function the runtime uses, so the verifier
+  ;; cannot report a provider the runtime will not use. It previously asked with
+  ;; `{:default true}` and answered :azure on an unset switch, while the runtime
+  ;; answered generic-OpenAI on the same value — so a deployment could be verified
+  ;; as :azure and then fail its first query with `Missing secret :openai-api-key`.
+  ;; The catch is the VERIFIER's job, not a second default: a switch that cannot
+  ;; be decrypted must be reported, not thrown, or the report never renders. The
+  ;; provider decision itself still comes from the one shared read, so this cannot
+  ;; disagree with the runtime about a switch that IS readable.
+  (if (try (accessor/use-azure-openai? tenant)
+           (catch Exception _ false))
+    :azure
+    :openai-compatible))
 
 (defn unsupplied-first-query-config
   "Config a first real query needs for `tenant` that has no usable value.

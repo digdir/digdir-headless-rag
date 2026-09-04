@@ -17,10 +17,13 @@
                                    MVP sends the assistant content as one
                                    delta chunk after the role intro."
   (:require [cheshire.core :as json]
+            [clojure.edn :as edn]
             [clojure.string :as str]
             [digdir.api.body :as request-body]
             [digdir.api.util :as api-util]
             [digdir.mcp.tools :as mcp-tools]
+            [digdir.rag.formatting :as formatting]
+            [digdir.skills.builtin.agent.workspace :as workspace]
             [digdir.skills.invoke :as invoke]
             [nano-id.core :refer [nano-id]]
             [ring.core.protocols :as ring-proto]
@@ -196,9 +199,9 @@
    history. Returns the raw invoke-rag map (status, response, etc.) — the
    handler decides how to render it (blocking JSON vs SSE stream)."
   [{:keys [agent-id skill-graph-id scope dataset-config skill-params]}
-   user-query history]
+   user-query history & [progress-fn]]
   (invoke/invoke-rag
-    {:user-query user-query
+    (cond-> {:user-query user-query
      :claim user-query
      :conversation-history history
      :collections {:docs-collection (:docs-collection dataset-config)
@@ -208,7 +211,12 @@
      :skill-params skill-params
      :execution-scope {:tenant (:tenant scope)
                        :dataset-config-key (:dataset-config-key scope)
-                       :agent-id agent-id}}))
+                       :agent-id agent-id}}
+      ;; `invoke-rag` has always accepted this sink — the MCP server has used
+      ;; it since #25 and Playground renders the same events. This path simply
+      ;; never passed one, which is why /v1 had no reasoning to surface: not a
+      ;; missing capability, a missing caller.
+      progress-fn (assoc :progress-fn progress-fn))))
 
 (defn- messages->history+query
   "Split an OpenAI `messages` array into (conversation-history, user-query).
@@ -238,30 +246,72 @@
                            :text (str (:content m))})
                         history-msgs)}))))
 
-(defn- truncate
-  "Trim a string to at most `n` chars (used for citation snippets)."
-  [^String s ^long n]
-  (cond
-    (nil? s) nil
-    (<= (count s) n) s
-    :else (str (subs s 0 n) "…")))
+(defn- clean-header-value
+  "One header level, as a single readable line.
 
-(defn- chunk-doc-info
-  "Workspace chunks carry their title + url inside a nested sub-map keyed
-   by the docs-collection name (`:website_documents_<hash>`). We don't
-   know that key statically, so walk the chunk's values and pick the
-   first map that looks like a doc-ref (has :title or :total_chunks).
-   Mirrors `digdir.skills.builtin.agent.workspace/chunk-doc-info` —
-   private there so we keep a local copy rather than promote it for a
-   single sibling caller."
+   ⚠️ NOT COSMETIC, AND FOUND BY LOOKING AT A REAL PAYLOAD RATHER THAN BY
+   READING THE SHAPE. A `Header N` value out of the demo corpus is not a tidy
+   title: it can carry the following heading's markdown inline, e.g.
+   `\"Storhetstid i middelalderen### Høvdingene organiserte skreifiske\"`, and it
+   can span lines. Rendered raw it puts markdown punctuation in the citation
+   list, which is the one place the reader is trying to orient themselves."
+  [v]
+  (some-> v
+          str
+          (str/split #"\n" 2)
+          first
+          (str/replace #"#+" " ")
+          (str/replace #"\s+" " ")
+          str/trim))
+
+(defn- header-breadcrumb
+  "The chunk's position in its document, as `Header 1 › Header 2 › …`.
+
+   THE ONE PIECE OF CHUNK METADATA OPEN WEBUI 0.11.3 WILL ACTUALLY SHOW. Its
+   citation UI renders exactly four things per document: `source.name`,
+   `metadata.parameters` (as a JSON blob), `metadata.page` (as \"(page N)\"),
+   and `distances`. Arbitrary metadata keys are accepted and silently dropped —
+   see the ADR in `docs/`. `metadata.name`, however, OVERRIDES the displayed
+   name (Citations.svelte: `if (metadata?.name) _source = {..._source, name:
+   metadata.name}`), so the breadcrumb rides in on the one rendered text field
+   there is.
+
+   Chunk `:metadata` arrives as either a map or an EDN string depending on how
+   Typesense round-tripped it, which `format-metadata-headers` already
+   normalises — so this reuses `extract-header-entries` through the same
+   parsing rather than re-implementing it. Returns nil when the chunk carries
+   no `Header N` keys, and the caller then falls back to the document title
+   alone."
   [chunk]
-  (when (map? chunk)
-    (some (fn [v]
-            (when (and (map? v)
-                       (or (contains? v :title)
-                           (contains? v :total_chunks)))
-              v))
-          (vals chunk))))
+  (let [metadata (:metadata chunk)
+        metadata-map (cond
+                       (map? metadata) metadata
+                       (string? metadata) (try
+                                            (let [parsed (edn/read-string metadata)]
+                                              (if (string? parsed)
+                                                (edn/read-string parsed)
+                                                parsed))
+                                            (catch Exception _ nil))
+                       :else nil)]
+    (when (map? metadata-map)
+      (let [levels (->> (formatting/extract-header-entries metadata-map)
+                        (sort-by first)
+                        (map second)
+                        (map clean-header-value)
+                        (remove str/blank?)
+                        distinct)]
+        (when (seq levels)
+          (str/join " › " levels))))))
+
+;; ⚠️ THE LOCAL COPY OF THIS LOOKUP IS GONE, AND THE COPIES DISAGREED.
+;; `chunk-doc-info` used to live here as a deliberate duplicate of the one in
+;; `agent.workspace`, with a docstring arguing for the duplication. The two had
+;; already drifted: the canonical `workspace/joined-document` accepts a joined
+;; sub-map carrying only `:url`, both `chunk-doc-info` copies required `:title`
+;; or `:total_chunks`. Typesense OMITS absent fields from a join, so a document
+;; with no title arrives as `{:url "…"}` — found by the canonical lookup,
+;; missed by the copy, which is one route to the "Untitled source" a citation
+;; can render as. One implementation, so the next drift has nowhere to happen.
 
 (defn- build-citations
   "Walk the agent's :citations / :chunks output and produce two
@@ -295,25 +345,63 @@
         resolved (->> citations
                       (keep (fn [{:keys [chunk-id]}]
                               (when-let [chunk (get chunks-by-id chunk-id)]
-                                (let [doc-info (chunk-doc-info chunk)
+                                (let [doc-info (workspace/joined-document chunk)
                                       title (or (:title doc-info)
                                                 (some-> chunk :headers vals first)
                                                 "Untitled source")
                                       url (or (:url doc-info)
                                               (str "chunk:" chunk-id))
-                                      snippet (truncate
-                                                (or (:content_markdown chunk)
-                                                    (:content chunk))
-                                                240)]
-                                  {:title (str title)
+                                      breadcrumb (header-breadcrumb chunk)
+                                      ;; #### THE SAME TEXT THE MODEL SAW ####
+                                      ;; Emitted whole, not trimmed. This field IS
+                                      ;; the model's view: `read_chunks` truncates
+                                      ;; only when the LLM itself passes
+                                      ;; `max_content_length`, and it does so in
+                                      ;; `retrieve-chunks-by-id` BEFORE the chunk is
+                                      ;; stored on the workspace — so whatever is on
+                                      ;; `:content_markdown` here is exactly the text
+                                      ;; `format-read-result` put in the prompt,
+                                      ;; `[truncated]` marker and all. The previous
+                                      ;; 240-char cap was ours alone and had no
+                                      ;; counterpart in what the model read.
+                                      content (or (:content_markdown chunk)
+                                                  (:content chunk))]
+                                  {:chunk-id (str chunk-id)
+                                   :title (str title)
+                                   :breadcrumb breadcrumb
                                    :url (str url)
-                                   :snippet snippet}))))
+                                   :snippet content}))))
                       vec)]
     {:perplexity (mapv :url resolved)
-     :owui-sources (mapv (fn [{:keys [title url snippet]}]
-                           {:source (cond-> {:name title}
+     :owui-sources (mapv (fn [{:keys [chunk-id title breadcrumb url snippet]}]
+                           {:source (cond-> {:name title
+                                             ;; Distinct per citation. Citations.svelte
+                                             ;; groups by `metadata.source ?? source.id
+                                             ;; ?? 'N/A'` — we set NEITHER before, so
+                                             ;; every citation collapsed into one entry
+                                             ;; under the first one's name.
+                                             :id chunk-id}
                                       url (assoc :url url))
-                            :document (if snippet [snippet] [])})
+                            :document (if snippet [snippet] [])
+                            ;; Parallel to :document by index — the shape OWUI's own
+                            ;; retrieval path emits (retrieval/utils.py). `:source`
+                            ;; is the grouping key and must NOT look like a URL, or
+                            ;; the UI replaces the display name with it. `:name`
+                            ;; overrides that display name, which is how the
+                            ;; breadcrumb becomes visible at all.
+                            :metadata [(cond-> {:source chunk-id
+                                                :chunk_id chunk-id}
+                                         breadcrumb
+                                         ;; `Header 1` IS the document title in
+                                         ;; this corpus, so prepending the title
+                                         ;; unconditionally rendered
+                                         ;; "Lofotfiskets historie › Lofotfiskets
+                                         ;; historie › …". Observed on a live
+                                         ;; payload, not predicted from the shape.
+                                         (assoc :name
+                                                (if (str/starts-with? breadcrumb (str title))
+                                                  breadcrumb
+                                                  (str title " › " breadcrumb))))]})
                          resolved)}))
 
 (defn- stage-timings
@@ -443,6 +531,52 @@
   (.write w "\n\n")
   (.flush w))
 
+;; ---------------------------------------------------------------------------
+;; Reasoning passthrough (#25 surfacing, not generation)
+;; ---------------------------------------------------------------------------
+
+(defn- stream-reasoning?
+  "Whether this deployment streams the agent's narration to /v1 clients.
+
+   📌 DEFAULT OFF, AND THAT IS A DECISION RATHER THAN AN OVERSIGHT.
+
+   The narration is the agent's own words about what it is doing, and it can
+   quote retrieved passages, name tool arguments and echo instructions from the
+   system prompt. Playground shows it because Playground is an operator surface
+   and its audience already has the config DB. `/v1` is consumed by end users
+   through Open WebUI, and the same text there is a different disclosure.
+
+   So the CONTENT is identical on both paths — one source, `:agent/thinking`,
+   the same field Playground reads — while the EXPOSURE differs by surface,
+   deliberately. That is not the divergence #497/#500/#506 were about; those
+   were two notions of the same thing. This is one notion, shown to two
+   audiences under different rules.
+
+   Read once per call rather than cached, so flipping it needs a restart of
+   nothing."
+  []
+  (= "true" (System/getenv "DIGDIR_OWUI_STREAM_REASONING")))
+
+(defn- reasoning-sink
+  "A `:progress-fn` that turns `:agent/thinking` events into OpenAI reasoning
+   deltas on the open SSE stream, or nil when reasoning is not being streamed.
+
+   Open WebUI 0.11.3 reads `delta.reasoning_content` (falling back to
+   `delta.reasoning`, then `delta.thinking`) in
+   `utils/middleware.py`, and wraps whatever it finds in `<think>` tags with
+   `type: reasoning_content` for the renderer. `reasoning_content` is therefore
+   the first key it looks at and the one used here.
+
+   Safe against the writer being shared: `run-agent` blocks the streaming
+   thread for its whole duration, so nothing else writes frames while these do."
+  [w id created model]
+  (when (stream-reasoning?)
+    (fn [payload]
+      (when (= :agent/thinking (:event payload))
+        (when-let [reasoning (not-empty (str/trim (or (:reasoning payload) "")))]
+          (write-sse-line! w (chunk-delta id created model
+                                          {:reasoning_content reasoning} nil)))))))
+
 (defn- stream-chat-completion
   "Build a ring StreamableResponseBody that writes the agent's response
    as OpenAI-compatible SSE chunks. Runs the agent synchronously, then
@@ -462,7 +596,7 @@
             ;; Run the agent. invoke-rag returns :status :error on failure;
             ;; surface that as a content delta so OWUI renders something
             ;; instead of hanging.
-            (let [result (run-agent ctx user-query history)
+            (let [result (run-agent ctx user-query history (reasoning-sink w id created model))
                   {:keys [perplexity owui-sources]} (build-citations result)
                   failed? (= :error (:status result))
                   body-text

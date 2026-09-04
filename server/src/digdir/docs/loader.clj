@@ -335,7 +335,16 @@
    (str coll-prefix "chunks_" (kview-hash kview "chunks"))
    (str coll-prefix "phrases_" (kview-hash kview "search-phrases"))])
 
-(def ts-admin ts-utils/ts-admin)
+(defn- ts
+  "Typesense settings for the tenant this loader run belongs to.
+
+   Was `(def ts-admin ts-utils/ts-admin)` — a load-time value resolved with NO
+   tenant, which fell back to a hardcoded tenant list and made every loader
+   write with another tenant's credentials (#476). `kview` is the resolved
+   loader config and already carries `:tenant`; every call site below had it,
+   or had it one frame up."
+  [kview]
+  (ts-utils/make-ts-settings {:tenant (:tenant kview)}))
 
 (defn extract-display-names
   "Extracts names with type 'display' from a collection of organizations.
@@ -359,7 +368,7 @@
   ([kview documents-coll doc]
    ;; Version that takes collection name explicitly
    (try
-     (ts/retrieve-document ts-admin documents-coll (:id doc))
+     (ts/retrieve-document (ts kview) documents-coll (:id doc))
      true ; document exists if no exception thrown
      (catch Exception _
        false))))
@@ -372,7 +381,7 @@
          test-documents-coll
 
   ;; Find an existing document ID to test with
-         (def sample-search (ts/search ts-admin test-documents-coll {:q "*" :query_by "" :per_page 1}))
+         (def sample-search (ts/search (ts kview) test-documents-coll {:q "*" :query_by "" :per_page 1}))
          (def existing-doc-id (get-in sample-search [:hits 0 :document :id]))
          existing-doc-id
 
@@ -394,16 +403,16 @@
          (document-inserted? kview test-documents-coll {:id ""}) ; should return false
 
   ;; Check how many documents are in the collection
-         (def collection-stats (ts/search ts-admin test-documents-coll {:q "*" :query_by "" :per_page 0}))
+         (def collection-stats (ts/search (ts kview) test-documents-coll {:q "*" :query_by "" :per_page 0}))
          (:found collection-stats)
 
   ;; Test the original problematic behavior by directly calling ts/retrieve-document
   ;; This should return the document data when it exists
-         (ts/retrieve-document ts-admin test-documents-coll existing-doc-id)
+         (ts/retrieve-document (ts kview) test-documents-coll existing-doc-id)
 
   ;; This should throw an exception when document doesn't exist
          (try
-           (ts/retrieve-document ts-admin test-documents-coll "non-existent-id")
+           (ts/retrieve-document (ts kview) test-documents-coll "non-existent-id")
            (catch Exception e
              {:caught-exception true
               :message (.getMessage e)
@@ -489,7 +498,7 @@
    the kudos loader gets the same cleanup. Filters on `id`, not
    `chunk_id`, to catch legacy auto-id rows from before chunks/phrases
    carried an explicit `:id`."
-  [coll doc-num current-ids]
+  [kview coll doc-num current-ids]
   (when (and (seq current-ids) (not (str/blank? (str doc-num))))
     (let [filter-by (str "doc_num:=" doc-num
                          " && id:!=[" (str/join "," current-ids) "]")]
@@ -497,7 +506,7 @@
                 {:data {:coll coll
                         :doc-num doc-num
                         :keep-count (count current-ids)}})
-      (ts/delete-documents! ts-admin coll {:filter_by filter-by}))))
+      (ts/delete-documents! (ts kview) coll {:filter_by filter-by}))))
 
 (defn store-doc [store kview]
   (let [[documents-coll chunks-coll phrases-coll] (coll-ids kview)]
@@ -521,14 +530,14 @@
                                          (:chunks doc))
                          current-phrase-ids (mapv :id phrases)]
                      (t/event! :document-loading/upserting-to-documents-typesense-collection)
-                     (ts/upsert-document! ts-admin documents-coll (prepare-doc doc))
+                     (ts/upsert-document! (ts kview) documents-coll (prepare-doc doc))
                      (t/event! :document-loading/upserting-to-chunks-typesense-collection
                                {:data {:chunk-count (count chunks)}})
-                     (ts/upsert-documents! ts-admin chunks-coll chunks)
-                     (delete-orphans! chunks-coll (:doc_num doc) current-chunk-ids)
+                     (ts/upsert-documents! (ts kview) chunks-coll chunks)
+                     (delete-orphans! kview chunks-coll (:doc_num doc) current-chunk-ids)
                      (t/event! :document-loading/upserting-to-phrases-typesense-collection)
-                     (ts/upsert-documents! ts-admin phrases-coll phrases)
-                     (delete-orphans! phrases-coll (:doc_num doc) current-phrase-ids)
+                     (ts/upsert-documents! (ts kview) phrases-coll phrases)
+                     (delete-orphans! kview phrases-coll (:doc_num doc) current-phrase-ids)
                      (say "Stored")
                      (t/event! :document-loading/document-upserted)))
 
@@ -581,9 +590,9 @@
    Needed because the writer uses Typesense `action=upsert`, which replaces the
    whole document: anything not in `prepare-doc`'s payload is destroyed. The
    retrieval-record fields therefore have to be read and carried forward (#308)."
-  [documents-coll doc]
+  [kview documents-coll doc]
   (try
-    (ts/retrieve-document ts-admin documents-coll (:id doc))
+    (ts/retrieve-document (ts kview) documents-coll (:id doc))
     (catch Exception _ nil)))
 
 (defn mk-require-doc-files-t
@@ -741,7 +750,7 @@
   (m/sp
    #_(m/? (m/sleep 10000))
    (let [[documents-coll _ _] (coll-ids kview)
-         prior (indexed-document documents-coll doc)
+         prior (indexed-document kview documents-coll doc)
          now (quot (System/currentTimeMillis) 1000)
          doc (m/? (mk-require-doc-files-t kview (fill-in-doc-fields doc)))
          unreachable? (contains? doc ::unreachable)
@@ -823,11 +832,11 @@
 
                 documents)))
 
-(defn create-docs-coll [store name]
+(defn create-docs-coll [kview store name]
   (try
     #_(t/event! :document-loading/creating-docs-collection)
     (ts/create-collection!
-     ts-admin
+     (ts kview)
      (assoc (edn/read-string (slurp (jio/resource "docs_schema.edn")))
             :name name))
     (catch clojure.lang.ExceptionInfo e
@@ -984,7 +993,7 @@
   (let [[docs-coll chunks-coll :as ids] (coll-ids kview)]
     (try
       #_(t/log! ["Creating collection" chunks-coll])
-      (ts/create-collection! ts-admin
+      (ts/create-collection! (ts kview)
                              (kudos-chunk-typesense-schema ids))
       (catch clojure.lang.ExceptionInfo e
         (if (clojure.core/= (:type (ex-data e)) :typesense.client/conflict)
@@ -1020,7 +1029,7 @@
   (let [[docs-coll chunks-coll phrases-coll :as ids] (coll-ids kview)]
     (try
       (t/log! ["Creating collection" phrases-coll])
-      (ts/create-collection! ts-admin
+      (ts/create-collection! (ts kview)
                              (kudos-phrases-typesense-schema ids))
       (catch clojure.lang.ExceptionInfo e
         (if (clojure.core/= (:type (ex-data e)) :typesense.client/conflict)
@@ -1038,7 +1047,7 @@
       (case (:store/type store)
         :dev/duratom (swap! !duratom-store assoc documents-coll {})
         :typesense (do
-                     (create-docs-coll store documents-coll)
+                     (create-docs-coll kview store documents-coll)
                      ;; #377. Placed HERE rather than at boot because this is the
                      ;; moment the schema is about to matter: the collection is
                      ;; named, reachable, and about to be written to. At boot

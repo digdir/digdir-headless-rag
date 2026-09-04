@@ -78,12 +78,45 @@
 ;; Folder Crawling
 ;; ============================================================================
 
+(defn resolved-corpus-path
+  "The configured path as an operator can act on it: absolute AND normalized.
+
+   `.getAbsolutePath` alone renders `./demo-corpus` as `/app/./demo-corpus`,
+   which is correct and still hard to read in an error message — and this
+   message exists to be read. Normalizing collapses the `.` segment."
+  [path]
+  (-> (jio/file path) .toPath .toAbsolutePath .normalize .toString))
+
 (defn find-markdown-files
   "Recursively finds all .md files in a directory.
-   Returns seq of maps with :path and :lastmod keys."
+   Returns seq of maps with :path and :lastmod keys.
+
+   ⚠️ THROWS when the directory is absent, rather than returning nil (#556).
+   The nil was read downstream as \"no documents\", so a materialization against
+   a path that does not exist COMPLETED with status `completed`, `errorMessage`
+   null and 0 documents processed — a failure shaped exactly like an empty
+   corpus. Nothing was wrong from the pipeline's point of view: it was handed
+   nothing and faithfully processed nothing.
+
+   The message names the RESOLVED ABSOLUTE path. That is the whole point: the
+   shipped demo config says `./demo-corpus`, which resolves against the JVM's
+   cwd — `/app` inside the container — and a relative path in an error message
+   is what let this hide."
   [root-dir]
-  (let [root-file (jio/file root-dir)]
-    (when (.exists root-file)
+  (let [root-file (jio/file root-dir)
+        absolute (resolved-corpus-path root-dir)]
+    (when-not (.exists root-file)
+      (throw (ex-info (str "Corpus directory does not exist: " absolute)
+                      {:type :folder/corpus-directory-missing
+                       :configured-path root-dir
+                       :resolved-path absolute
+                       :cwd (System/getProperty "user.dir")})))
+    (when-not (.isDirectory root-file)
+      (throw (ex-info (str "Corpus path is not a directory: " absolute)
+                      {:type :folder/corpus-path-not-a-directory
+                       :configured-path root-dir
+                       :resolved-path absolute})))
+    (do
       (t/event! :folder/scanning-directory {:data {:path root-dir}})
       (let [files (file-seq root-file)
             md-files (filter #(and (.isFile %)
@@ -93,6 +126,25 @@
                {:path (.getAbsolutePath file)
                 :lastmod (tick/instant (.lastModified file))})
              md-files)))))
+
+(defn ensure-documents-found!
+  "Throw when a scan of an EXISTING directory yielded nothing (#556).
+
+   Deliberately separate from the missing-directory refusal in
+   `find-markdown-files`, because the two remedies do not overlap: that one
+   means a wrong path or an absent mount, this one means the corpus was never
+   fetched or its files are not `.md`. Collapsing both into a single
+   \"no documents\" is the conflation that made the original bug invisible —
+   the same shape as a nil that means both \"lookup failed\" and \"no such
+   value\"."
+  [file-entries folder-path]
+  (when (empty? file-entries)
+    (let [absolute (resolved-corpus-path folder-path)]
+      (throw (ex-info (str "Corpus directory contains no .md files: " absolute)
+                      {:type :folder/corpus-directory-empty
+                       :configured-path folder-path
+                       :resolved-path absolute}))))
+  file-entries)
 
 (tests
  "Folder crawling"
@@ -244,8 +296,11 @@
 
 (defn document-inserted?
   "Checks if a document with the given ID exists in the collection."
-  [_config coll-name doc]
-  (storage/document-inserted? coll-name doc))
+  ;; `config` was `_config`: the tenant was threaded to this boundary and
+  ;; discarded here, which is how the storage layer ended up resolving
+  ;; Typesense with no tenant at all (#476).
+  [config coll-name doc]
+  (storage/document-inserted? config coll-name doc))
 
 (defn create-stores
   "Creates all three collections."
@@ -265,9 +320,30 @@
 ;; Configuration
 ;; ============================================================================
 
+(def default-folder-path
+  "Where `wview` looks for markdown when nothing overrides it.
+
+   ⚠️ THIS IS A DEV-CONVENIENCE DEFAULT, NOT THE PRODUCTION PATH. A real
+   materialization takes `:folder/path` from dataset config — see
+   `:folder-path` in `digdir.pipeline.materialization`'s source key map — so
+   this value is only reached by `-main` and by the admin UI's import panel.
+
+   It used to be `~/dev/digdir/docs-digdir-no/_export/markdown/` — one
+   developer's home directory, in shipped code (#490). Its own siblings
+   establish the convention it broke: `episerver.clj` defaults to a relative
+   `cache/episerver-data/epix.xml` and `website.clj` to `http://localhost:1313`.
+   Two of three were portable.
+
+   `DOCS_FOLDER_PATH` is read so the workflow that path was serving still works
+   — the developer who needs their own export points the variable at it instead
+   of editing shipped code. Read at load time, which is adequate for a dev
+   default; `digdir.setup.demo-dataset/corpus-directory` reads at call time
+   because a deployment can move it."
+  (or (System/getenv "DOCS_FOLDER_PATH") "cache/docs-export/markdown/"))
+
 (def wview
-  {:folder/path "~/dev/digdir/docs-digdir-no/_export/markdown/"
-   :base-path (normalize-path "~/dev/digdir/docs-digdir-no/_export/markdown/")
+  {:folder/path default-folder-path
+   :base-path (normalize-path default-folder-path)
    :base-url "https://docs.digdir.no/docs/"
 
    :parallelism/documents 3
@@ -350,6 +426,7 @@
           _ (t/event! :folder/scanning-folder {:data {:path folder-path}})
           file-entries (m/? (m/via m/blk (find-markdown-files folder-path)))
           _ (t/event! :folder/found-files {:data {:count (count file-entries)}})
+          _ (ensure-documents-found! file-entries folder-path)
           file-entries-flow (m/seed file-entries)
           filtered-flow (mk-filter-file-entries-f config file-entries-flow)]
 

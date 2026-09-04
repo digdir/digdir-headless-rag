@@ -78,10 +78,64 @@ that matters is *why*, not *whether*.
 |---|---|---|---|---|
 | Claude Code | 2.1.238 | `server/discover` with `MCP-Protocol-Version: 2026-07-28`, then `tools/list`, then `tools/call` | **works** | Modern-era client. It never attempts `initialize`, so no fallback is involved — it works because both ends speak the same revision |
 | MCP Inspector | 2.3.0 | `initialize`, no version header | **fails** | Legacy-only client. It has no fall-forward mechanism, so it cannot recover — this is the cost of the move, not a bug |
+| **MCP Python SDK reference client** | 2.1.1, `Client(mode="auto")` | `server/discover` | **works** | Negotiates `2026-07-28`, then `tools/list` → 13 tools, then `tools/call` dispatches into the agent. The only failure is the empty corpus (`Dataset ref does not resolve…`), which is business logic, not protocol |
+| Open WebUI (native MCP client) | 0.11.3 (`mcp` SDK 1.27.2) | `initialize` | **fails** | `MCPClient.connect` calls `session.initialize()` unconditionally, with no fallback. `POST /api/mcp` → `400`; the UI reports *"Failed to create MCP client"* |
+| [MCPO](https://github.com/open-webui/mcpo) (MCP→OpenAPI bridge) | 0.0.20 (`mcp` SDK 1.26.0) | `initialize` | **fails** | Same SDK, v1 era. Its client crashes on the `400` and it then serves an empty tool list, `{"paths":{}}` — while its own healthcheck still returns `200`, so it reports HEALTHY with nothing behind it |
 
-This is a snapshot of two clients on one date, not a guarantee about the
-ecosystem. Re-run it before each release — see
-[Conformance check](#conformance-check).
+This is a snapshot of four clients, taken on two dates (the first two
+2026-08-21, the last two 2026-09-01), not a guarantee about the ecosystem.
+Re-run it before each release — see [Conformance check](#conformance-check).
+
+**The last two rows look like the tripwire condition below, and they are not.**
+The tripwire needs both halves: a revision breaks a client our users bring,
+**and the fix is not available to them.** Only the first half holds here — and
+the row above them is why.
+
+**The reference client works, end to end.** The MCP Python SDK's own
+`Client(mode="auto")` at 2.1.1 sends `server/discover`, adopts `2026-07-28`,
+lists our 13 tools and dispatches a `tools/call` that lands in the agent. That
+is the same SDK the two failing rows are built on — one major version later.
+It also retires the risk this section used to flag: a third-party client's
+`tools/call` **does** carry the mirrored `Mcp-Name` header, so
+[request-metadata mirroring](#what-a-client-must-send) is not a barrier to
+adoption. The only error in that round trip was `Dataset ref does not resolve
+to a canonical dataset runtime node` — an empty corpus, not a protocol fault.
+
+So the two failures are **the clients' SDK era, not our revision.** Open WebUI
+pins `mcp` 1.27.2 and MCPO 1.26.0; both use the v1-era low-level
+`ClientSession`, whose `initialize()` is a mandatory opening. Answering that
+handshake would reintroduce the dual-era fallback #139 records us getting
+wrong, in order to serve clients whose own dependency has already moved.
+
+**But do not read "one bump away" into that** — measured, and it is not true of
+MCPO: SDK v2 renames `streamablehttp_client` → `streamable_http_client` and
+`McpError` → `MCPError`, and drops `headers=` from the transport in favour of a
+caller-supplied `httpx` client. Past those, MCPO would still call
+`ClientSession.initialize()` and still meet the `400`. Reaching the modern flow
+means porting to the high-level `Client`, and MCPO has had no commit since
+2026-02-27. See [`server/e2e/README.md`](../../../e2e/README.md).
+
+So: **no change to the version policy on this evidence, and no waiting on one
+either.** MCPO's only job was translating these tools into OpenAPI for Open
+WebUI; that translation now happens here, in
+[`/api/tools`](./openapi-tools.md), from the same `list-tools` and
+`invoke-tool` this endpoint uses. Open WebUI ships in
+`docker-compose.newcomer.yml` attached over both that and
+[`/v1`](./openai-compat.md), neither of which has a handshake to fail — see
+[`docs/onboarding.md` §4b](../../../../docs/onboarding.md#4b-see-it-answer-in-a-chat-ui--open-webui)
+for the measurement and the control that attributes the MCP failure to this
+server rather than to the harness.
+
+A client that *does* speak `2026-07-28` should still prefer this endpoint:
+`/api/tools` is a compatibility surface, and it carries none of the streaming,
+progress or resource-link machinery documented below.
+
+> [Chatbox](https://github.com/chatboxai/chatbox) 1.23.0 also negotiates
+> `2026-07-28` through `server/discover`, per its own technical docs, and is
+> the client to reach for if you want a GUI over MCP rather than over `/v1`.
+> It is absent from the table because it is a desktop Electron app and has not
+> been run against this server — the reference-SDK row above is the measured
+> evidence that a modern client works, and is stronger evidence anyway.
 
 **The risk inverted when we moved.** Before: dual-era and legacy clients
 worked, modern-only clients failed. Now: modern and dual-era clients work,

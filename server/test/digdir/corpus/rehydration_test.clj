@@ -23,7 +23,8 @@
    The signature check alone would have gone on passing while the whole corpus
    was committed beside a single sidecar — so the directory check is what still
    covers the documents, and dropping it re-opens that hole."
-  (:require [clojure.java.io :as io]
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.java.shell :as shell]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
@@ -122,6 +123,125 @@
             (str "files are committed inside a corpus output directory: "
                  (pr-str offenders)))))))
 
+(def ^:private default-corpus-dir
+  "The documented default output directory — `bb demo-corpus` and
+   `digdir.setup.demo-dataset/corpus-directory` both use it."
+  "demo-corpus")
+
+(defn- ignored?
+  "Does git's ignore machinery claim `path`? Works on paths that do not exist,
+   which is the state CI is always in — no corpus has been fetched."
+  [path]
+  (let [root (repo-root)
+        {:keys [exit]} (shell/with-sh-dir (str root)
+                         (shell/sh "git" "check-ignore" "-q" path))]
+    (zero? exit)))
+
+(deftest fetched-corpus-cannot-be-added
+  ;; THE GAP THIS CLOSES. The guard above asserts on `git ls-files` — TRACKED
+  ;; files — so it catches \"committed\" and is structurally blind to
+  ;; \"untracked but UNIGNORED\", which is one `git add -A` away from committed
+  ;; and reports nothing wrong in the meantime. A live ingest left 353 Wikipedia
+  ;; articles in exactly that state with this suite green throughout.
+  ;;
+  ;; The licence argument for this corpus rests on the text never being
+  ;; committed, so \"not committed yet\" is not the property that needs guarding.
+  (testing "the ignore machinery can say NO — otherwise every check below is vacuous"
+    ;; Without this the assertions are satisfied by a check-ignore that claims
+    ;; everything, and a rule that matched nothing would still look green.
+    (is (not (ignored? "server/src/digdir/setup/demo_dataset.clj"))
+        "check-ignore claims a tracked source file — the probe is not discriminating")
+    (is (not (ignored? "README.md"))
+        "check-ignore claims README.md — the probe is not discriminating"))
+
+  (testing "the documented default corpus directory is ignored"
+    (doseq [p [(str default-corpus-dir "/gold/Solsystemet.md")
+               (str default-corpus-dir "/gold-full/Apollon.md")
+               (str default-corpus-dir "/distractors/Whatever.md")
+               (str default-corpus-dir "/ATTRIBUTION.tsv")
+               (str default-corpus-dir "/MANIFEST.txt")]]
+      (is (ignored? p)
+          (str "'" p "' is NOT ignored. A fetched corpus would sit untracked and "
+               "addable, and the no-Wikipedia-text-in-the-repo argument would be "
+               "one 'git add -A' from being false. Check .gitignore still names "
+               "the directory the fetch script actually writes to."))))
+
+  (testing "the licence sidecar is ignored wherever it lands"
+    ;; --out-dir is caller-supplied, so the repo rule cannot name every path.
+    (is (ignored? "some/other/place/ATTRIBUTION.tsv"))))
+
+(def ^:private manifest-file "resources/demo-corpus/manifest.edn")
+
+(defn- manifest []
+  (let [f (io/file (repo-root) "server" manifest-file)]
+    (when (.exists f) (edn/read-string (slurp f)))))
+
+(def ^:private allowed-article-keys
+  "#{:title :file :sha256} plus the date pin (#447). `:revid` and
+   `:revision-timestamp` name the revision each hash was taken from — for a
+   HUMAN following a drift report to the diff, NOT for the fetcher, which
+   cannot pin by them (`prop=extracts` ignores `revids`)."
+  #{:title :file :sha256 :revid :revision-timestamp})
+(def ^:private allowed-question-keys #{:title :question :answers})
+
+(deftest manifest-carries-the-cc0-layer-and-no-article-text
+  ;; THE INVARIANT THIS FILE EXISTS FOR. NorQuAD's CC0 covers the questions and
+  ;; answers it wrote. It does not and could not cover the Wikipedia prose in its
+  ;; `context` field, so that prose is fetched at setup and never committed.
+  ;;
+  ;; A guard that merely checked the file \"looks small\" would pass a manifest
+  ;; that had quietly grown a :context key, so this asserts the key set EXACTLY.
+  (let [m (manifest)]
+
+    (testing "the manifest is present and populated — an empty one passes everything below"
+      ;; Non-vacuity. Without this, a manifest of {} satisfies every assertion
+      ;; here, and deleting its contents would look like a clean build.
+      (is (some? m) (str "manifest not found at server/" manifest-file))
+      (is (< 300 (count (:articles m)))
+          (str "expected the full article set, saw " (count (:articles m))))
+      (is (< 2000 (count (:questions m)))
+          (str "expected the full question set, saw " (count (:questions m)))))
+
+    (testing "no record carries article text, under ANY key name"
+      (let [bad-articles (remove #(= allowed-article-keys (set (keys %))) (:articles m))
+            bad-questions (remove #(= allowed-question-keys (set (keys %))) (:questions m))]
+        (is (empty? bad-articles)
+            (str "article records carry unexpected keys — the no-prose invariant is "
+                 "asserted on the EXACT key set, so a new field fails here on purpose: "
+                 (pr-str (take 3 (map keys bad-articles)))))
+        (is (empty? bad-questions)
+            (str "question records carry unexpected keys: "
+                 (pr-str (take 3 (map keys bad-questions)))))))
+
+    (testing "and specifically none of the names prose would arrive under"
+      (let [ks (into #{} (mapcat keys) (concat (:articles m) (:questions m)))]
+        (doseq [k [:context :body :text :content :extract :article :prose]]
+          (is (not (contains? ks k))
+              (str "the manifest carries " k " — Wikipedia prose must never be committed")))))
+
+    (testing "hashes are well-formed, so a garbled manifest cannot pass silently"
+      (is (every? #(re-matches #"[0-9a-f]{64}" (:sha256 %)) (:articles m))
+          "every article needs a full sha256"))
+
+    (testing "every question refers to an article that ships"
+      (let [titles (into #{} (map :title) (:articles m))
+            orphans (remove #(contains? titles (:title %)) (:questions m))]
+        (is (empty? orphans)
+            (str (count orphans) " questions reference an article not in the manifest"))))
+
+    (testing "answer spans stay de minimis — the licence judgement, made executable"
+      ;; Measured over the shipped set: 2,357 spans, median 18 chars / 3 words,
+      ;; max 388 / 54 words, totalling 0.49% of the source prose as
+      ;; non-contiguous fragments. Quotation, not redistribution. This bound
+      ;; fails if a regeneration ever starts carrying long passages.
+      (let [spans (mapcat :answers (:questions m))
+            over (filter #(< 500 (count %)) spans)]
+        (is (seq spans) "no answer spans at all — the bound below would be vacuous")
+        (is (empty? over)
+            (str (count over) " answer span(s) exceed 500 characters. The measured "
+                 "maximum is 388. A span that long stops being a quotation and the "
+                 "de minimis judgement needs re-making, not re-inheriting."))))))
+
 (deftest rehydrated-documents-carry-no-front-matter
   ;; MEASURED, not stylistic. `docs/folder.clj` contains zero front-matter
   ;; references — only `website.clj` parses it — so a YAML block at the top of a
@@ -208,3 +328,31 @@
           "the rewritten form is what the chunker can split on")
       (is (re-find wikitext-heading-re bad)
           "the unrewritten form is exactly what this guard exists to reject"))))
+
+(deftest manifest-is-pinned-to-a-single-capture
+  ;; The corpus is captured as of a date (#447). One date for the whole file,
+  ;; and a revision id per article, both recorded in the SAME fetch so a hash
+  ;; and its revid describe the same moment — fetching them separately would let
+  ;; an edit land between and make the pairing quietly false.
+  (let [m (manifest)]
+    (testing "there is one capture date, and it is a date"
+      (is (string? (:captured m)) "manifest has no :captured date")
+      (is (re-matches #"\d{4}-\d{2}-\d{2}" (str (:captured m)))
+          (str "expected an ISO date, saw " (pr-str (:captured m)))))
+
+    (testing "every article names the revision its hash came from"
+      ;; Non-vacuity first: an empty article list would satisfy `every?`.
+      (is (< 300 (count (:articles m))))
+      (is (every? #(integer? (:revid %)) (:articles m))
+          "some articles have no :revid — a drift report could not name the revision")
+      (is (every? #(string? (:revision-timestamp %)) (:articles m))))
+
+    (testing "the file states what the pin cannot do"
+      ;; The limitation belongs where people read it. `prop=extracts` silently
+      ;; ignores `revids`, so a recorded revid that looks fetchable is exactly
+      ;; the kind of half-true artefact that gets trusted later.
+      (let [header (slurp (io/file (repo-root) "server" manifest-file))]
+        (is (re-find #"(?i)detectable, not reproducible" header)
+            "the manifest does not say the pin is detectable but not reproducible")
+        (is (re-find #"(?i)ignores `revids`|IGNORES `revids`" header)
+            "the manifest does not warn that prop=extracts ignores revids")))))

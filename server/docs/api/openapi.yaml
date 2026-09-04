@@ -300,6 +300,145 @@ paths:
               schema:
                 $ref: '#/components/schemas/JsonRpcResponse'
 
+  /api/tools/openapi.json:
+    get:
+      tags:
+        - Tools
+      summary: OpenAPI document for the agent tools this key can reach
+      description: |
+        The same `(agent, mode)` tools `/api/mcp` advertises, rendered as an
+        OpenAPI 3.1 document so an **OpenAPI tool-server** client — Open WebUI's
+        "external tools" feature is the one this targets — can tool-call them
+        directly.
+
+        This exists because the usual bridge cannot. MCPO translates MCP into
+        OpenAPI for exactly this purpose, but it opens with `initialize`, which
+        MCP `2026-07-28` does not have, so it never connects; and it is
+        unmaintained. Serving the OpenAPI here removes the bridge instead of
+        working around it.
+
+        **The document is filtered per API key** — it lists only the tools the
+        calling key can reach, so it is not a public catalogue and must not be
+        cached across keys. One `POST /api/tools/call/{tool-name}` operation per
+        tool, with `operationId` equal to the tool name, and a request body
+        schema copied verbatim from the MCP `inputSchema`.
+      operationId: toolsOpenapiDocument
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: |
+            An OpenAPI 3.1 document. `paths` is empty when the key can reach no
+            agents — which is a valid answer, not an error.
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          description: Missing or invalid API key.
+
+  /api/tools/call/{tool-name}:
+    post:
+      tags:
+        - Tools
+      summary: Invoke one agent tool
+      description: |
+        Runs the `(agent, mode)` pair named by `tool-name` and returns its
+        answer. The same `digdir.mcp.tools/invoke-tool` path `tools/call` uses,
+        so authorization, dataset-scope resolution and conversation handling
+        are identical — only the wire format differs.
+
+        The request body is the tool's arguments, as advertised by that tool's
+        schema in [the OpenAPI document](#operation/toolsOpenapiDocument). It is
+        deliberately **not** validated against a fixed schema here: arguments
+        are per-tool and open-ended, and this API's coercion strips fields it
+        does not know about.
+
+        **A recoverable failure is a `200`, not a `4xx`.** `no_dataset_scope`
+        and `missing_query` come back as a normal result with
+        `status: "error"` and the message in `answer`, mirroring how
+        `tools/call` returns them as `isError: true` rather than as a JSON-RPC
+        error. The reason is the client: Open WebUI turns any status `>= 400`
+        into an opaque exception string, which would bury the message the model
+        needs in order to retry correctly. Statuses are reserved for failures a
+        caller cannot retry their way out of.
+
+        Per-API-key rate limited (120 requests / 60s by default).
+      operationId: callAgentTool
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: tool-name
+          in: path
+          required: true
+          description: >-
+            The tool name, `<agent-id>__<mode>`, as returned by `tools/list`,
+            `GET /v1/models`, or an `operationId` in the OpenAPI document.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        description: The tool's arguments. Open-ended; see the tool's own schema.
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: |
+            The tool result — **or a recoverable failure**, distinguished by
+            `status`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [answer, status]
+                properties:
+                  answer:
+                    type: string
+                    description: >-
+                      The agent's answer, or the error message when `status` is
+                      `error`. First on purpose: this payload is read by a
+                      model, and the first field is the one that survives
+                      truncation.
+                  status:
+                    type: string
+                    enum: [ok, error]
+                  conversation_id:
+                    type: string
+                    description: >-
+                      Pass back as `conversation_id` in the next call to
+                      continue the conversation.
+                  sources:
+                    type: array
+                    description: The documents the answer cited.
+                    items:
+                      type: object
+                      properties:
+                        uri: { type: string }
+                        name: { type: string }
+                  chunks:
+                    type: array
+                    items: { type: object }
+                  queries:
+                    type: array
+                    items: { type: string }
+                  clarification:
+                    type: object
+                    description: Present when the agent needs the caller to narrow the question.
+        '401':
+          description: Missing or invalid API key.
+        '403':
+          description: >-
+            The API key may not reach this agent or mode
+            (`agent_not_authorized`, `mode_not_authorized`, `agent_disabled`).
+        '404':
+          description: >-
+            No such tool for this key (`invalid_tool_name`, `agent_not_found`,
+            `mode_not_allowed`).
+        '429':
+          description: Per-API-key rate limit exceeded.
+
   /v1/models:
     get:
       tags:

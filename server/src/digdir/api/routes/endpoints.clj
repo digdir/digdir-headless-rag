@@ -58,6 +58,8 @@
                                               debug-agent-resolution-handler]]
    [digdir.api.routes.endpoints.openai-compat :refer [list-models-handler
                                                        chat-completions-handler]]
+   [digdir.api.routes.endpoints.openapi-tools :refer [openapi-spec-handler
+                                                      tool-call-handler]]
    [digdir.api.rate-limit-api :as rate-limit-api]
    [digdir.api.routes.handlers :refer [create-api-key-handler
                                        list-api-keys-handler
@@ -475,6 +477,15 @@
 (def dataset-id-path-parameters
   [:map
    [:dataset-id [:string {:min 1}]]])
+
+(def tool-name-path-parameters
+  "The `<agent-id>__<mode>` tool name addressed by POST /api/tools/call/:tool-name.
+   Left as a bare non-empty string on purpose: the name's structure is
+   validated by `digdir.mcp.tools/parse-tool-name`, which returns an
+   `invalid_tool_name` the caller can read, and duplicating that rule as a
+   regex here would give two places for it to drift."
+  [:map
+   [:tool-name [:string {:min 1}]]])
 
 (def resource-id-path-parameters
   [:map
@@ -915,6 +926,20 @@
     ;; enumerated because their emitted body is not established either.
     ["get" "/api/mcp"]
     ["delete" "/api/mcp"]
+    ;; The OpenAPI tool surface. Enumerated rather than declared, and for these
+    ;; two the reason is that a DECLARED schema would be the wrong shape rather
+    ;; than an unfinished one:
+    ;;   - the spec document is an OpenAPI 3.1 doc whose `paths` differ per API
+    ;;     key, so there is no fixed key set to pin;
+    ;;   - the tool result carries per-graph structured content, and response
+    ;;     coercion against a partial map is the vacuous guard this register's
+    ;;     docstring warns about (#323).
+    ;; Both ARE pinned, against the handler, in
+    ;; `digdir.api.routes.endpoints.openapi-tools-test` — which is more than
+    ;; "not established", but it is not a route-level declaration either, and
+    ;; this set is about the declaration.
+    ["get" "/api/tools/openapi.json"]
+    ["post" "/api/tools/call/:tool-name"]
     ["get" "/v1/models"]
     ["post" "/v1/chat/completions"]
     ["get" "/console-api/api-keys"]
@@ -1018,7 +1043,36 @@
     ;; 405 lets a client tell "wrong verb" from "wrong endpoint".
     ["/mcp" {:post {:handler (rate-limit-api/wrap-api-rate-limit mcp/handle-mcp-request)}
              :get {:handler mcp/handle-mcp-method-not-allowed}
-             :delete {:handler mcp/handle-mcp-method-not-allowed}}]]
+             :delete {:handler mcp/handle-mcp-method-not-allowed}}]
+    ;; OpenAPI tool-server surface — the same (agent, mode) tools /api/mcp
+    ;; advertises, rendered as an OpenAPI document so Open WebUI's tool-server
+    ;; feature can consume them WITHOUT the MCPO bridge. MCPO is built on the
+    ;; v1-era Python MCP SDK, which opens with `initialize`; this server has no
+    ;; handshake, so that bridge cannot work and is unmaintained besides.
+    ;; See digdir.api.routes.endpoints.openapi-tools for the full reasoning.
+    ;;
+    ;; ⚠️ THE `/call/` SEGMENT IS LOAD-BEARING. Without it the tool route is
+    ;; `/api/tools/:tool-name`, which reitit REFUSES as conflicting with
+    ;; `/api/tools/openapi.json` — it throws at router construction, so the
+    ;; server does not boot at all. Differing HTTP methods do not help; the
+    ;; conflict check compares paths. (An earlier revision of this comment
+    ;; claimed reitit prefers a static segment over a wildcard. It does not,
+    ;; and compiled-router-test turned that claim into a hard error rather
+    ;; than a subtle mis-route.)
+    ;;
+    ;; No `wrap-required-api-key-scope`, matching /api/mcp and /v1 rather than
+    ;; the rest of /api/*. These are the SAME tools those two surfaces expose,
+    ;; and mcp.md states the rule they follow: no additional scope is required
+    ;; to list or call tools — per-tool authorization is enforced inside
+    ;; `invoke-tool` against the key's :agent-refs / :skill-graphs /
+    ;; :dataset-scopes. Requiring :query here would make the identical call
+    ;; succeed on /api/mcp and fail here.
+    ["/tools"
+     ["/openapi.json" {:get {:parameters {}
+                             :handler openapi-spec-handler}}]
+     ["/call/:tool-name" {:post {:parameters {:path tool-name-path-parameters}
+                                 :handler (rate-limit-api/wrap-api-rate-limit
+                                            tool-call-handler)}}]]]
    ;; OpenAI-compatible /v1 surface — exposes each agent as a `model`
    ;; so any OpenAI client (Open WebUI, cursor, continue) can talk to
    ;; a digdir agent directly. Same wrap-api-key-auth as /api/* — both

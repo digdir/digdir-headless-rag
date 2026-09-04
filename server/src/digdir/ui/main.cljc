@@ -35,6 +35,62 @@
       mode
       "full")))
 
+#?(:clj
+   (defn admin-console-typesense-settings
+     "Typesense settings for the admin console, or nil.
+
+      ## Why this exists (#479, and why the console stopped loading)
+
+      This call site used to pass no tenant at all, and
+      `digdir.rag.typesense/make-ts-settings` resolved that through a
+      library-level fallback list whose first entry was `digdir`. #476 removed
+      that fallback — correctly, because the ingest path was silently borrowing
+      another tenant's credentials — and #486 removed the `digdir` tenant it
+      resolved to. After both, a tenant-less call throws, and because this value
+      is computed inside the Electric session it took the WHOLE ADMIN CONSOLE
+      down: websocket crash in the browser, dead process on the server.
+
+      ## Where the tenant comes from, and what is deliberately NOT decided here
+
+      The deployment tenant, `TENANT` — the same variable `mcp/tools` already
+      reads for its scope fallback and the compose files already set. That is a
+      statement about which tenant THIS DEPLOYMENT serves, not an answer to
+      #479's actual design question, which is where a MULTI-tenant operator
+      chooses the tenant they are looking at. That question stays open: this
+      makes the console load for a single-tenant deployment and takes no
+      position on the picker, the route, or the session.
+
+      ## Why nil rather than a throw, and why that is not #476 again
+
+      Returning nil is an ABSENCE, not a default. It never borrows another
+      tenant's credentials — the thing #476 removed and the thing that made this
+      fail silently. The failure is logged loudly with its cause, and the status
+      bar shows Typesense as unreachable rather than the console failing to
+      render at all.
+
+      One unresolvable value must not take down every other panel. Config,
+      import, and the pipeline views do not need Typesense, and before this they
+      died with it — which is also what a fresh deployment hits before anything
+      is seeded."
+     ;; Two arities so the behaviour is testable. The 0-arity reads the
+     ;; deployment environment; the 1-arity is the whole decision and takes the
+     ;; tenant as a value, because `System/getenv` cannot be set from a test and
+     ;; a rule nothing can exercise is the one that regresses.
+     ([] (admin-console-typesense-settings
+          (some-> (System/getenv "TENANT") str/trim not-empty)))
+     ([tenant]
+      (if (nil? tenant)
+        (do (t/error! {:id :admin-ui/no-deployment-tenant
+                       :data {:reason "TENANT is unset, so the admin console cannot resolve Typesense settings. Set TENANT to the tenant this deployment serves."}})
+            nil)
+        (try
+          (ts-utils/make-ts-settings {:tenant tenant})
+          (catch clojure.lang.ExceptionInfo e
+            (t/error! {:id :admin-ui/typesense-settings-unresolved
+                       :data (assoc (ex-data e) :tenant tenant)}
+                      e)
+            nil))))))
+
 (e/defn DebugUiNotice [debug-ui]
   (e/client
    (when (not= debug-ui "full")
@@ -64,8 +120,10 @@
             translations-loaded? (i18n/load-translations-cljs! server-translations)
             active-language (i18n/normalize-language user-language)
             _language-installed? (i18n/set-language-cljs! active-language)
-            ;; always use test instance if specified in config file
-            ts-settings (e/server (ts-utils/make-ts-settings {}))
+            ;; Resolved for the DEPLOYMENT TENANT, and nil rather than fatal when
+            ;; it cannot be resolved — see `admin-console-typesense-settings`.
+            ;; Passing `{}` here is what took the whole console down (#479).
+            ts-settings (e/server (admin-console-typesense-settings))
             debug-ui    (e/server
                          (normalize-debug-ui-mode
                           (get-in ring-request [:query-params "debug-ui"])))]

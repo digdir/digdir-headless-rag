@@ -421,6 +421,7 @@
             _ (when (and effective-enrichment-collection docs-collection)
                 (try
                   (enrich-coll/ensure-collection-by-name!
+                   {:tenant effective-tenant}
                    docs-collection
                    effective-enrichment-collection
                    enrichment-type)

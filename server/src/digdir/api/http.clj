@@ -231,6 +231,49 @@
 
 ;;; Electric integration
 
+(defn normalize-electric-user-version
+  "Treat a blank Electric user version as ABSENT rather than as a value (#524).
+
+   ## Why this is not cosmetic
+
+   `wrap-reject-stale-client` branches on the server's version:
+
+     nil                      -> accept any client, guard explicitly disabled
+     = the client's version   -> accept
+     otherwise                -> reject, and the client is told to reload
+
+   A blank string is not nil, so it takes the COMPARING path — and the client
+   reports blank too, because `build.clj` bakes the same value into the CLJS
+   closure-define, overriding Electric's own non-empty default. So `\"\" = \"\"`
+   matches, every client is accepted, and a genuinely stale one connects and
+   then dies decoding a message it cannot understand.
+
+   ⇒ That is the worst of both: the cost of a guard, the value of none, and the
+   false impression that stale clients are detected. Measured in the shipped
+   artifact rather than inferred from a shell — `pitest-digdir-rag:latest`
+   carries `#:hyperfiddle{:electric-user-version \"\"}`, because the Dockerfile
+   takes VERSION from a build arg with no default and the compose build passes
+   none. Kamal passes `git rev-parse HEAD` and is unaffected.
+
+   ## What this does and does not buy
+
+   It detects NOTHING NEW. It makes the system honest about what it does not
+   do: the guard reports itself disabled instead of silently passing everything.
+   The detection needs a version that actually discriminates builds, which is a
+   separate change — and `prod.cljc`'s `(assert (string? ...))`, which a blank
+   string satisfies, must not be tightened until that exists, or every
+   compose-built stack refuses to boot."
+  [config]
+  (let [v (:hyperfiddle/electric-user-version config)]
+    (if (and (string? v) (str/blank? v))
+      (do (log/warn (str "Electric user version is blank; treating it as ABSENT. "
+                         "The stale-client guard is DISABLED — a browser running an "
+                         "old client will be accepted and may fail with an array-index "
+                         "error instead of being told to reload. Build with a VERSION "
+                         "build-arg to enable it (see #524)."))
+          (assoc config :hyperfiddle/electric-user-version nil))
+      config)))
+
 (defn electric-websocket-middleware
   "Open a websocket and boot an Electric server program defined by `entrypoint`.
   Takes:
@@ -241,7 +284,8 @@
   "
   [next-handler config entrypoint]
   ;; Applied bottom-up
-  (let [session-secret @auth/secret
+  (let [config (normalize-electric-user-version config)
+        session-secret @auth/secret
         ;; Ensure the key is exactly 16 bytes for AES encryption
         session-key (take 16 (concat (.getBytes session-secret) (repeat 0)))]
     (-> (electric-ring/wrap-electric-websocket next-handler entrypoint) ; 8. connect electric client

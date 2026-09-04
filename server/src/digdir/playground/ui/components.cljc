@@ -532,17 +532,43 @@
          (set-markdown-html! dom/node html)))))))
 
 (e/defn DiagnosticsChunkPanel
-  "Fetch and display full chunk content in the reference side panel."
-  [chunk-id docs-collection chunks-collection on-close position total on-previous on-next]
+  "Fetch and display full chunk content in the reference side panel.
+
+   ⚠️ `tenant` IS LOAD-BEARING, NOT OPTIONAL METADATA. `fetch-chunk-by-id`
+   resolves Typesense through `make-ts-settings`, which since #476 has NO
+   default tenant and throws \"Typesense settings requested with no tenant\".
+   This call site passed the 3-arity, so opts were nil, so every fetch here
+   failed — the same defect #516 fixed in the admin console (#479), at a call
+   site that sweep missed. Second door, same room.
+
+   The failure was invisible because the fetch swallows its exception and
+   returns nil, and a nil chunk renders as BOTH \"Untitled source\" (no title,
+   no headings) and \"No source content available\" (no content). One nil, two
+   strings, and nothing on screen saying which of the two it was — which is how
+   this survived to reach a human tester."
+  [chunk-id docs-collection chunks-collection on-close position total on-previous on-next tenant]
   (e/client
    (when chunk-id
      (let [chunk (e/server
                   (playground/fetch-chunk-by-id
-                   chunks-collection docs-collection (e/client chunk-id)))
-           source (source-display-data chunk docs-collection)]
+                   chunks-collection docs-collection (e/client chunk-id)
+                   (when-let [t (e/client tenant)] {:tenant t})))
+           ;; Degrade to the citation's own identity rather than to a blank
+           ;; document, and SAY WHICH BRANCH WAS TAKEN. A panel that silently
+           ;; renders an empty document is indistinguishable from a document
+           ;; that is genuinely empty, which is the property that let a broken
+           ;; fetch look like a data problem.
+           source (if chunk
+                    (source-display-data chunk docs-collection)
+                    {:title (str "Source " chunk-id " could not be loaded")
+                     :headings []
+                     :heading-line (if (str/blank? (str tenant))
+                                     "No tenant in scope — Typesense cannot be resolved (#476)."
+                                     "The chunk was not found in the configured collections.")
+                     :chunk-id chunk-id})]
        (ChunkDetailPanel source chunk on-close position total on-previous on-next)))))
 
 ;; Compatibility alias for older call sites while the side-panel terminology
 ;; propagates through downstream namespaces.
 (e/defn DiagnosticsChunkModal [chunk-id docs-collection chunks-collection on-close]
-  (DiagnosticsChunkPanel chunk-id docs-collection chunks-collection on-close 0 1 nil nil))
+  (DiagnosticsChunkPanel chunk-id docs-collection chunks-collection on-close 0 1 nil nil nil))

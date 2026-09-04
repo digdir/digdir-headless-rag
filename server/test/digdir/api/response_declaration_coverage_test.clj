@@ -89,7 +89,10 @@
     (is (= 10 dec)
         (str "operations declaring a response body changed to " dec
              ". If that was deliberate, update this number in the same commit."))
-    (is (= 30 enum)
+    ;; 30 -> 32: the OpenAPI tool surface. Both entries carry their reason in
+    ;; `response-schema-not-established` — for these two a declared schema is
+    ;; the wrong shape, not an unfinished one.
+    (is (= 32 enum)
         (str "operations enumerated as not-established changed to " enum
              ". Removing an entry requires adding its schema."))))
 

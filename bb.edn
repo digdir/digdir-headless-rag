@@ -1,5 +1,46 @@
 {:tasks
  {:init (do
+          (require '[babashka.process :as compose-probe])
+
+          ;; Docker Compose answers to two different names, and WHICH ONE EXISTS
+          ;; IS A PROPERTY OF THE MACHINE rather than of Docker's version:
+          ;;
+          ;;   `docker compose`   the CLI plugin — GitHub's ubuntu-* runners
+          ;;   `docker-compose`   a standalone binary — what Homebrew installs
+          ;;
+          ;; Hardcoding either one breaks the other environment, and this is
+          ;; worse than it looks to diagnose: a shell profile may define a
+          ;; `docker` FUNCTION that forwards `docker compose` to `docker-compose`
+          ;; (Homebrew + Docker Desktop do exactly this). Then an interactive
+          ;; `docker compose version` reports success while bb — which does not
+          ;; source your profile — gets "unknown shorthand flag: 'f'", because
+          ;; the real binary has no compose plugin. The interactive check tests
+          ;; a different program than the task runs.
+          ;;
+          ;; So probe the way bb will actually invoke it, and fall back.
+          ;; `sh` rather than `shell`: it returns an exit code instead of
+          ;; throwing, which is the whole point of a probe.
+          ;;
+          ;; `memoize` rather than `delay`, and a call rather than a deref:
+          ;; bb.edn is read by the EDN reader, which has no `@` reader macro —
+          ;; `@compose-cmd` here fails the whole file to load, taking every
+          ;; unrelated task with it. Memoized so the probe costs one process
+          ;; per bb invocation that actually touches compose, and none at all
+          ;; for `bb test` and friends.
+          (def compose-cmd
+            (memoize
+              (fn []
+                (if (try
+                      (zero? (:exit (compose-probe/sh ["docker" "compose" "version"])))
+                      (catch Exception _ false))
+                  ["docker" "compose"]
+                  ["docker-compose"]))))
+
+          (defn compose!
+            "Run docker compose in `dir` with `args`, under whichever name exists."
+            [dir & args]
+            (apply shell {:dir dir} (concat (compose-cmd) args)))
+
           ;; Deploy host. Single override point, shared with deploy.yml, which
           ;; reads the same DIGDIR_DEPLOY_HOST variable for `servers:` and
           ;; `builder.remote`. Unset falls back to the current production host,
@@ -1059,11 +1100,50 @@
                                   (println "  bb ts-retrieve digdir public-docs \"q1,q2,q3\" --limit 50 --retrieve-top-k 200")
                                   (println "  bb ts-retrieve digdir public-docs \"altinn\" --enrichment-types hypothetical-questions,verified-phrases"))))}
 
+         demo-tenant {:doc "Seed ONLY the demo tenant's platform tree — its own Typesense settings, so it never borrows another tenant's (#476). Idempotent. Seeds NO dataset: a configured dataset with no fetched corpus answers unhelpfully with no sign a step remains (#473), which is worse than the no-datasets 404 a newcomer gets from this. Use `bb demo-seed` once #473 lands, or now if you are also running `bb demo-corpus`. Secrets are NOT seeded: TYPESENSE_API_KEY_ADMIN arrives from the environment via the config env-bridge. (usage: bb demo-tenant)"
+                      :task (clojure {:dir "server"}
+                                     "-M"
+                                     "-e"
+                                     (pr-str
+                                       '(do (require (quote digdir.setup.demo-tenant))
+                                            (println "  seeding demo tenant platform tree")
+                                            (println (str "    " ((resolve (quote digdir.setup.demo-tenant/seed!)))))
+                                            (println "  done. This tenant has NO dataset yet — see `bb demo-corpus` and `bb demo-seed`."))))}
+
+         demo-seed {:doc "Seed the demo tenant into the config DB: its platform tree (its OWN Typesense settings, so it never borrows another tenant's — #476), then its dataset and runtime trees. Idempotent. Secrets are NOT seeded: TYPESENSE_API_KEY_ADMIN continues to arrive from the environment via the config env-bridge. Run `bb demo-corpus` first (or after) to fetch the corpus itself; this seeds configuration only. (usage: bb demo-seed)"
+                    :task (clojure {:dir "server"}
+                                   "-M"
+                                   "-e"
+                                   (pr-str
+                                     '(do (require (quote digdir.setup.demo-tenant)
+                                                   (quote digdir.setup.demo-dataset))
+                                          ;; Platform tree FIRST: the dataset is
+                                          ;; useless without Typesense settings to
+                                          ;; reach, and env bridging needs the
+                                          ;; Platform/default node to exist.
+                                          (println "  seeding demo tenant platform tree")
+                                          (println (str "    " ((resolve (quote digdir.setup.demo-tenant/seed!)))))
+                                          (println "  seeding demo dataset + runtime trees")
+                                          (println (str "    " ((resolve (quote digdir.setup.demo-dataset/seed!)))))
+                                          (println "  done. Fetch the corpus with `bb demo-corpus` if you have not."))))}
+
+         phrase-cache-archive {:doc "Rebuild the committed warm phrase-cache archive from a cache directory (yardarm-warmcache). The archive is regenerated rather than maintained: a change to the chunker, prompt, model constant or parser-version orphans every entry, at which point re-run a materialisation and point this at the resulting cache dir. (usage: bb phrase-cache-archive <cache-dir> [out-file])"
+                               :task (shell (str "bb server/scripts/corpus/build_phrase_cache_archive.clj "
+                                                 (clojure.string/join " " *command-line-args*)))}
          demo-corpus {:doc "Fetch the demo NorQuAD corpus (352 Wikipedia articles + distractors) into DEMO_CORPUS_DIR (default ./demo-corpus). Nothing is checked in: NorQuAD's CC0 covers its questions and answers, not the Wikipedia prose, so the text is fetched from Wikipedia under CC BY-SA at setup. Resumable — an article already written is not refetched. (usage: bb demo-corpus [distractor-count])"
                       :task (let [dir (or (System/getenv "DEMO_CORPUS_DIR") "./demo-corpus")
                                   n (or (first *command-line-args*) "800")]
                               (println (str "  fetching demo corpus into " dir))
-                              (shell (str "bb server/scripts/corpus/rehydrate_norquad.clj " dir " " n)))}
+                              ;; ONE implementation: this shells to the same namespace the
+                              ;; container runs (digdir.corpus.rehydrate-norquad). The
+                              ;; babashka script it used to call was deleted rather than
+                              ;; kept in parallel — two fetchers would be free to drift, and
+                              ;; a fetcher producing so much as a different trailing newline
+                              ;; would orphan every entry in the committed warm cache while
+                              ;; still looking like it worked.
+                              (shell {:dir "server"}
+                                     (str "clojure -M -m digdir.corpus.rehydrate-norquad "
+                                          (if (.isAbsolute (java.io.File. dir)) dir (str "../" dir)) " " n)))}
          v3-score {:doc "Score ts-retrieve against the v3-baseline cited chunks. Reports both chunk-level (strict v3) and doc-level (slice-21) recall at top-10 and top-30. When --user-intent-first-pass true, also runs an intent-only pass and merges via --union-mode (cap|interleave|rrf, default cap per slice-22 measurement). Cap mode takes --intent-cap N (default 3); RRF mode takes --union-rrf-k K (default 60). --server-side-union true delegates the union to the production retrieval skill via one debug-endpoint call (slice 23 verification). (usage: bb v3-score [--top-k 30] [--expand-queries N] [--user-intent-first-pass true] [--server-side-union true] [--union-mode cap|interleave|rrf] [--intent-cap N] [--union-rrf-k K] [--rerank-with-colbert true] [--title-fields '[\"linktitle\" \"frontmatter_title\"]'] [--doc-title-chunk-fanout 3] [--auto-filter-rules '<edn>'] [--expansion-mode blind|corpus-aware-1hop|corpus-aware-2hop] [--expansion-variant two-call|one-call] [--expansion-compare true] [--auto-filter true|false] [--enrichment-types hypothetical-questions,verified-phrases,...] [--tenant digdir] [--env public-docs] [--v3-dir <path>])"
                    :task (let [flags (parse-cli-flags *command-line-args*)
                                tenant (or (:tenant flags) "digdir")
@@ -2078,27 +2158,27 @@
 
          e2e:up
          {:doc "Bring up the OpenWebUI + MCPO + dev-server E2E stack (usage: bb e2e:up)"
-          :task (shell {:dir "server/e2e"}
-                       "docker-compose" "-f" "docker-compose.e2e.yml"
-                       "up" "--build" "-d" "--wait")}
+          :task (compose! "server/e2e"
+                          "-f" "docker-compose.e2e.yml"
+                          "up" "--build" "-d" "--wait")}
 
          e2e:down
          {:doc "Tear down the E2E stack and its volumes (usage: bb e2e:down)"
-          :task (shell {:dir "server/e2e"}
-                       "docker-compose" "-f" "docker-compose.e2e.yml"
-                       "down" "-v")}
+          :task (compose! "server/e2e"
+                          "-f" "docker-compose.e2e.yml"
+                          "down" "-v")}
 
          e2e:host:up
          {:doc "Bring up just MCPO + Open WebUI pointed at host bb dev (port 8181). Skips building a digdir-rag container — uses the live local backend. Requires bb dev running with E2E_API_KEY set so the API key MCPO uses gets seeded into the local DB. (usage: bb e2e:host:up)"
-          :task (shell {:dir "server/e2e"}
-                       "docker-compose" "-f" "docker-compose.host.yml"
-                       "up" "-d" "--wait")}
+          :task (compose! "server/e2e"
+                          "-f" "docker-compose.host.yml"
+                          "up" "-d" "--wait")}
 
          e2e:host:down
          {:doc "Tear down the host-pointed Open WebUI stack and its volumes (usage: bb e2e:host:down)"
-          :task (shell {:dir "server/e2e"}
-                       "docker-compose" "-f" "docker-compose.host.yml"
-                       "down" "-v")}
+          :task (compose! "server/e2e"
+                          "-f" "docker-compose.host.yml"
+                          "down" "-v")}
 
          e2e:install-browsers
          {:doc "Install Playwright's Chromium binary (run once)"
@@ -2107,7 +2187,7 @@
 
          e2e:test
          {:doc "Run the Playwright E2E suite against the running stack.
-   Requires `bb e2e:up && bb e2e:seed` first. Optional arg = test-name filter."
+   Requires `bb e2e:up` first (seeding happens at server boot from E2E_API_KEY \u2014 there is no e2e:seed task). Optional arg = test-name filter."
           :task (let [args *command-line-args*
                       pattern (first args)]
                   (apply shell {:dir "server/e2e/playwright"}

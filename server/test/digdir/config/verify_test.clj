@@ -246,17 +246,26 @@
   ;; switch is read through the same door. Each case says which path it is on.
   (testing "an absent value is reported, with the variable that supplies it"
     ;; Everything absent -> the switch falls back to its :default true -> Azure.
-    (with-redefs [accessor/get-platform-value (fn [_ opts] (:default opts))]
+    (with-redefs [accessor/get-platform-value (fn [_ opts] (:default opts))
+                  ;; #500: the provider switch is now read through `accessor/get`,
+                  ;; the same door the RUNTIME uses, so it must be stubbed too.
+                  accessor/get (fn [_ & _] nil)]  ; no default on the runtime read - #500
       (let [found (verify/unsupplied-first-query-config :db "digdir")
             by-path (into {} (map (juxt :path identity)) found)]
-        (is (= (set (map :path (env-bridge/first-query-bindings :azure)))
-               (set (keys by-path)))
-            "everything the AZURE path needs is reported when nothing is set")
-        (is (= "AZURE_OPENAI_API_KEY"
-               (:env-var (get by-path "services.azure-openai.api-key")))))))
+        (is (every? (set (keys by-path)) ["OPENAI_API_ENDPOINT" "OPENAI_API_KEY"])
+            "#500: an UNSET switch reports what the OPENAI-COMPATIBLE path needs,
+             because that is the path the runtime actually takes. This asserted the
+             AZURE set until the verifier stopped defaulting the switch to true on
+             its own - the divergence that let a deployment verify as :azure and
+             then fail its first query.")
+        (is (not (contains? (set (keys by-path)) "services.azure-openai.api-key"))
+            "and does not demand an Azure key the runtime will never use"))))
 
   (testing "nothing is reported when the values resolve"
-    (with-redefs [accessor/get-platform-value (fn [_ _] "a-value")]
+    (with-redefs [accessor/get-platform-value (fn [_ _] "a-value")
+                  ;; #500: the provider switch is now read through `accessor/get`,
+                  ;; the same door the RUNTIME uses, so it must be stubbed too.
+                  accessor/get (fn [_ & _] "a-value")]
       (is (= [] (verify/unsupplied-first-query-config :db "digdir")))))
 
   (testing "a legitimately false boolean is NOT reported as missing"
@@ -264,29 +273,47 @@
     ;; sentinel would report a correctly-disabled provider as unconfigured.
     ;; `false` for everything also selects the OpenAI-compatible path, so its
     ;; env-only half is supplied here to isolate what this case is about.
-    (with-redefs [accessor/get-platform-value (fn [_ _] false)]
+    (with-redefs [accessor/get-platform-value (fn [_ _] false)
+                  ;; #500: the provider switch is now read through `accessor/get`,
+                  ;; the same door the RUNTIME uses, so it must be stubbed too.
+                  accessor/get (fn [_ & _] false)]
       (binding [secrets/*env-lookup* {"OPENAI_API_ENDPOINT" "set" "OPENAI_API_KEY" "set"}]
         (is (= [] (verify/unsupplied-first-query-config :db "digdir"))))))
 
   (testing "a blank string counts as unsupplied"
-    (with-redefs [accessor/get-platform-value (fn [_ _] "   ")]
+    (with-redefs [accessor/get-platform-value (fn [_ _] "   ")
+                  ;; #500: the provider switch is now read through `accessor/get`,
+                  ;; the same door the RUNTIME uses, so it must be stubbed too.
+                  accessor/get (fn [_ & _] "   ")]
       ;; A blank switch is not `false`, so this is still the Azure path.
       (is (= (count (env-bridge/first-query-bindings :azure))
              (count (verify/unsupplied-first-query-config :db "digdir"))))))
 
   (testing "a value that cannot be decrypted counts as unsupplied, with the reason"
-    (with-redefs [accessor/get-platform-value (fn [_ _] (throw (ex-info "Tag mismatch" {})))]
-      ;; A throwing switch falls back to Azure, so every reported row here has
-      ;; a config path and the reason is carried through for all of them.
-      (is (= ["Tag mismatch"]
-             (distinct (map :reason (verify/unsupplied-first-query-config :db "digdir"))))))))
+    (with-redefs [accessor/get-platform-value (fn [_ _] (throw (ex-info "Tag mismatch" {})))
+                  ;; #500: the provider switch is now read through `accessor/get`,
+                  ;; the same door the RUNTIME uses, so it must be stubbed too.
+                  accessor/get (fn [_ & _] (throw (ex-info "Tag mismatch" {})))]
+      ;; #500: a switch that THROWS no longer silently selects Azure. The old
+      ;; verifier caught every exception and answered `true`; now the shared read
+      ;; keeps runtime semantics and the VERIFIER catches only so the report can
+      ;; render — so this lands on the OpenAI-compatible path, whose env-only
+      ;; halves are reported "absent" rather than carrying the decrypt reason.
+      ;; What this case exists to pin is unchanged: an undecryptable CONFIG value
+      ;; is reported as unsupplied WITH its reason, rather than silently dropped.
+      (is (contains? (set (map :reason (verify/unsupplied-first-query-config :db "digdir")))
+                     "Tag mismatch")
+          "the decrypt failure is carried through as the reason, not swallowed"))))
 
 (deftest the-report-does-not-count-one-path-in-two-places
   ;; Overlapping counts make each of them meaningless on its own - the same
   ;; reasoning that already keeps unreachable and undecryptable disjoint.
   (with-tree [(node "platform/digdir/default" "default")] {}
     (fn []
-      (with-redefs [accessor/get-platform-value (fn [_ opts] (:default opts))]
+      (with-redefs [accessor/get-platform-value (fn [_ opts] (:default opts))
+                    ;; #500: the provider switch is now read through `accessor/get`,
+                    ;; the same door the RUNTIME uses, so it must be stubbed too.
+                    accessor/get (fn [_ & _] nil)]  ; no default on the runtime read - #500
         (let [{:keys [unreachable unsupplied]}
               (verify/report-unresolved-service-config! :db "digdir")
               unreachable-paths (set (map :path unreachable))]
@@ -294,7 +321,7 @@
           (is (seq unsupplied) "the supply gap is still reported")
           (is (empty? (filter unreachable-paths (map :path unsupplied)))
               "but no path appears in both lists")
-          (is (contains? (set (map :path unsupplied)) "services.azure-openai.api-key")
+          (is (contains? (set (map :path unsupplied)) "OPENAI_API_KEY")
               "and the LLM key - invisible to the reachability check - is in it"))))))
 
 ;; ---------------------------------------------------------------------------
@@ -302,12 +329,21 @@
 ;; ---------------------------------------------------------------------------
 
 (defn- with-config
-  "Stub the accessor with a path->value map; anything absent returns :default."
+  "Stub the accessor with a path->value map; anything absent returns :default.
+
+   ⚠️ BOTH READS ARE STUBBED, and that is not belt-and-braces. #500 moved the
+   verifier's provider check off `get-platform-value` and onto `accessor/get` —
+   the function the RUNTIME uses — so that a verifier can no longer report a
+   provider the runtime will not use. Stubbing only the old path would leave the
+   provider check hitting a real config DB, which is how these tests started
+   erroring rather than answering."
   [m f]
-  (with-redefs [accessor/get-platform-value
-                (fn [path opts]
-                  (get m (str/join "." (map name path)) (:default opts)))]
-    (f)))
+  (let [lookup (fn [path default] (get m (str/join "." (map name path)) default))]
+    (with-redefs [accessor/get-platform-value
+                  (fn [path opts] (lookup path (:default opts)))
+                  accessor/get
+                  (fn [_opts & path] (lookup (vec path) nil))]
+      (f))))
 
 (deftest the-local-model-path-is-not-asked-for-an-azure-key
   ;; #314 made the OpenAI-compatible path first-class. Demanding
@@ -332,14 +368,23 @@
         (is (contains? paths "services.azure-openai.api-key"))
         (is (contains? paths "services.azure-openai.deployment-name"))))))
 
-(deftest an-absent-switch-defaults-to-azure
-  ;; The shipped snapshot sets it true for both tenants. Defaulting the other
-  ;; way would quietly stop asking for the Azure credentials on the installs
-  ;; that need them.
+(deftest an-absent-switch-means-NOT-azure-because-that-is-what-the-runtime-does
+  ;; ⚠️ THIS TEST PREVIOUSLY ASSERTED THE OPPOSITE, and the opposite was the bug
+  ;; (#500). The verifier defaulted an absent switch to `true` and reported
+  ;; `:azure`; the runtime read the same value with NO default, got nil, and took
+  ;; the generic-OpenAI path — failing a real query with
+  ;; `Missing secret :openai-api-key`. A verifier that disagrees with the runtime
+  ;; is worse than no verifier: it turns "I checked" into false confidence, and it
+  ;; did exactly that here once already.
+  ;;
+  ;; Both now read through `accessor/use-azure-openai?`, so the question is not
+  ;; "which default is nicer" but "there is one answer". If the product wants
+  ;; absent to mean Azure, that changes in ONE place and this test moves with it.
   (with-config {}
     (fn []
-      (is (contains? (set (map :path (verify/unsupplied-first-query-config :db "digdir")))
-                     "services.azure-openai.api-key")))))
+      (let [paths (set (map :path (verify/unsupplied-first-query-config :db "digdir")))]
+        (is (not (contains? paths "services.azure-openai.api-key"))
+            "an absent switch must not demand an Azure key the runtime will never use")))))
 
 (deftest the-env-only-half-of-the-local-path-is-checked-in-the-ENVIRONMENT
   ;; OPENAI_API_ENDPOINT / OPENAI_API_KEY have no config path at all. Looking

@@ -94,8 +94,13 @@
               (recur message default)))))
 
 (def ^:private database-services
-  "The two backend families, as `digdir.config.env-bridge` groups them."
-  #{:database-file :database-postgres})
+  "The two backend families, as `digdir.config.env-bridge` groups them.
+
+   DERIVED from the table's own `:alternative-group`, not restated. This set
+   and the boot gate in `digdir.boot.required-env` have to agree about which
+   services are alternatives, and two copies of that answer are free to
+   disagree — the defect class #521 is about."
+  (env-bridge/services-in-alternative-group :database))
 
 (def ^:private file-backend-vars
   (env-bridge/env-vars-for-service :database-file))
@@ -348,3 +353,123 @@
    later without touching call sites."
   [message]
   (prompt message))
+
+;; =============================================================================
+;; Refusing to seed while the server is running (#493)
+;; =============================================================================
+
+(def ^:private seed-guard-override
+  "DIGDIR_ALLOW_SEED_WITH_SERVER_RUNNING")
+
+(defn- health-2xx?
+  "True only when host:port answers `/up` with a 2xx.
+
+   ⚠️ A bare TCP accept is NOT enough, and it fails in BOTH directions: any
+   unrelated process holding the port produces a FALSE REFUSAL that blocks a
+   legitimate seed, and a half-dead JVM still holding its listening socket reads
+   as healthy. Only a real health response distinguishes them.
+
+   `/up` is public and unauthenticated (`digdir.api.http/auth-routes`), so this
+   needs no credential."
+  [host port]
+  (try
+    (let [url (.toURL (java.net.URI. (str "http://" host ":" port "/up")))
+          conn ^java.net.HttpURLConnection (.openConnection url)]
+      (try
+        (doto conn
+          (.setRequestMethod "GET")
+          (.setConnectTimeout 500)
+          (.setReadTimeout 500)
+          (.setInstanceFollowRedirects false))
+        (<= 200 (.getResponseCode conn) 299)
+        (finally (.disconnect conn))))
+    (catch Exception _ false)))
+
+(defn- parse-address [s]
+  (let [[h p] (str/split (str/trim s) #":" 2)]
+    (when-not (str/blank? h)
+      [h (or (some-> p str/trim parse-long) 8080)])))
+
+(defn probe-addresses
+  "Every address a server sharing this database could be answering on.
+
+   THREE DOORS, and a guard that checks fewer passes cleanly from the one it
+   cannot see — each of the first two was MEASURED to be blind to the other:
+
+     127.0.0.1:<container-port>  `docker compose exec` runs INSIDE the server's
+                                 own container, where the server is on loopback.
+     digdir-rag:<container-port> `docker compose run` runs in a SEPARATE
+                                 container on the same network, where loopback
+                                 is that container's own and reaches nothing.
+     127.0.0.1:<HTTP_PORT>       `bb setup` runs on the HOST, against a `bb dev`
+                                 that listens on HTTP_PORT (default 8081,
+                                 `dev.cljc`). That variable exists so sibling
+                                 worktrees run in parallel, so the port is
+                                 per-worktree and the container addresses never
+                                 see it."
+  []
+  (if-let [override (System/getenv "DIGDIR_SEED_GUARD_ADDRESSES")]
+    (vec (keep parse-address (str/split override #",")))
+    (let [container-port (or (some-> (System/getenv "PORT") str/trim parse-long) 8080)
+          host-port (or (some-> (System/getenv "HTTP_PORT") str/trim parse-long) 8081)]
+      (vec (distinct [["127.0.0.1" container-port]
+                      ["digdir-rag" container-port]
+                      ["127.0.0.1" host-port]])))))
+
+(defn running-server-address
+  "\"host:port\" of a live server, or nil when none answers.
+
+   The 1-arity takes the addresses explicitly so a test can point it at a real
+   HTTP server it started itself — a probe that cannot be made to find something
+   is a probe that proves nothing."
+  ([] (running-server-address (probe-addresses)))
+  ([addresses]
+   (when-let [[host port] (first (filter (fn [[h p]] (health-2xx? h p)) addresses))]
+     (str host ":" port))))
+
+(defn refuse-if-server-running!
+  "Exit non-zero when a server is already up, because seeding past it silently
+   loses the write.
+
+   ⚠️ MEASURED, twice, on two independent fresh container stacks (#493): with the
+   server running, `digdir.setup.first-admin` reported `[CREATED] … ✔ created 1`
+   and the account did not exist afterwards. A second JVM reading the same store
+   reported `can-login? -> false` and zero admins IMMEDIATELY after the command
+   and again 45s later, and the documented `docker compose restart` did NOT
+   recover it. With the server stopped, the identical command persisted — a
+   re-run reported `[SKIPPED] Already has admin-full`.
+
+   So the failure is not a stale connection on the server's side, and a restart
+   is not a remedy: the write never lands. Ordering the operations correctly
+   removes the restart rather than re-ordering it — on a fresh volume seeded with
+   the server down, login succeeded on the FIRST attempt with no restart at all.
+
+   The command reports success either way, which is what makes it worth refusing
+   rather than documenting."
+  ([command-label] (refuse-if-server-running! command-label (probe-addresses)))
+  ([command-label addresses]
+   (when-not (= "true" (some-> (System/getenv seed-guard-override) str/trim str/lower-case))
+     (when-let [addr (running-server-address addresses)]
+       (println)
+       (println (str "  ✖ Refusing: a server is already answering /up at " addr "."))
+       (println)
+       (println (str "    " command-label " writes to the config database from its own"))
+       (println "    JVM. While the server is up that write is LOST — the command")
+       (println "    still prints success, and the value is simply not there")
+       (println "    afterwards. Restarting the server does not recover it.")
+       (println)
+       (println "    Stop the server, seed, then start it again:")
+       (println)
+       (println "        docker compose stop digdir-rag")
+       (println "        docker compose run --rm --no-deps --entrypoint java digdir-rag \\")
+       (println (str "          -cp /app/app.jar clojure.main -m " command-label))
+       (println "        docker compose start digdir-rag")
+       (println)
+       (println "    On a host checkout, stop `bb dev` instead.")
+       (println)
+       (println (str "    If that server does not share this database, set "
+                     seed-guard-override "=true"))
+       (println "    to proceed anyway.")
+       (println)
+       (flush)
+       (exit! 1)))))

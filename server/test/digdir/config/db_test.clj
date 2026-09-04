@@ -1,7 +1,7 @@
 (ns digdir.config.db-test
   "Tests for the V2 config tree model."
   (:require [clojure.string :as str]
-            [clojure.test :refer [deftest is]]
+            [clojure.test :refer [deftest is testing]]
             [datahike.api :as d]
             [digdir.config.schema :as schema]
             [digdir.config.db :as config-db]
@@ -783,3 +783,66 @@
                (mapv :dataset/id (config-db/list-dataset-records @conn)))))
       (finally
         (delete-test-db conn)))))
+
+(deftest resolve-dataset-runtime-node-classifies-a-failed-ref-instead-of-crashing
+  "A failed dataset resolution must produce a classified client error, not a cast.
+
+   THE DEFECT. #434 added a branch that distinguishes `no datasets at all` from
+   `a ref matching none`, and asked the question with
+   `(get-datasets-by-tenant db tenant)` — passing a tenant STRING to a function
+   that reduces over a COLLECTION. `reduce` walked the characters of \"demo\" and
+   handed `\\d` to `clojure.string/blank?`, so every `tools/call` and every `/v1`
+   chat returned a 500 ClassCastException.
+
+   WHY NOTHING CAUGHT IT. The code runs ONLY after resolution has already
+   failed — its whole job is to pick a nicer message. Anything exercising
+   successful resolution never reaches this line, so no test did.
+
+   ⚠️ WHY BOTH BRANCHES ARE ASSERTED, AND WHY ONE WOULD NOT DO. The obvious
+   one-line fix is `(get-datasets-by-tenant db [tenant])`, which returns
+   `{\"demo\" []}` — and `(seq {\"demo\" []})` is TRUTHY with zero datasets. That
+   fix makes `any-datasets?` permanently true, so the `No datasets are
+   configured` branch can never fire again: a crash swapped for a message that
+   is always wrong. A test covering only the has-datasets branch passes against
+   BOTH the correct fix and that broken one. Exercising both is the only thing
+   that tells them apart."
+  (testing "a tenant with NO datasets is told exactly that"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/register-tenant! conn "demo" {:name "Demo"})
+        (let [e (is (thrown? clojure.lang.ExceptionInfo
+                             (config-db/resolve-dataset-runtime-node!
+                              @conn {:tenant "demo" :dataset-config-key "public-docs"})))]
+          (is (= "No datasets are configured for this tenant" (ex-message e)))
+          (is (= :no-datasets-configured (:digdir/client-error (ex-data e)))
+              "the error boundary reads this key to choose a status"))
+        (finally (delete-test-db conn)))))
+
+  (testing "a tenant WITH datasets but a ref matching none is told that instead"
+    (let [conn (create-test-db)]
+      (try
+        (seed-definition! conn "pipeline.ui.name" :dataset :string)
+        (config-db/register-tenant! conn "demo" {:name "Demo"})
+        (config-db/create-dataset! conn {:dataset-id "norquad" :name "NorQuAD"})
+        (config-db/create-dataset-pipeline! conn {:pipeline-id "norquad-docs"
+                                                 :dataset-id "norquad"})
+        (config-db/create-config-node! conn {:root :dataset
+                                             :tenant "demo"
+                                             :node-id "dataset/demo/norquad/default"
+                                             :label "Default"
+                                             :tenant-config-key "default"})
+        (config-db/create-config-node! conn {:root :dataset
+                                             :tenant "demo"
+                                             :node-id "dataset/demo/norquad/default/norquad-docs/materialization"
+                                             :label "Default Materialization"
+                                             :parent-id "dataset/demo/norquad/default"
+                                             :tenant-config-key (config-db/default-dataset-tenant-config-key "default" "norquad-docs")})
+        (testing "control: this tenant really does have a dataset, so the branch above
+                  is reachable and this one is not passing by having nothing either"
+          (is (seq (config-db/list-datasets @conn "demo"))))
+        (let [e (is (thrown? clojure.lang.ExceptionInfo
+                             (config-db/resolve-dataset-runtime-node!
+                              @conn {:tenant "demo" :dataset-config-key "no-such-key"})))]
+          (is (= "Dataset ref does not match any configured dataset" (ex-message e)))
+          (is (= :dataset-ref-unknown (:digdir/client-error (ex-data e)))))
+        (finally (delete-test-db conn))))))

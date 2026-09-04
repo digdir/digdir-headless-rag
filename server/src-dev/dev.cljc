@@ -11,6 +11,8 @@
    #?(:clj [clojure.string :as str])
    #?(:clj [digdir.api.http :as server])
    #?(:clj [digdir.auth.core :as auth])
+   #?(:clj [digdir.boot.placeholder-secrets :as placeholder-secrets])
+   #?(:clj [digdir.boot.required-env :as required-env])
    #?(:clj [digdir.e2e.seed :as e2e-seed])
    #?(:clj [digdir.skills.init :as skills-init])
    ;; Side-effect requires: each ns invokes its register! to put the
@@ -91,6 +93,23 @@
      "Everything both modes need, in one place so the two entrypoints cannot
       drift apart."
      []
+     ;; FIRST, and in dev too (#489). A check that only runs in production is
+     ;; never exercised by the people who would notice it misbehaving, and a
+     ;; placeholder secret on a dev box is the same published credential it is
+     ;; anywhere else. DIGDIR_ALLOW_PLACEHOLDER_SECRETS=true boots anyway and
+     ;; says so; that is the supported way to keep a placeholder locally.
+     (log/info (str "Placeholder-secret check: "
+                    (pr-str (placeholder-secrets/check!))))
+
+     ;; And the other half of the same promise (#521). `:tier :boot` in
+     ;; `digdir.config.env-bridge` says the server does not start without
+     ;; these; until now nothing derived a presence check from that, so the
+     ;; sentence was true only by luck of each consumer. Derived from the
+     ;; table, so it covers a boot variable added after this line was written.
+     ;; DIGDIR_ALLOW_MISSING_BOOT_ENV=true boots anyway and says so.
+     (log/info (str "Required boot environment: "
+                    (pr-str (required-env/check!))))
+
      (increase-shadow-cache-string-limit!)
 
      ;; Initialize the skills system

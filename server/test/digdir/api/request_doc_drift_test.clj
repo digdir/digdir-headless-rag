@@ -290,8 +290,11 @@
   "Pinned so the walker going quiet fails loudly. A route-walker that stops
    matching is indistinguishable from a server with fewer routes, and this
    file's own history is the argument: #174 found six schemas unchecked
-   because nothing asserted how many there should be."
-  40)
+   because nothing asserted how many there should be.
+
+   40 -> 42: the OpenAPI tool surface, GET /api/tools/openapi.json and
+   POST /api/tools/call/:tool-name."
+  42)
 
 (deftest the-route-walker-still-sees-the-public-and-console-trees
   ;; Named for what it walks, not for the whole surface. It was called

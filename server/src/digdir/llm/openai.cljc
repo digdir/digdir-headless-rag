@@ -40,7 +40,11 @@
             (reset! !wait? false)
             (println "reset wait to false"))))
 
-#?(:clj (defn use-azure-openai [tenant] (cfg/get {:tenant tenant} :services :azure-openai :use-azure-openai-api)))
+#?(:clj
+   (defn use-azure-openai
+     "Delegates to `cfg/use-azure-openai?` — the ONE read of this switch (#500)."
+     [tenant]
+     (cfg/use-azure-openai? tenant)))
 
 #?(:clj
    (defn create-chat-completion [tenant messages]

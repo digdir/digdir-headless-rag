@@ -93,8 +93,23 @@
      pipeline-name - Pipeline name
      collection-names - Map with :docs-collection, :chunks-collection, :phrases-collection
      master-key - Encryption key"
-  ([conn tenant tenant-config-key pipeline-name collection-names master-key]
-   (track-pipeline-collections! conn tenant tenant-config-key pipeline-name pipeline-name collection-names master-key))
+  ([_conn tenant tenant-config-key pipeline-name _collection-names _master-key]
+   ;; ⚠️ #509: THIS ARITY USED TO SUPPLY `pipeline-name` FOR THE DATASET ID.
+   ;; It was correct only where the two coincide — true for the demo tenant
+   ;; (`norquad-docs`/`norquad-docs`) and false for any tenant whose pipeline is
+   ;; not named after its dataset. A convenience whose correctness depends on two
+   ;; unrelated identities happening to be equal is not a convenience: it reads
+   ;; as an intentional default and silently resolves the wrong node.
+   ;;
+   ;; Refusing rather than deleting outright, so an out-of-tree caller gets a
+   ;; sentence naming the fix rather than an arity error.
+   (throw (ex-info (str "track-pipeline-collections! needs an explicit dataset-id. "
+                        "The 5-arity used the pipeline name as the dataset id, which is "
+                        "only correct when they coincide. Call the 7-arity with the "
+                        "durable dataset-id (see digdir.pipeline.executor).")
+                   {:tenant tenant
+                    :tenant-config-key tenant-config-key
+                    :pipeline-name pipeline-name})))
   ([conn tenant _tenant-config-key dataset-id pipeline-name collection-names master-key]
    (doseq [path ["pipeline.storage.docs-collection"
                  "pipeline.storage.chunks-collection"

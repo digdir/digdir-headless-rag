@@ -3,8 +3,9 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Playwright config for the digdir-rag E2E suite.
  *
- * Targets the local docker-compose stack: Open WebUI on :3000, MCPO on
- * :8765, the dev server on :8080. Reuse the existing compose stack
+ * Targets the local docker-compose stack: Open WebUI on :3030 and the dev
+ * server on :8080 (the MCPO container is gone — see ../README.md). Reuse the
+ * existing compose stack
  * (`bb e2e:up`) — Playwright does NOT start the services itself,
  * because Docker startup is too slow to lump into every test run.
  */

@@ -175,17 +175,45 @@
     (ensure-pipeline-property-definitions! conn properties)
     (ensure-pipeline-records! conn dataset-id pipeline-name properties)
     (let [db @conn
-          canonical-root-node (config-db/get-config-node-by-tenant-config-key db tenant :dataset "default")
-          base-node-id (or (:config.node/id canonical-root-node)
-                           (config-db/dataset-base-node-id tenant dataset-id))
+          ;; ⚠️ #509: ONE BASE NODE PER DATASET, KEYED BY DATASET-ID.
+          ;;
+          ;; This lookup used to be `(tenant, :dataset, "default")` — tenant-scoped,
+          ;; not dataset-scoped — so a tenant's SECOND dataset found the FIRST one's
+          ;; base node and quietly hung its materialization tree there. Nothing threw.
+          ;; `pipeline.storage.*` values live on the base node, so the second dataset
+          ;; then RESOLVED the first one's collections and a query against it searched
+          ;; the wrong corpus: confident answers from another dataset's documents, with
+          ;; no error anywhere. Latent only because every tenant we ship has one
+          ;; dataset — `test-multi-tenant-pipelines` has exercised a two-dataset tenant
+          ;; the whole time.
+          base-node-id (config-db/dataset-base-node-id tenant dataset-id)
+          existing-base (config-db/get-config-node db base-node-id)
+          ;; ⚠️ AND WHY THE FIRST DATASET KEEPS THE LITERAL "default".
+          ;; `create-config-node!` enforces (tenant, root, tenant-config-key)
+          ;; uniqueness, so the key cannot simply be "default" for every dataset. It
+          ;; also cannot be the dataset-id for EVERY dataset: a sweep for `:dataset`
+          ;; + "default" found four paths that resolve a tenant's dataset ROOT by that
+          ;; exact key — `api/routes/datasets.clj` (twice, including
+          ;; `authorize-dataset-materialization-request!`, which 404s without it),
+          ;; `config/ops/ownership.clj`'s pin-all-globals, and `config/db.clj`'s
+          ;; `tenant-root-node!`. Keying every dataset by its id would break those for
+          ;; any tenant created after this change, including its FIRST dataset.
+          ;;
+          ;; So: the tenant's first dataset remains the dataset root under "default",
+          ;; and subsequent datasets are keyed by their own dataset-id — which is
+          ;; exactly the key `resolve-dataset-runtime-node!` already looks them up by.
+          ;; Existing nodes are untouched.
+          tenant-has-dataset-root? (some? (config-db/get-config-node-by-tenant-config-key
+                                           db tenant :dataset "default"))
+          base-tenant-config-key (if tenant-has-dataset-root? dataset-id "default")
           materialization-node-id (config-db/dataset-materialization-node-id tenant tenant-config-key dataset-id pipeline-name)
           materialization-tenant-config-key (dataset-materialization-tenant-config-key tenant-config-key pipeline-name)]
-      (when-not canonical-root-node
+      (when-not existing-base
         (config-db/create-config-node! conn {:root :dataset
                                              :tenant tenant
                                              :node-id base-node-id
                                              :label "Default"
-                                             :tenant-config-key "default"}))
+                                             :tenant-config-key base-tenant-config-key}))
       (if-let [leaf (config-db/get-config-node db materialization-node-id)]
         (do
           (config-db/update-config-node! conn {:node-id materialization-node-id

@@ -72,7 +72,16 @@
     :db/cardinality :db.cardinality/one
     :db/doc "Ownership pattern: :fork (tenant owns after registration; default)
              or :inherit (tenant values override a live global baseline).
-             Absent is treated as :fork."}])
+             Absent is treated as :fork."}
+
+   {:db/ident :config-def/deployment-specific?
+    :db/valueType :db.type/boolean
+    :db/cardinality :db.cardinality/one
+    :db/doc "True when the path has NO correct global default, so a shipped
+             value is always wrong for somebody: __global__ must not hold one
+             and the committed snapshot must not carry one. Roughly the
+             complement of :ownership :inherit. The per-path decision lives in
+             digdir.config.deployment-specific; this is where it is READ from."}])
 
 ;; =============================================================================
 ;; Config Tree Schema

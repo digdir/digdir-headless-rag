@@ -4,7 +4,8 @@
    This namespace now defines only the explicit deployment-target materialization
    contract plus the loader-mapping boundary. Hard-coded fallback values have
    been retired from the execution path."
-  (:require [digdir.docs.pipeline.search-phrases :as search-phrases]))
+  (:require [digdir.docs.pipeline.search-phrases :as search-phrases]
+            [digdir.pipeline.model :as model]))
 
 (def ^:private deployment-target-materialization-contracts
   {["digdir" "public-docs"]
@@ -37,63 +38,63 @@
     :parallelism-store 1
     :max-document-failures 10}})
 
+(def ^:private source-types
+  "The source types the loader maps are built for."
+  [:kudos :website :folder :episerver])
+
+;; ⚠️ THE FOUR MAPS BELOW ARE NOW DERIVED, NOT DECLARED (#513).
+;;
+;; They used to be four literal maps, and MEMBERSHIP OF A MAP WAS THE ONLY
+;; STATEMENT OF REQUIREDNESS: `required-execution-properties` took
+;; `(keys source-loader-key-map)`, so that map did two jobs — translate a
+;; property to a loader key, AND declare it mandatory — while the second job
+;; was never written down anywhere. `model.clj` then stated requiredness a
+;; second time, independently and smaller, and the two drifted. That drift IS
+;; #513: `:website-base-url` optional in the model, required here, so the API
+;; accepted a website dataset that materialization then refused to execute.
+;;
+;; Both layers now derive from `model/dataset-properties`, which carries the
+;; three facts per property — loader key, required-or-optional, and which
+;; source types it applies to. Adding a property is one line there and cannot
+;; make the two layers disagree.
+;;
+;; The four shapes are KEPT rather than collapsed into one, because
+;; `dataset-config->loader-config` treats required and optional differently on
+;; purpose: a required key is read unconditionally, an optional one is omitted
+;; entirely when unset so "absent => no-op" stays true at the consumption site.
+
+(defn- loader-key-map
+  "Property -> loader key for `source-type`, restricted to declarations whose
+   requiredness is `required?` and whose scope is per-source (`scope` = `:source`)
+   or pipeline-wide (`:all`)."
+  [source-type required? scope]
+  (into {}
+        (->> (model/properties-for source-type required?)
+             (filter (fn [{:keys [source-types]}]
+                       (if (= :source scope) (set? source-types) (= :all source-types))))
+             (map (fn [p] [(:property p) (model/loader-key-for p source-type)])))))
+
 (def ^:private source-loader-key-map
-  {:kudos {:kudos-use-preprod :kudos/use-preprod?
-           :kudos-starting-page :kudos/starting-page
-           :kudos-document-types :documents/types
-           :document-limit :documents/limit
-           :document-offset :documents/offset
-           :kudos-transducer :documents/transducer}
-   :website {:website-sitemap-url :sitemap/url
-             :website-base-url :base-url
-             :document-limit :urls/limit
-             :document-offset :urls/offset}
-   :folder {:folder-path :folder/path
-            :document-limit :files/limit
-            :document-offset :files/offset}
-   :episerver {:episerver-xml-path :xml/path
-               :episerver-language :language
-               :episerver-include-page-types :pages/include-page-types
-               :document-limit :pages/limit
-               :document-offset :pages/offset}})
+  "Source-specific properties a pipeline of that source type MUST set, mapped to
+   their loader keys. DERIVED from `model/dataset-properties`."
+  (into {} (map (fn [st] [st (loader-key-map st true :source)])) source-types))
+
+(def ^:private optional-source-loader-key-map
+  "Source-specific properties translated when present and simply ABSENT
+   otherwise. DERIVED from `model/dataset-properties`.
+
+   `{:folder {:folder-base-url :base-url}}` is the worked example of why the
+   declaration needs per-source applicability: the same loader key `:base-url`
+   is required for `:website` and optional for `:folder` (#506/#504)."
+  (into {} (map (fn [st] [st (loader-key-map st false :source)])) source-types))
 
 (def ^:private shared-loader-key-map
-  "Shared properties every pipeline MUST set, mapped to their loader keys.
-
-   THIS MAP IS A CONTRACT, NOT A TRANSLATION TABLE. `required-execution-properties`
-   derives the required set from `(keys shared-loader-key-map)`, so adding a key
-   here makes it MANDATORY for every dataset: materialization then throws
-   \"Pipeline materialization config incomplete\" for every existing pipeline that
-   does not set it.
-
-   That is invisible in a diff — a new entry here looks exactly like its
-   siblings, and the meaning lives in a function three definitions away. It is
-   how #453 first shipped a red build. If the key should be optional, put it in
-   `optional-shared-loader-key-map` instead."
-  {:chunk-strategy :chunks/strategy
-   :chunk-minimum-length :chunks/minimum-length
-   :chunk-maximum-length :chunks/maximum-length
-   :search-phrases-model :search-phrases/model
-   :search-phrases-fallback :search-phrases/fallback-model
-   :search-phrases-prompt :search-phrases/prompt
-   :collection-prefix :store/coll-prefix
-   :parallelism-documents :parallelism/documents
-   :parallelism-store :parallelism/store
-   :max-document-failures :fault-tolerance/max-document-failures})
+  "Pipeline-wide properties every pipeline MUST set. DERIVED."
+  (loader-key-map :kudos true :all))
 
 (def ^:private optional-shared-loader-key-map
-  "Shared properties translated when present and simply ABSENT otherwise.
-
-   Deliberately not part of the required contract above: a key here never makes
-   an existing dataset fail materialization, and when it is unset the loader
-   config does not carry it at all rather than carrying nil. That keeps
-   \"absent => no-op\" true at the consumption site (see `split-oversized-chunks`
-   in `digdir.rag.chunking`) rather than depending on every consumer treating nil
-   the way the default would.
-
-   `materialization-test` guards the distinction: any key in this map that turns
-   up in `required-execution-properties` fails the build."
-  {:chunk-split-max-length :chunks/split-max-length})
+  "Pipeline-wide properties translated when present, absent otherwise. DERIVED."
+  (loader-key-map :kudos false :all))
 
 (def ^:private derived-loader-values
   {:chunks/hash-changer 1
@@ -162,7 +163,20 @@
   [pipeline-config]
   (require-explicit-materialization-config! pipeline-config)
   (let [source-type (:source-type pipeline-config)
-        source-keys (get source-loader-key-map source-type {})]
+        source-keys (get source-loader-key-map source-type {})
+        ;; Optional keys are omitted entirely when unset, so a pipeline that
+        ;; does not use one produces exactly the loader config it did before the
+        ;; key existed.
+        ;;
+        ;; ONE implementation, used for both optional maps. Writing the `keep`
+        ;; out twice would be two definitions of what "optional" means, free to
+        ;; drift into disagreeing — which is the shape of #497 and #500.
+        translate-optional (fn [key-map]
+                             (into {}
+                                   (keep (fn [[source-key loader-key]]
+                                           (when (contains? pipeline-config source-key)
+                                             [loader-key (get pipeline-config source-key)])))
+                                   key-map))]
     (merge
      {:tenant (:tenant pipeline-config)}
      derived-loader-values
@@ -174,11 +188,5 @@
            (map (fn [[source-key loader-key]]
                   [loader-key (get pipeline-config source-key)]))
            shared-loader-key-map)
-     ;; Optional keys are omitted entirely when unset, so a pipeline that does
-     ;; not use one produces exactly the loader config it did before the key
-     ;; existed.
-     (into {}
-           (keep (fn [[source-key loader-key]]
-                   (when (contains? pipeline-config source-key)
-                     [loader-key (get pipeline-config source-key)])))
-           optional-shared-loader-key-map))))
+     (translate-optional optional-shared-loader-key-map)
+     (translate-optional (get optional-source-loader-key-map source-type {})))))
