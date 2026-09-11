@@ -449,7 +449,7 @@ switch that decides which client the family configures:
 
 | Switch | Client | Endpoint from | Key from | Model from |
 | --- | --- | --- | --- | --- |
-| `true` (shipped default) | wkok's Azure client (`:impl :azure`) | `services.azure-openai.api-endpoint` | `services.azure-openai.api-key` | `services.azure-openai.deployment-name` |
+| `true` (must be set explicitly — unset is NOT this row) | wkok's Azure client (`:impl :azure`) | `services.azure-openai.api-endpoint` | `services.azure-openai.api-key` | `services.azure-openai.deployment-name` |
 | `false` | `digdir.llm.client` — a plain OpenAI-compatible POST | **`OPENAI_API_ENDPOINT`** (environment) | **`OPENAI_API_KEY`** (environment) | `services.azure-openai.model-name` |
 
 Nothing renames when you flip the switch. A config family named after Azure is
@@ -608,7 +608,8 @@ credentials, calling `tools/call` on `builtin.agent-rag-agent__agent-rag-graph-b
 
 | What is wrong | What you see |
 | --- | --- |
-| Nothing changed yet — the shipped `use-azure-openai-api true` with no Azure key | `LLM request failed at iteration 0 (status 401): Interceptor Exception: status: 401` |
+| Nothing changed yet — switch UNSET, which since #500 means the OpenAI-compatible path, not Azure | `LLM request failed at iteration 0: Missing secret :openai-api-key: set OPENAI_API_KEY. Tried [:env].` |
+| Switch explicitly `true`, no Azure key (what "nothing changed yet" used to mean, when a value was still shipped) | `LLM request failed at iteration 0 (status 401): Interceptor Exception: status: 401` |
 | Switch flipped, **neither** variable set | `LLM request failed at iteration 0: Missing secret :openai-api-key: set OPENAI_API_KEY. Tried [:env].` |
 | `OPENAI_API_KEY` set, **`OPENAI_API_ENDPOINT` missing** | `LLM request failed at iteration 0 (status 401): clj-http: status 401` |
 | Everything set correctly | a real answer |

@@ -325,7 +325,8 @@ Datahike backends are supported for the bootstrap connection:
   decided in the config DB by `services.azure-openai.use-azure-openai-api`, and
   **both paths read that same `services.azure-openai.*` family** — the name is
   historical, not a scope:
-  - **Azure OpenAI** (`use-azure-openai-api true`, the shipped default) —
+  - **Azure OpenAI** (`use-azure-openai-api true` — you must SET this; there is
+    no longer a shipped default, and **unset means NOT Azure**) —
     `AZURE_OPENAI_API_KEY`
   - **Any OpenAI-compatible server, including a local one** (`false`) —
     `OPENAI_API_ENDPOINT` *and* `OPENAI_API_KEY`, both read from the
