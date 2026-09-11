@@ -7,6 +7,7 @@
    #?(:clj [digdir.auth.core :as auth])
    #?(:clj [digdir.boot.phrase-cache :as phrase-cache])
    #?(:clj [digdir.boot.placeholder-secrets :as placeholder-secrets])
+   #?(:clj [digdir.boot.provider-switch :as provider-switch])
    #?(:clj [digdir.boot.required-env :as required-env])
    #?(:clj [digdir.e2e.seed :as e2e-seed])
    ;; NOT digdir.skills.api. The two are different initialisers: api's
@@ -102,6 +103,12 @@
        ;; Boot-time E2E auto-seed. No-op unless E2E_API_KEY is set,
        ;; so production starts unchanged.
        (e2e-seed/maybe-seed!)
+       ;; LAST, and deliberately not up with the other two refusals: this one
+       ;; reads the CONFIG DATABASE rather than the environment, so it has to
+       ;; run after everything that can write config. Refusing here still
+       ;; refuses before the first request is served, which is what matters.
+       (log/info (str "Provider switch check: "
+                      (pr-str (provider-switch/check!))))
        (server/start-server!
          (fn [ring-request] (digdir.ui.main/electric-boot ring-request))
          config))))

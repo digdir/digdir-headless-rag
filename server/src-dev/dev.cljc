@@ -12,6 +12,7 @@
    #?(:clj [digdir.api.http :as server])
    #?(:clj [digdir.auth.core :as auth])
    #?(:clj [digdir.boot.placeholder-secrets :as placeholder-secrets])
+   #?(:clj [digdir.boot.provider-switch :as provider-switch])
    #?(:clj [digdir.boot.required-env :as required-env])
    #?(:clj [digdir.e2e.seed :as e2e-seed])
    #?(:clj [digdir.skills.init :as skills-init])
@@ -129,6 +130,13 @@
      ;; Boot-time E2E auto-seed (mirrors prod.cljc -main). No-op unless
      ;; E2E_API_KEY is set, so a plain `bb dev` is unchanged.
      (e2e-seed/maybe-seed!)
+
+     ;; Same refusal as prod, and in dev too: a check that only runs in
+     ;; production is never exercised by the people who would notice it
+     ;; misbehaving. Reads the CONFIG DATABASE, so it runs after everything
+     ;; that can write config rather than up with the environment checks.
+     (log/info (str "Provider switch check: "
+                    (pr-str (provider-switch/check!))))
 
      ;; Dev-only: when no email service is configured, admin-login
      ;; confirmation codes go to this log instead of throwing, so first

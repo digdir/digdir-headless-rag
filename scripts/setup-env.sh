@@ -64,6 +64,30 @@ OPTIONAL_PROMPTED_VARS="COLBERT_API_URL COLBERT_API_KEY"
 # reach the prompt and all three end up written uncommented.
 ACCESS_VARS="ADMIN_USER_EMAILS"
 
+# A FOURTH list, on the same principle as the third: this file groups by what
+# skipping COSTS, and this one's cost is CONDITIONAL, which neither existing
+# message can say.
+#
+#   PROMPTED_VARS says "still needs a value before the LLM path works" — false
+#   for someone deliberately running a local model, for whom leaving this unset
+#   is the correct and intended state.
+#
+#   OPTIONAL_PROMPTED_VARS says skipping is a supported outcome — true here, but
+#   that list is asserted by setup-env-script-test to hold only `:tier :optional`
+#   bindings, and this one is `:tier :query`. Putting it there would break that
+#   guard rather than satisfy it.
+#
+# So it gets its own prompt and a message that states the condition: blank is
+# right if you are not using Azure, and wrong if you just supplied Azure
+# credentials above.
+#
+# WHY ASK AT ALL. Unset is a real choice, but it is indistinguishable from never
+# having been offered one. A user supplied a key, an endpoint and a deployment
+# name, left this unset because nothing asked, and every query then failed with
+# `Missing secret :openai-api-key` — a message about the OTHER provider. Asking
+# means a clean install always has a CHOSEN provider rather than no value at all.
+PROVIDER_VARS="AZURE_OPENAI_USE_AZURE"
+
 say() { printf '%s\n' "$*"; }
 
 # Can we actually OPEN a terminal? Probed once, by opening it — see the note at
@@ -180,6 +204,34 @@ for v in $OPTIONAL_PROMPTED_VARS; do
       say "      $v  skipped — reranking stays off. Answers keep retrieval"
       say "                            order: slightly worse ORDERING, not fewer"
       say "                            or wrong answers."
+    fi
+  else
+    say "      $v  already set, left alone"
+  fi
+done
+
+say ""
+say "  Which LLM provider should this instance use?"
+say "    true  = Azure OpenAI, using the three values above."
+say "    false = any OpenAI-compatible server, including a local one."
+for v in $PROVIDER_VARS; do
+  if needs_value "$v"; then
+    if [ "$TTY_AVAILABLE" = "1" ]; then
+      printf '      %s (true or false): ' "$v" > /dev/tty
+      read -r answer < /dev/tty || answer=""
+    else
+      answer=""
+    fi
+    if [ -n "${answer:-}" ]; then
+      set_var "$v" "$answer"
+      say "      $v  set"
+    else
+      # Deliberately not defaulted. Guessing from the presence of an Azure key
+      # would be inferring intent, and writing the wrong provider is worse than
+      # leaving the choice visible — the boot check names this exact state.
+      say "      $v  SKIPPED — correct if you are NOT using Azure. If you"
+      say "                            supplied Azure values above, the server"
+      say "                            will refuse to start until you set this."
     fi
   else
     say "      $v  already set, left alone"
