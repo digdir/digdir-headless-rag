@@ -121,6 +121,21 @@
            :build ; use `clj -X:build build-client`, NOT -T!
            {:extra-paths ["src-build"]
             :ns-default  build
+            ;; ⚠️ MAX HEAP IS PINNED HERE, NOT IN THE DOCKERFILE, so that a HOST
+            ;; build and a CONTAINER build get the same ceiling. Without it the
+            ;; JVM default applies — a QUARTER of available memory — and the
+            ;; Closure `:advanced` pass in `build-client` exhausts it. Measured:
+            ;; a developer machine has enough by accident (16 GB host → 4 GB
+            ;; default heap, builds fine), while a container given 7.6 GB gets
+            ;; ~1.9 GB and dies. So whether a clean clone built depended on an
+            ;; undocumented host Docker memory setting, and the failure did not
+            ;; name memory — see the release-status check in `build.clj`.
+            ;;
+            ;; This is a CEILING, not a reservation: it costs nothing on a big
+            ;; machine. A host that cannot supply it fails either way; README
+            ;; step 2 states the requirement so that is a known constraint
+            ;; rather than a discovery.
+            :jvm-opts    ["-Xmx4g"]
             :extra-deps  {thheller/shadow-cljs          {:mvn/version "2.26.2"}
                           io.github.clojure/tools.build {:mvn/version "0.10.11"}}}
 

@@ -123,14 +123,39 @@ application classpath to be available"
   ; adding com.google.guava/guava {:mvn/version "31.1-jre"} to deps,
   ; see https://hf-inc.slack.com/archives/C04TBSDFAM6/p1692636958361199
   (shadow-server/start!)
-  (as->
-      (shadow-api/release :prod
-        {:debug   debug,
-         :verbose verbose,
-         :config-merge
-         [{:compiler-options {:optimizations (if optimize :advanced :simple)}
-             :closure-defines  {'hyperfiddle.electric-client3/ELECTRIC_USER_VERSION version}}]})
-      shadow-status (assert (= shadow-status :done) "shadow-api/release error")) ; fail build on error
+  ;; ⚠️ THE FAILURE HAS TO NAME ITS OWN CAUSE. This was
+  ;;
+  ;;     (assert (= shadow-status :done) "shadow-api/release error")
+  ;;
+  ;; which throws away everything shadow reported. Heap exhaustion in Closure's
+  ;; `:advanced` pass happens on a worker thread, so it never propagates to this
+  ;; one; shadow returns a non-`:done` status and the assert rendered it as
+  ;; `Assert failed: shadow-api/release error`, a message with no relationship
+  ;; to the cause. A user hit exactly that on a clean container build and could
+  ;; only find the real `java.lang.OutOfMemoryError: Java heap space` by
+  ;; re-running the whole build with `--progress plain` and reading the raw log.
+  ;;
+  ;; A check that hides its own cause costs more than the fault it reports.
+  (let [status (try
+                 (shadow-api/release :prod
+                   {:debug   debug,
+                    :verbose verbose,
+                    :config-merge
+                    [{:compiler-options {:optimizations (if optimize :advanced :simple)}
+                        :closure-defines  {'hyperfiddle.electric-client3/ELECTRIC_USER_VERSION version}}]})
+                 (catch Throwable t
+                   (throw (ex-info (str "Electric client release build threw: " (.getMessage t))
+                                   {:build/phase :shadow-release} t))))]
+    (when-not (= status :done)
+      (let [described (let [s (pr-str status)]
+                        (if (> (count s) 800) (str (subs s 0 800) " ...(truncated)") s))]
+        (throw (ex-info (str "Electric client release build did not complete. "
+                             "shadow-cljs returned: " described
+                             " -- if this build is running in a container, check "
+                             "that it has enough memory: the :advanced pass is "
+                             "heap-hungry and its failure surfaces here.")
+                        {:build/phase :shadow-release
+                         :shadow/status status})))))
   (shadow-server/stop!)
   (log/info "client built")))
 

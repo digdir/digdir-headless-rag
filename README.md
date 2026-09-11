@@ -96,6 +96,13 @@ time. Rebuild with the same command whenever you change server code. If you have
 changed `.env`, you do not need to rebuild — run the start command in step 4
 again, which recreates the containers with the new values.
 
+**Give Docker at least 6 GB of memory.** The build asks for up to 4 GB of heap
+for the JavaScript optimizer, and Docker Desktop's default allocation is not
+always enough to cover that plus the rest of the build. The ceiling is pinned
+in the project rather than left to the JVM default, so this no longer depends
+on a host setting nobody mentions — but the machine still has to be able to
+supply it. On Docker Desktop the setting is under Settings → Resources.
+
 ### 3. Set up the database, before starting the server
 
 Start the search backend on its own first:
@@ -129,6 +136,13 @@ the server holds open, and a write made behind a running server does not
 survive — the command reports success and the change is not there afterwards.
 Each command checks for a running server and refuses rather than doing that
 silently, so if you see it refuse, stop the server and run it again.
+
+⚠️ **Your credentials must already be in `.env` before this step.** The
+`demo-tenant` command copies your LLM provider settings and Typesense admin key
+out of the environment and into the tenant's configuration **as it runs** — it
+does not read them again later. If you skipped those prompts in step 1, or
+filled them in afterwards, you get a tenant whose LLM configuration is empty,
+and the only fix is to put the values in `.env` and run `demo-tenant` again.
 
 ### 4. Start it
 
@@ -172,7 +186,7 @@ CC BY-SA 4.0.
 Fetching runs from the image, so it needs nothing installed but Docker:
 
 ```sh
-docker compose --profile fetch run --rm corpus-fetch
+docker compose -f docker-compose.newcomer.yml --profile fetch run --rm corpus-fetch
 ```
 
 `--profile fetch` is why this is not started by `docker compose up`: it is a
