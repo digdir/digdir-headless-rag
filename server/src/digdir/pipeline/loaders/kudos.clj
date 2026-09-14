@@ -26,8 +26,13 @@
    (t/event! :pipeline.kudos/starting {:data {:config (dissoc config :master-key)}})
 
    (try
-     ;; Delegate to existing Kudos loader
-     (let [result (m/? (loader/mk-materialize-t config))]
+     ;; Delegate to existing Kudos loader.
+     ;; Pilot 2026-09-14: pipeline-veien (materialization/dataset-config->loader-config)
+     ;; setter aldri :stores, og loader/create-stores + mk-store-document-t itererer
+     ;; over (:stores kview), så en Kudos-pipeline lagret INGENTING. Standard til
+     ;; Typesense når nøkkelen mangler. Forslag til Benjamin.
+     (let [config (cond-> config (empty? (:stores config)) (assoc :stores #{{:store/type :typesense}}))
+           result (m/? (loader/mk-materialize-t config))]
        (t/event! :pipeline.kudos/completed {:data {:result result}})
        result)
 
