@@ -76,6 +76,54 @@ graph_builder:212, synthesis:232, query_planner:314,617,660}`;
 
 30 sites mention `:impl :azure` in total.
 
+### Parameter resolution already has four layers — and records none of them
+
+`skills/graph/runner.clj:139-151 resolve-step-parameters`:
+
+```clojure
+(merge
+  (:parameters step)     ; skill-GRAPH step defaults      <- lowest
+  common-params          ; graph-wide :model/:temperature/:max-tokens/:prompt
+  per-skill-params       ; (get skill-params skill-id)
+  execution-overrides)   ; per-run                        <- highest
+```
+
+All eight LLM-calling skills honour `(or model ...)`, so the chain reaches
+every one of them: `synthesis`, `query_planner`, `fact_checking`,
+`summarization`, `entity_extraction`, `graph_builder`, `agent/loop`,
+`agent/read_signals`.
+
+**Two facts follow, and they pull in opposite directions.**
+
+The reassuring one: the in-skill `(if (llm/use-azure-openai tenant)
+deployment-name model-name)` fallback sits BELOW all four layers. It is the
+only thing Phase 1 replaces, so collapsing the provider asymmetry cannot
+reduce skill- or graph-level parameterisation.
+
+The unwelcome one: `resolve-step-parameters` merges and returns. Nothing
+records WHICH layer supplied the winning value — no trace event, no output
+field. During Phase 1 that is disabling: the bottom layer is being rewritten
+and there is no way to show that the same model was selected for the same
+reason before and after. A passing test suite does not answer that question.
+
+The right pattern already exists one level down. The enrichment subsystem
+stamps `:model`, `:prompt-hash` and `:generated-at-ms` onto every row it
+writes, explicitly "for audit and future-selective-regeneration", with a
+sentinel when the model is unknown (`skills/enrichment/apply_questions.clj:60-95`).
+
+### Persisted skill-level model config covers one skill in eight
+
+Only `synthesis` has operator-facing keys: `skills.synthesis.{model,
+temperature,max-tokens}`. `query-planner` has `{enabled, prompt, max-phrases,
+expansion-mode}` and no model or temperature. `fact-checking`,
+`summarization`, `entity-extraction`, `graph-builder`, `agent/loop` and
+`agent/read-signals` have no `skills.*` namespace at all.
+
+Those seven are configurable per RUN by a caller, but an operator cannot
+persistently pin one. Today that is invisible because everything lands on the
+same tenant default; it becomes visible the moment provider choice is real per
+usage, which is what this plan enables.
+
 ## Asymmetry inventory, and the verdict on each
 
 | # | Asymmetry | Why it existed | Still earns it? |
@@ -89,11 +137,33 @@ graph_builder:212, synthesis:232, query_planner:314,617,660}`;
 | A7 | Non-Azure model name stored at `services.azure-openai.model-name` | Expedience | **No** |
 | A8 | `:lm-studio` (loader) vs `:lmstudio` (search-phrases) for one thing | Two authors | **No** |
 | A9 | Two OpenAI-compatible stores (`OPENAI_API_*` vs `services.lmstudio.*`) | Different subsystems, different eras | **No** |
+| A10 | Persisted skill-level model config for `synthesis` only | Synthesis was the first skill to need a non-default model | **No** — extend to the other seven, or drop the one |
 
 A4 is the only one that survives. Everything else is the residue of the
 retired requirement.
 
 ## Proposed changes
+
+### Phase 0 — record what was resolved, and from where
+
+Make `resolve-step-parameters` return the resolved values **with their source
+layer**, and emit that on the step's trace:
+
+```clojure
+{:model "gpt-5.5" :model/source :graph-step
+ :temperature 0.1  :temperature/source :skill-default}
+```
+
+with `:provider-fallback` as the source name for the in-skill
+`(if use-azure ...)` branch that Phase 1 replaces.
+
+No behaviour change, no config change, small diff. It exists so that every
+later phase can be verified by comparing resolved-parameter records before and
+after, rather than by trusting that a green suite means the same model was
+chosen for the same reason.
+
+**This phase is a precondition for Phase 1, not an optional extra.** Without
+it, the Phase 1 verification in this plan cannot actually be performed.
 
 ### Phase 1 — one resolver, one shape
 
@@ -153,6 +223,7 @@ path needs. Rewrite `.env.example`'s Path A / Path B blocks around the single
 
 | Phase | Files |
 |---|---|
+| 0 | `skills/graph/runner.clj:139-151, 201`; the step-trace emitter |
 | 1 | new `server/src/digdir/llm/provider.clj`; `llm/openai.cljc:44-63`; the ~16 call sites listed above |
 | 2 | `config/env_bridge.clj:145-225`; `setup/config.clj:52-118`; `config/deployment_specific.clj:55-100` |
 | 3 | `docs/loader.clj:641-670`; `docs/pipeline/search_phrases.clj:23-90`; `skills/enrichment/propose_questions.clj:135-218` |
@@ -161,21 +232,27 @@ path needs. Rewrite `.env.example`'s Path A / Path B blocks around the single
 
 ## Verification plan
 
-1. **A guard on boot-tier composition.** Nothing currently pins *which*
+1. **Resolved-parameter records, before and after every phase** (Phase 0).
+   For a fixed corpus of graph runs, the `{value, source}` pair for `:model`,
+   `:temperature` and `:max-tokens` at each step must be unchanged across
+   Phases 1-4 — except where a phase intends to change the source, which it
+   then states. This is the only check that can distinguish "same behaviour"
+   from "same test outcome".
+2. **A guard on boot-tier composition.** Nothing currently pins *which*
    variables are `:tier :boot`; `required_env_test` only asserts the check
    reads `:tier` off the table. Add a test asserting the boot set is exactly
    the six database/bootstrap variables, so an LLM key can never silently
    become boot-required. (Verified today: `boot-requirements` with zero Azure
    variables returns `{:checked 6 :missing [] :unsatisfied-groups []}`.)
-2. **One test per selector, pre-change**, pinning today's behaviour including
+3. **One test per selector, pre-change**, pinning today's behaviour including
    the defects — then flipped as each phase lands. Specifically: a test that
    `use-azure-openai-api false` still sends search-phrases to Azure (red-by-
    design, documents the bug), inverted in Phase 3.
-3. **Both branches at the chokepoint.** `model_params_test/capture-direct-body`
+4. **Both branches at the chokepoint.** `model_params_test/capture-direct-body`
    and `capture-azure-params` already do this; extend them to assert the
    resolver's output rather than hand-built opts.
-4. **A sabotage pass per phase**: revert the change, require the new tests red.
-5. **End-to-end**: one real LM Studio run (the only Path B target ever
+5. **A sabotage pass per phase**: revert the change, require the new tests red.
+6. **End-to-end**: one real LM Studio run (the only Path B target ever
    exercised per `.env.example`) and one Azure run, before and after.
 
 ## Risks and open questions
@@ -198,8 +275,9 @@ path needs. Rewrite `.env.example`'s Path A / Path B blocks around the single
 
 ## Suggested execution order
 
-1. Verification guard (1) and pinning tests (2) — no behaviour change.
-2. Phase 1 resolver + call-site collapse. Largest diff, lowest risk, no config change.
-3. Phase 5 `setup-env.sh` fix — independent, small, fixes a live onboarding gap.
-4. Confirm the open question above.
-5. Phase 2, then 3, then 4 — each on its own branch because of the snapshot.
+1. **Phase 0 first** — provenance recording. Everything below is verified against it.
+2. Boot-tier guard and pinning tests — no behaviour change.
+3. Phase 1 resolver + call-site collapse. Largest diff, lowest risk, no config change.
+4. Phase 5 `setup-env.sh` fix — independent, small, fixes a live onboarding gap.
+5. Confirm the open question above.
+6. Phase 2, then 3, then 4 — each on its own branch because of the snapshot.
