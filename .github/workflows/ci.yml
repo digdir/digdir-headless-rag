@@ -8,8 +8,14 @@ on:
   pull_request:
   push:
     branches:
-      - release-v0.1-details
-      - agentic-skills
+      # `main` is the public repository's branch. The previous entries —
+      # release-v0.1-details and agentic-skills — do not exist here, so merges
+      # to main ran no CI at all while pull_request carried the whole gate.
+      #
+      # This file is shared by the private repo, where `main` does not exist
+      # either; there the push half is simply inert until a branch of that name
+      # appears. pull_request is unaffected in both.
+      - main
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -289,7 +295,20 @@ jobs:
   # change.
   mark-green:
     needs: lint-and-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/release-v0.1-details'
+    # ⚠️ GATED ON THE REPOSITORY, and that is the point rather than tidiness.
+    # This job moves a ref that causes a deploy to a box WE run. A merge to
+    # this public repository must not be able to trigger that — deciding what
+    # reaches our infrastructure stays on our side of the line. The private
+    # repo advances the marker itself, after verifying the public run for that
+    # SHA; see plans/proposed/private-deploy-sync-plan.md.
+    #
+    # Stated as a condition rather than by keeping the file out of this repo:
+    # one workflow file, both repositories, and the boundary is readable here
+    # instead of being implied by which file exists where.
+    if: >-
+      github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
+      && github.repository == 'itonomi/digdir-headless-rag'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
