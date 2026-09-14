@@ -111,10 +111,10 @@ info:
     name: Digdir Support
 
 servers:
-  - url: https://admin.kunnskap.digdir.cloud
+  - url: https://rag.digdir.cloud
     description: Production
-  - url: https://admin.staging.kunnskap.digdir.cloud
-    description: Staging
+  - url: https://test.rag.digdir.cloud
+    description: Test
 
 tags:
   - name: MCP

@@ -98,7 +98,12 @@ services:
     build:
       context: .
       dockerfile: server.Dockerfile
-    image: digdir-rag-server:newcomer
+    # Same override the corpus-fetch service below already honours. That one
+    # had it and this one did not, so DIGDIR_RAG_IMAGE moved one service and
+    # not the other — and because the tag is daemon-global while compose scopes
+    # only containers and volumes, a build here silently rewrote the default tag
+    # every other stack on the machine also uses. The default is unchanged.
+    image: ${DIGDIR_RAG_IMAGE:-digdir-rag-server:newcomer}
     container_name: digdir-rag-newcomer
     depends_on:
       typesense:

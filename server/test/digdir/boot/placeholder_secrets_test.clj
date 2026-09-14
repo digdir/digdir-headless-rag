@@ -110,8 +110,14 @@
             "the violation is still reported, not swallowed")
         (is (true? (:overridden? r)))))
 
+    (testing "casing is forgiven — the value must SAY true, not be typed one way"
+      (doseq [v ["TRUE" "True" "  tRuE  "]]
+        (let [r (ph/check! (env-stub (assoc placeholder ph/override-env-var v)))]
+          (is (true? (:overridden? r))
+              (str "override value " (pr-str v) " should engage the override")))))
+
     (testing "and NOT on anything else — no silent default"
-      (doseq [v ["1" "yes" "TRUE" "" "false"]]
+      (doseq [v ["1" "yes" "" "false" "truthy"]]
         (is (thrown? clojure.lang.ExceptionInfo
                      (ph/check! (env-stub (assoc placeholder ph/override-env-var v))))
             (str "override value " (pr-str v) " should not disable the check"))))

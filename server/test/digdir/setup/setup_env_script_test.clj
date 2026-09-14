@@ -268,3 +268,19 @@
       (when (and i-seed i-admin i-up)
         (is (< i-seed i-up) "`up -d` is printed before the bootstrap seed")
         (is (< i-admin i-up) "`up -d` is printed before the admin is created")))))
+
+(deftest the-provider-switch-variable-is-one-clojure-actually-reads
+  (testing "PROVIDER_VARS is a fourth shell-side copy of a name Clojure owns.
+            A typo here would write a variable into .env that nothing reads,
+            and the symptom would be the very defect the prompt exists to
+            prevent — no provider chosen, and a query failing about the other
+            one. Checked against the binding table rather than a literal."
+    (let [declared (set (map :env-var env-bridge/env-config-bindings))
+          provider (shell-list (script) "PROVIDER_VARS")]
+      (is (seq provider) "PROVIDER_VARS not parsed from the script")
+      (doseq [v provider]
+        (is (contains? declared v)
+            (str v " is prompted for by setup-env.sh but is not an env-bridge "
+                 "binding, so nothing would ever read it")))
+      (testing "and it is the switch the accessor resolves, not a near-miss"
+        (is (contains? provider "AZURE_OPENAI_USE_AZURE"))))))

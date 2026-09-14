@@ -9,11 +9,13 @@ name: CI queue watchdog
 # EXECUTION, not the time it waits for a runner, so it is inert for exactly
 # this failure. Do not "simplify" this workflow away in favour of one.
 #
-# ⚠️ WHERE THIS RUNS IS HALF THE DESIGN. It runs on `ubuntu-latest`, NOT on the
-# self-hosted runners it watches. A monitor that runs on the thing it monitors
-# shares that thing's failure domain and goes quiet at precisely the moment it
-# is needed — the runners being stuck is the condition it exists to report.
-# Do not move this to `[self-hosted, digdir-rag]`.
+# ⚠️ WHERE THIS RUNS IS HALF THE DESIGN. A monitor that runs on the thing it
+# monitors shares that thing's failure domain and goes quiet at precisely the
+# moment it is needed. That was written when this watched self-hosted runners;
+# CI is GitHub-hosted now, so the two share a failure domain again and this
+# cannot report a total Actions outage. It still reports the failure modes
+# GitHub stays up through — a stranded queue, a missing run, a red default
+# branch — which is what it is for. Do not move it to a self-hosted runner.
 #
 # It FAILS rather than warns. A red scheduled workflow is emailed to the repo's
 # watchers; a green one that checked nothing is indistinguishable from a green
@@ -139,10 +141,9 @@ jobs:
           if [ -n "$stranded" ]; then
             echo "$stranded"
             echo "::error::CI jobs have been queued longer than ${STRANDED_MINUTES} minutes."
-            echo "::error::Most likely a runner is in a reconnect window and will NOT pick these up on its own."
-            echo "::error::A runner settings page reading 'online' does not rule this out — it read online throughout the incident this lane exists for."
-            echo "::error::Remedy, in order: re-dispatch the run; then 'ssh kamal-1 docker restart digdir-rag-1'; then revert ci.yml to 'runs-on: ubuntu-latest'."
-            echo "::error::Full runbook: infra/ci-runner/README.md, section 'If CI stops'."
+            echo "::error::All jobs now run on GitHub-hosted runners, so this is no longer a self-hosted reconnect window."
+            echo "::error::Remedy, in order: check https://www.githubstatus.com for an Actions incident; then re-dispatch the run; then check the repo's Actions usage limits."
+            echo "::error::This check is KEPT after the move to GitHub-hosted runners: a queued-forever job is a real failure mode on hosted runners too (incidents, concurrency limits), and the two checks below do not depend on the runner at all."
             exit 1
           fi
 

@@ -26,7 +26,7 @@ If you're an operator (logged in via the Operator Console, `auth-token` cookie),
 key scoped to the dataset you want to query:
 
 ```bash
-curl -X POST https://admin.kunnskap.digdir.cloud/console-api/api-keys \
+curl -X POST https://rag.digdir.cloud/console-api/api-keys \
   -H "Content-Type: application/json" \
   -H "X-User-Email: user@example.com" \
   --cookie "auth-token=YOUR_JWT_TOKEN" \
@@ -75,7 +75,7 @@ Each `(agent × allowed skill-graph)` pair is exposed as one MCP tool. List the 
 key can use:
 
 ```bash
-curl -sS -X POST https://admin.kunnskap.digdir.cloud/api/mcp \
+curl -sS -X POST https://rag.digdir.cloud/api/mcp \
   -H "Content-Type: application/json" \
   -H "X-API-Key: rag_your_api_key_here" \
   -H "MCP-Protocol-Version: 2026-07-28" \
@@ -89,7 +89,7 @@ This returns a `result.tools` array. The built-in RAG agent's tool is named
 ### Step 2 — Call a tool
 
 ```bash
-curl -sS -X POST https://admin.kunnskap.digdir.cloud/api/mcp \
+curl -sS -X POST https://rag.digdir.cloud/api/mcp \
   -H "Content-Type: application/json" \
   -H "X-API-Key: rag_your_api_key_here" \
   -H "MCP-Protocol-Version: 2026-07-28" \
@@ -123,7 +123,7 @@ curl -sS -X POST https://admin.kunnskap.digdir.cloud/api/mcp \
 ```javascript
 const TOOL = 'builtin.agent-rag-agent__agent-rag-graph-bundled';
 
-const response = await fetch('https://admin.kunnskap.digdir.cloud/api/mcp', {
+const response = await fetch('https://rag.digdir.cloud/api/mcp', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -160,7 +160,7 @@ import requests
 TOOL = 'builtin.agent-rag-agent__agent-rag-graph-bundled'
 
 response = requests.post(
-    'https://admin.kunnskap.digdir.cloud/api/mcp',
+    'https://rag.digdir.cloud/api/mcp',
     headers={
         'Content-Type': 'application/json',
         'X-API-Key': os.environ['DIGDIR_API_KEY'],
@@ -223,7 +223,7 @@ To continue an existing conversation, pass the `conversation_id` from the previo
 as `arguments.conversation_id`:
 
 ```bash
-curl -sS -X POST https://admin.kunnskap.digdir.cloud/api/mcp \
+curl -sS -X POST https://rag.digdir.cloud/api/mcp \
   -H "Content-Type: application/json" \
   -H "X-API-Key: rag_your_api_key_here" \
   -H "MCP-Protocol-Version: 2026-07-28" \

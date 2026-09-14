@@ -54,7 +54,7 @@ Returns an OpenAPI 3.1 document with one `POST /api/tools/call/{tool-name}`
 operation per tool the calling key can reach.
 
 ```bash
-curl -s https://admin.kunnskap.digdir.cloud/api/tools/openapi.json \
+curl -s https://rag.digdir.cloud/api/tools/openapi.json \
   -H "X-API-Key: $DIGDIR_API_KEY"
 ```
 
@@ -62,7 +62,7 @@ curl -s https://admin.kunnskap.digdir.cloud/api/tools/openapi.json \
 {
   "openapi": "3.1.0",
   "info": { "title": "digdir-rag", "version": "1.0", "description": "…" },
-  "servers": [{ "url": "https://admin.kunnskap.digdir.cloud" }],
+  "servers": [{ "url": "https://rag.digdir.cloud" }],
   "paths": {
     "/api/tools/call/builtin.agent-rag-agent__agent-rag-graph-faithful": {
       "post": {
@@ -98,7 +98,7 @@ open-ended, and this API's coercion strips fields it does not know about
 
 ```bash
 curl -s -X POST \
-  "https://admin.kunnskap.digdir.cloud/api/tools/call/builtin.agent-rag-agent__agent-rag-graph-faithful" \
+  "https://rag.digdir.cloud/api/tools/call/builtin.agent-rag-agent__agent-rag-graph-faithful" \
   -H "X-API-Key: $DIGDIR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"query": "Hva er Altinn?"}'

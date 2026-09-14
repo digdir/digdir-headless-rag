@@ -2,7 +2,7 @@
   "Integration tests for /api endpoints against deployed environments.
 
    Requires environment variables:
-   - RAG_API_BASE_URL: Base URL of the API (e.g., https://admin.staging.kunnskap.digdir.cloud)
+   - RAG_API_BASE_URL: Base URL of the API (e.g., https://test.rag.digdir.cloud)
    - RAG_API_TEST_KEY: Valid API key for the target environment
 
    Run with: bb integration-test <environment>"

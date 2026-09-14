@@ -70,8 +70,8 @@
 
           ;; API base URLs for integration testing
           (def api-base-urls
-            {"prod" "https://admin.kunnskap.digdir.cloud"
-             "test" "https://admin.test.kunnskap.digdir.cloud"})
+            {"prod" "https://rag.digdir.cloud"
+             "test" "https://test.rag.digdir.cloud"})
 
           (defn show-integration-test-error []
             (println "Error: config-key is required.")
