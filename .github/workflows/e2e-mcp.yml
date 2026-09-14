@@ -1,15 +1,17 @@
 name: E2E — MCP + Open WebUI stack
 
-# WHY THIS IS A SEPARATE WORKFLOW, AND WHY IT IS NOT ON THE SELF-HOSTED RUNNER.
+# WHY THIS IS A SEPARATE WORKFLOW.
 #
-# `ci.yml` runs entirely on the single self-hosted runner, whose container
-# **deliberately does not mount the docker socket** — infra/ci-runner/README.md:
-# "Mounting it would let workflow code reach the production containers." This
-# suite brings up three containers, so it cannot run there at all. That is a
-# design decision to route around, not an oversight to fix.
+# It needs to bring up three containers. It was split out because `ci.yml` then
+# ran on the self-hosted runner, whose container **deliberately does not mount
+# the docker socket** — infra/ci-runner/README.md: "Mounting it would let
+# workflow code reach the production containers" — so this suite could not run
+# there at all.
 #
-# So it runs on ubuntu-latest, the same escape hatch ci-fallback-canary.yml
-# already uses.
+# ci.yml is on ubuntu-latest now, so that constraint is gone and the two COULD
+# be merged. Kept separate deliberately: this suite pulls images and starts a
+# stack, which is a different cost and a different failure mode from lint and
+# unit tests, and folding it in would make every PR pay for it.
 #
 # WHAT IT GUARDS, and why it exists at all:
 #
