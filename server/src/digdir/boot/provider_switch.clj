@@ -139,7 +139,13 @@
 
 (defn override-engaged?
   ([] (override-engaged? (System/getenv override-env-var)))
-  ([raw] (= "true" (some-> raw str/trim))))
+  ;; Case-INSENSITIVE, matching `digdir.setup.common`'s seed guard and the
+  ;; RAG env flags. An escape hatch is reached for under pressure, and a
+  ;; `TRUE` that silently fails to engage presents as "the documented override
+  ;; does not work" — the operator is already dealing with a refusal and now
+  ;; has a second, invisible one. The value is still required to SAY true;
+  ;; only its casing is forgiven.
+  ([raw] (= "true" (some-> raw str/trim str/lower-case))))
 
 (defn check!
   "Refuse to start when any tenant supplies Azure credentials and no switch.

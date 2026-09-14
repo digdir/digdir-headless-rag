@@ -170,16 +170,17 @@
             of getting it wrong is a refusal to boot that looks like the hatch
             not working. What counts should be pinned rather than discovered.
 
-            Case sensitivity is DELIBERATE here only in the sense that it
-            matches `required-env` and `placeholder-secrets`, which parse their
-            overrides the same way; this test records the behaviour, it does not
-            argue for it. Change all three together or none."
+            Casing is forgiven, matching `required-env`, `placeholder-secrets`
+            and `digdir.setup.common`'s seed guard. The value must still SAY
+            true — only its capitalisation is ignored, so nothing is loosened
+            beyond the one thing an operator can plausibly get wrong."
     (doseq [[raw expected]
             [["true"      true]
              [" true "    true]   ; surrounding whitespace is trimmed
              ["\ttrue\n"  true]
-             ["TRUE"      false]  ; case-sensitive, like the sibling checks
-             ["True"      false]
+             ["TRUE"      true]   ; case-insensitive, like the sibling checks
+             ["True"      true]
+             ["  tRuE  "  true]
              ["yes"       false]
              ["1"         false]
              ["false"     false]

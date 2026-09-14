@@ -187,7 +187,15 @@
       (is (true? (:overridden? summary)))
       (is (seq (:violations summary))
           "the violations are still reported, not suppressed")))
-  (testing "Strict \"true\" only."
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (required-env/check!
-                   (env-fn {required-env/override-env-var "yes"}))))))
+  (testing "Casing is forgiven — an operator reaching for the hatch under
+            pressure should not also have to guess its capitalisation."
+    (doseq [v ["TRUE" "True" "  tRuE  "]]
+      (is (true? (:overridden? (required-env/check!
+                                 (env-fn {required-env/override-env-var v}))))
+          (str "override value " (pr-str v) " should engage the override"))))
+  (testing "The value must still SAY true; nothing else engages it."
+    (doseq [v ["yes" "1" "" "false" "truthy"]]
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (required-env/check!
+                     (env-fn {required-env/override-env-var v})))
+          (str "override value " (pr-str v) " should not disable the check")))))
