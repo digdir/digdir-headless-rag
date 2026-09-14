@@ -139,6 +139,55 @@
                   (fn [& _] (throw (ex-info "config unavailable" {})))]
       (is (= [] (:violations (provider-switch/check! ["demo"])))))))
 
+(deftest an-unreadable-tenant-is-not-counted-as-checked
+  (testing "The summary is logged at boot by both entrypoints, so it is read as
+            a health signal. `:checked` therefore has to count what was actually
+            RESOLVED — counting the tenants offered instead reports
+            `{:checked 3 :violations []}` for three tenants whose reads all
+            threw, which is indistinguishable from three clean tenants. This is
+            the assertion the sibling test above cannot make: it asserts only on
+            `:violations`, and `:violations` is empty in BOTH cases."
+    (with-redefs [accessor/get-platform-value
+                  (fn [& _] (throw (ex-info "config unavailable" {})))]
+      (let [summary (provider-switch/check! ["alpha" "beta" "gamma"])]
+        (is (= 0 (:checked summary))
+            "no tenant was resolved, so none was checked")
+        (is (= 3 (:unreadable summary))
+            "the three that could not be read are named, not silently dropped")
+        (is (= [] (:violations summary)))))))
+
+(deftest a-readable-tenant-is-still-counted
+  (testing "Control for the test above: without this, `:checked` could be
+            hard-wired to 0 and the unreadable case would still pass."
+    (with-config {"demo" {}}
+      (fn []
+        (let [summary (provider-switch/check! ["demo"])]
+          (is (= 1 (:checked summary)))
+          (is (= 0 (:unreadable summary))))))))
+
+(deftest the-override-engages-only-on-an-exact-true
+  (testing "An escape hatch is reached for under pressure, and the failure mode
+            of getting it wrong is a refusal to boot that looks like the hatch
+            not working. What counts should be pinned rather than discovered.
+
+            Case sensitivity is DELIBERATE here only in the sense that it
+            matches `required-env` and `placeholder-secrets`, which parse their
+            overrides the same way; this test records the behaviour, it does not
+            argue for it. Change all three together or none."
+    (doseq [[raw expected]
+            [["true"      true]
+             [" true "    true]   ; surrounding whitespace is trimmed
+             ["\ttrue\n"  true]
+             ["TRUE"      false]  ; case-sensitive, like the sibling checks
+             ["True"      false]
+             ["yes"       false]
+             ["1"         false]
+             ["false"     false]
+             [""          false]
+             [nil         false]]]
+      (is (= expected (provider-switch/override-engaged? raw))
+          (str "override-engaged? " (pr-str raw) " should be " expected)))))
+
 (deftest the-refusal-carries-no-credential-value
   (testing "One of the three paths is an encrypted API key. It is read to ask
             whether it is there and for nothing else."

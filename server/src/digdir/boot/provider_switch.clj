@@ -111,11 +111,20 @@
      :switch (accessor/get-platform-value switch-path {:tenant tenant})}
     (catch Throwable _ nil)))
 
+(defn- read-tenants
+  "The tenants this check could actually resolve.
+
+   `read-tenant` answers `nil` for a tenant it cannot read, and dropping it here
+   is how the check declines to answer. That makes the count of what SURVIVES
+   the only honest basis for `:checked` — counting the input instead reports a
+   tenant as examined when its read threw. See `check!`."
+  [tenants]
+  (vec (keep read-tenant tenants)))
+
 (defn contradictory-tenants
   "Tenant ids in the contradictory state, sorted. Never carries a value."
   [tenants]
-  (->> tenants
-       (keep read-tenant)
+  (->> (read-tenants tenants)
        (filter contradiction?)
        (map :tenant)
        sort
@@ -135,15 +144,25 @@
 (defn check!
   "Refuse to start when any tenant supplies Azure credentials and no switch.
 
-   Returns a summary when it does not refuse — `{:checked n :violations [...]
-   :overridden? bool}`, the shape the sibling boot checks return. `:checked` is
-   what makes a vacuous run visible: 0 means no tenants were examined.
+   Returns a summary when it does not refuse — `{:checked n :unreadable n
+   :violations [...] :overridden? bool}`, the shape the sibling boot checks
+   return.
+
+   `:checked` counts the tenants actually RESOLVED, not the tenants offered, so
+   a vacuous run is visible: 0 means nothing was examined. Counting the input
+   would report a tenant as checked when its config read threw, which is the
+   one case where this check knows nothing — and it is logged at boot by both
+   entrypoints, so `{:checked 3 :violations []}` over three unreadable tenants
+   would read as healthy. `:unreadable` names that remainder rather than
+   leaving it to be inferred from a number that is missing.
 
    Throws `ex-info` rather than exiting, so the boot path decides how to die."
   ([] (check! (all-tenants)))
   ([tenants]
-   (let [violations (contradictory-tenants tenants)
-         summary {:checked (count tenants)
+   (let [examined   (read-tenants tenants)
+         violations (->> examined (filter contradiction?) (map :tenant) sort vec)
+         summary {:checked (count examined)
+                  :unreadable (- (count tenants) (count examined))
                   :violations violations
                   :overridden? (override-engaged?)}]
      (cond
@@ -174,6 +193,7 @@
                      "OpenAI-compatible server. To boot anyway, set "
                      override-env-var "=true.")
                 {:violations violations
-                 :checked (count tenants)
+                 :checked (count examined)
+                 :unreadable (- (count tenants) (count examined))
                  :switch-env-var switch-env-var
                  :override-env-var override-env-var}))))))
