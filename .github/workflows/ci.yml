@@ -17,14 +17,27 @@ concurrency:
 
 jobs:
   lint-and-test:
-    # Self-hosted on kamal-1 (container `digdir-rag-1`). There is exactly ONE
-    # such runner, so if it stops, every PR in this repo stops — see
-    # infra/ci-runner/README.md, "If CI stops", for what that looks like and
-    # how to unblock it. TO REVERT, restore exactly:
+    # GitHub-hosted. This ran on a self-hosted runner on kamal-1 (container
+    # `digdir-rag-1`) while the repository was private; that is no longer
+    # appropriate and the reason is the repository's visibility, not cost.
     #
-    #     runs-on: ubuntu-latest
+    # ⚠️ THE RUNNER SHARES A BOX WITH PRODUCTION. infra/ci-runner/README.md
+    # states it plainly: "This box serves rag.digdir.cloud. PR code therefore
+    # executes on the same [box]." While only this team could open a pull
+    # request, that was a considered trade. On a PUBLIC repository anyone can,
+    # and `on: pull_request` would run their code there.
     #
-    runs-on: [self-hosted, digdir-rag]
+    # The second half is already written down 200 lines below, in the
+    # mark-green job: that runner "is NOT ephemeral — it persists between
+    # jobs", so a hostile PR can leave a background process, a credential
+    # helper or a poisoned PATH behind for a later job. That argument was used
+    # to keep the deploy-marker job OFF this runner. It applies at least as
+    # strongly to running arbitrary fork code on it at all.
+    #
+    # ubuntu-latest is ephemeral by construction and cannot reach the
+    # production box. The self-hosted path is not deleted — infra/ci-runner/
+    # and its README stay — but nothing routes to it.
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     # The test suite resolves configuration through the config DB, so without a
@@ -120,7 +133,14 @@ jobs:
   # over-limit build is killed by its own cgroup and cannot threaten the Kamal
   # co-tenants — the cap is what protects production.
   build-client:
-    runs-on: [self-hosted, digdir-rag]
+    # GitHub-hosted, for the reason given on lint-and-test above.
+    #
+    # The memory note immediately above is about the SELF-HOSTED cgroup cap and
+    # is kept as the record of what was measured there; it no longer describes
+    # where this runs. The client build now pins -Xmx4g in server/deps.edn's
+    # :build alias, so its ceiling travels with the build rather than with the
+    # host, and a GitHub-hosted runner supplies more than that.
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -244,21 +264,22 @@ jobs:
   # for this SHA on this branch" — delivered over git, so the agent needs no
   # GitHub API token and this repository stores no deploy credential.
   #
-  # WHY A SEPARATE JOB, AND WHY ON A GITHUB-HOSTED RUNNER: `needs` makes the
-  # dependency explicit, but separating the jobs is not enough on its own.
-  # lint-and-test runs on the SELF-HOSTED runner and executes untrusted pull
-  # request code, and that runner is NOT ephemeral — it persists between jobs.
-  # A hostile PR could leave a background process, a git credential helper, a
-  # poisoned PATH entry or a modified tool behind, and a later job on that same
-  # host would run with a token able to move the ref THAT CAUSES A DEPLOY.
+  # WHY A SEPARATE JOB: `needs` makes the dependency explicit, and the write
+  # token that can move a deploy-triggering ref must not share a machine with
+  # untrusted pull request code.
   #
-  # So this job must not merely be a different JOB, it must be a different
-  # MACHINE. ubuntu-latest is ephemeral by construction, so the write token
-  # never shares a host with repository code. This job is a checkout and one
-  # git push — it never needs the self-hosted box, and seconds of Linux is not
-  # the cost that made us self-host the suite.
+  # ⚠️ THIS ARGUMENT ORIGINALLY RESTED ON lint-and-test BEING SELF-HOSTED, on a
+  # non-ephemeral runner that persists between jobs — a hostile PR could leave
+  # a background process, a credential helper or a poisoned PATH behind for a
+  # later job holding that token. Both jobs are GitHub-hosted now, so they no
+  # longer share a host, and that specific escape is closed at the source.
   #
-  # DO NOT move this to [self-hosted, digdir-rag] to "keep it consistent".
+  # The separation is KEPT anyway, and not out of inertia: it is what makes the
+  # property survive someone moving lint-and-test back to a persistent runner.
+  # A guard that is only correct because of a decision made elsewhere stops
+  # being a guard the moment that decision changes.
+  #
+  # DO NOT move this to a self-hosted runner to "keep it consistent".
   #
   # ⚠️ PUSH ONLY, NEVER pull_request — STATED RATHER THAN IMPLIED. The `if`
   # below is deliberately redundant with the workflow's own trigger list: a
