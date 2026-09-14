@@ -108,6 +108,10 @@
    (remove #(when (ex-data %)
               (t/error! (:document-dropped events) %)
               true))
+   ;; Kudos-API-et (2026) identifiserer dokumenter med :uuid og har ikke :id
+   ;; lenger; resten av lasteren leser :id. Lokal normalisering for piloten
+   ;; 2026-09-14 (branch pilot/kudos-uuid), forslag til Benjamin.
+   (map #(cond-> % (and (map? %) (nil? (:id %)) (:uuid %)) (assoc :id (:uuid %))))
    (pages profile (get kview starting-page-key 1))))
 
 (defn documents-by-ids [{:keys [base-url document-path retry-delays-ms events]} ids]
