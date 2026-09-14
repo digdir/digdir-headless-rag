@@ -208,7 +208,7 @@
         docs-coll  (:docs-collection base-names)
         enrich-coll (enrichment-collection-name pipeline-config enrichment-type)
         schema (schema-for enrichment-type [docs-coll enrich-coll])]
-    (storage/create-collection! schema)))
+    (storage/create-collection! pipeline-config schema)))
 
 (defn ensure-collection-by-name!
   "Name-only variant of `ensure-collection!` for callers that already
@@ -225,7 +225,7 @@
 
    Idempotent (delegates to `storage/create-collection!` which maps a
    Typesense 409 conflict to `:already-exists`)."
-  [docs-collection-name enrichment-collection-name enrichment-type]
+  [config docs-collection-name enrichment-collection-name enrichment-type]
   (let [schema (schema-for enrichment-type
                            [docs-collection-name enrichment-collection-name])]
-    (storage/create-collection! schema)))
+    (storage/create-collection! config schema)))

@@ -585,6 +585,37 @@
         (throw (ex-info "Permission denied"
                         {:path path-str :user-id user-id :action action}))))))
 
+(defn use-azure-openai?
+  "Whether `tenant` routes LLM traffic through Azure rather than generic OpenAI.
+
+   ⚠️ ONE READ OF THIS SWITCH, DELIBERATELY — #500. It used to be read in two
+   places with OPPOSITE defaults and different resolution paths: the verifier
+   asked `get-platform-value` with `{:default true}` and reported `:azure`, while
+   the runtime asked `cfg/get` with no default at all and, on an unset value, fell
+   through to the generic OpenAI path and failed with
+   `Missing secret :openai-api-key`. A verifier that disagrees with the runtime is
+   worse than no verifier, because it turns \"I checked\" into false confidence —
+   and it did: this exact question was investigated, reported checked-and-clear
+   from the site WITH the default, and the site WITHOUT one is the one that runs.
+
+   The semantics here are the RUNTIME's, because the runtime is what decides where
+   a request actually goes: UNSET MEANS NOT AZURE. If the product wants the
+   opposite default, change it HERE, once, and every caller moves with it — which
+   is the property that was missing."
+  [tenant]
+  (boolean
+   (try
+     (get {:tenant tenant} :services :azure-openai :use-azure-openai-api)
+     (catch clojure.lang.ExceptionInfo e
+       ;; A tenant with no platform tree has not chosen a provider, which is the
+       ;; same state as an unset switch — NOT AZURE, matching what the runtime
+       ;; does with the value. Only this one condition is swallowed: the previous
+       ;; verifier caught EVERY exception and answered `true`, which is how a
+       ;; deployment with no config at all got reported as :azure.
+       (if (= :tenant-root-missing (:kind (ex-data e)))
+         false
+         (throw e))))))
+
 (defn get-if-allowed
   "Get a config value only if the user has permission.
 

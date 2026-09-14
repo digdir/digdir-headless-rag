@@ -408,7 +408,7 @@
           <h3 class="blue">How a run works</h3>
           <ul class="tight" style="margin-top:.6em">
             <li>A run is a <strong>materialization</strong> of a dataset against a pipeline — triggered from the operator console or CLI.</li>
-            <li>Content is <strong>chunked by markdown headers</strong>; each chunk gets LLM-generated <strong>search phrases</strong> (query-equivalent keywords, default <span class="mono">gpt-4o</span>, file-cached by chunk+model+prompt).</li>
+            <li>Content is <strong>chunked by markdown headers</strong>; each chunk gets LLM-generated <strong>search phrases</strong> (query-equivalent keywords, default <span class="mono">gpt-4o</span>, file-cached by chunk content+model+prompt+parser version).</li>
             <li>Documents + chunks + phrases are upserted into three per-dataset Typesense collections.</li>
           </ul>
         </div>

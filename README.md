@@ -7,7 +7,7 @@ This repository is a prototype to explore the possibilities for rapid experiment
 >
 > Digdir plans to **migrate to a different tech stack** for productization, so
 > this repository is expected to stay prototype-grade for the foreseeable
-> future (PI, 2026-08-21). That is a stronger statement than "expect rough
+> future. That is a stronger statement than "expect rough
 > edges", and it changes the answer to ordinary engineering questions:
 >
 > - **Deep refactors and legacy retirement have low return.** Code that will be
@@ -56,24 +56,220 @@ It provides:
 - **`mise.toml`**: Toolchain versions + convenience tasks/env
 
 
-## Just want to run it? Docker is the only prerequisite
+## Run it with Docker
+
+Docker is the only thing you need to get a working stack. You do not need Java,
+Clojure, Node or any of the tooling further down this page — those are for
+working *on* the backend.
+
+Everything on this page runs from the container image, including fetching the
+demo corpus.
+
+### 1. Configure it
 
 ```sh
 cp .env.example .env
-docker compose -f docker-compose.newcomer.yml up --build
+./scripts/setup-env.sh
 ```
 
-Brings up the server **and** its Typesense search backend. The admin UI is then
-on <http://localhost:8080>. Nothing below this section is needed — no Mise, no
-JVM, no Clojure.
+The script generates the secrets that can be generated, and asks you for the
+ones nobody can invent: your LLM provider credentials, and the email address
+that should be allowed to administer this instance. It writes them into `.env`.
 
-**It starts with an empty corpus.** Retrieval finds nothing until a dataset is
-materialised, and a query returns `Dataset ref does not resolve to a canonical
-dataset runtime node` until then (#434 tracks that error being reported as an
-internal error rather than as a missing prerequisite). What a newcomer's starting
-corpus should be is an open question — see #328.
+Add one more line to `.env` so you can log in without an email service:
 
-The sections below are for **working on** the backend, which needs the toolchain.
+```sh
+echo 'DIGDIR_LOG_CONFIRMATION_CODES=true' >> .env
+```
+
+Login normally emails you a six-digit code. With this set, the code is written
+to the server log instead, which is what you want on a local stack.
+
+### 2. Build the image
+
+```sh
+docker compose -f docker-compose.newcomer.yml build
+```
+
+This compiles the server into a single jar, so it takes a few minutes the first
+time. Rebuild with the same command whenever you change server code. If you have only
+changed `.env`, you do not need to rebuild — run the start command in step 4
+again, which recreates the containers with the new values.
+
+**Give Docker at least 6 GB of memory.** The build asks for up to 4 GB of heap
+for the JavaScript optimizer, and Docker Desktop's default allocation is not
+always enough to cover that plus the rest of the build. The ceiling is pinned
+in the project rather than left to the JVM default, so this no longer depends
+on a host setting nobody mentions — but the machine still has to be able to
+supply it. On Docker Desktop the setting is under Settings → Resources.
+
+### 3. Set up the database, before starting the server
+
+Start the search backend on its own first:
+
+```sh
+docker compose -f docker-compose.newcomer.yml up -d typesense
+```
+
+Then run four setup commands. Each runs in its own short-lived container and
+exits:
+
+```sh
+docker compose -f docker-compose.newcomer.yml run --rm --no-deps digdir-rag \
+  java -cp app.jar clojure.main -m digdir.setup.bootstrap
+
+docker compose -f docker-compose.newcomer.yml run --rm --no-deps digdir-rag \
+  java -cp app.jar clojure.main -m digdir.setup.first-admin
+
+docker compose -f docker-compose.newcomer.yml run --rm --no-deps digdir-rag \
+  java -cp app.jar clojure.main -m digdir.setup.demo-tenant
+
+docker compose -f docker-compose.newcomer.yml run --rm --no-deps digdir-rag \
+  java -cp app.jar clojure.main -m digdir.setup.demo-dataset
+```
+
+They create the configuration database, your admin account, the demo tenant and
+the demo dataset, in that order.
+
+**Run these while the server is stopped.** They write to the same database file
+the server holds open, and a write made behind a running server does not
+survive — the command reports success and the change is not there afterwards.
+Each command checks for a running server and refuses rather than doing that
+silently, so if you see it refuse, stop the server and run it again.
+
+⚠️ **Your credentials must already be in `.env` before this step.** The
+`demo-tenant` command copies your LLM provider settings and Typesense admin key
+out of the environment and into the tenant's configuration **as it runs** — it
+does not read them again later. If you skipped those prompts in step 1, or
+filled them in afterwards, you get a tenant whose LLM configuration is empty,
+and the only fix is to put the values in `.env` and run `demo-tenant` again.
+
+### 4. Start it
+
+```sh
+docker compose -f docker-compose.newcomer.yml up -d
+```
+
+| Address | What it is |
+| --- | --- |
+| <http://localhost:8080> | the admin UI and the API |
+| <http://localhost:3030> | a chat UI (Open WebUI) |
+
+If port 3030 is taken, set `OPENWEBUI_PORT` in `.env` to something else.
+
+### 5. Log in
+
+Open <http://localhost:8080/auth> and enter the address you gave the setup
+script. Then find the confirmation code in the log:
+
+```sh
+docker compose -f docker-compose.newcomer.yml logs digdir-rag | grep dev-login
+```
+
+Enter the code and you are in. You should not need to restart anything.
+
+### 6. Fetch the demo corpus
+
+The stack starts with an empty corpus, and until it has one a query returns a
+`404` that names the missing step rather than failing obscurely.
+
+The demo corpus is **352 Norwegian Wikipedia articles** — the ones behind the
+NorQuAD question-answering set — plus a set of unrelated articles (800 by
+default) so that retrieval has something to get wrong.
+
+**It is not in this repository, and that is deliberate.** NorQuAD releases its
+own questions and answers into the public domain under CC0, but it cannot
+relicense the Wikipedia prose they are about. So this repo ships a manifest and
+a fetch script, and the article text is downloaded from Wikipedia at setup under
+CC BY-SA 4.0.
+
+Fetching runs from the image, so it needs nothing installed but Docker:
+
+```sh
+docker compose -f docker-compose.newcomer.yml --profile fetch run --rm corpus-fetch
+```
+
+`--profile fetch` is why this is not started by `docker compose up`: it is a
+one-shot job rather than part of the running stack. It writes to the same
+directory the server later reads, but mounted read-**write** — the server's own
+mount is read-only, which is correct for the server and wrong for the thing that
+fills it.
+
+With a source tree you can also run `bb demo-corpus`, which shells to the same
+code. There is deliberately only one implementation: two fetchers would be free
+to drift, and because the shipped cache is keyed by chunk hash, a fetcher
+producing so much as a different trailing newline would silently orphan the
+cache while still appearing to work.
+
+It downloads roughly one article per request and **takes a while**. It is
+resumable: an article already written is not fetched again, so if it stops you
+can simply run it again. Files land in `./demo-corpus`, or wherever you point
+`DEMO_CORPUS_DIR`.
+
+You do not have to wire anything up. The compose file mounts that same
+directory into the container for you, read-only, and reads `DEMO_CORPUS_DIR`
+to find it — so one variable moves both the fetch and the mount, and leaving it
+unset puts the corpus in `./demo-corpus` at the repository root.
+
+⚠️ **On macOS, keep the repository somewhere under your home directory.**
+Docker Desktop does not share `/tmp` or `/private/tmp`, and a bind mount from
+there fails in the worst possible way: it resolves, `docker inspect` reports it
+correctly, and the container sees an **empty** directory with no error at all.
+If you have cloned into a scratch path, that phantom empty corpus looks exactly
+like a broken setup.
+
+If the corpus is missing, materializing **refuses and tells you where it
+looked** — naming the resolved absolute path, which for the shipped
+configuration is `/app/demo-corpus` inside the container rather than the
+`./demo-corpus` you configured. It distinguishes two cases, because the fixes
+are different: a directory that is not there at all, and a directory that is
+there with no `.md` files in it.
+
+### 7. Materialize the corpus
+
+In the admin UI, open the demo tenant's dataset (`norquad-docs`) and run its
+pipeline. This reads the articles, splits them up and indexes them for search.
+
+⚠️ **The first attempt on a brand-new stack usually fails**, reporting
+`Model not found` and zero documents. Nothing is wrong: the search backend is
+still downloading a 128 MB embedding model in the background. Wait a moment and
+run it again — the second attempt works. This is a known rough edge.
+
+**Materializing this corpus costs no model calls.** A pre-computed search-phrase
+cache is committed to this repository and unpacks itself the first time the
+server boots, so the phrases that would normally be generated are already there.
+You only pay for an article that has changed since the corpus was pinned.
+
+### 8. Ask it something
+
+Open <http://localhost:3030>, pick an agent from the model dropdown, and ask a
+question about the corpus.
+
+Open WebUI attaches to the backend twice, because an agent is reachable as two
+different things: over [`/v1`](server/docs/api/endpoints/openai-compat.md) each
+agent is a **model** — it *is* the conversation, and the dropdown fills itself
+on boot — and over
+[`/api/tools`](server/docs/api/endpoints/openapi-tools.md) each agent is a
+**tool** another model can call mid-answer. It is included because it is the one
+client here that we did not write, so it exercises things our own tests cannot
+see. Why neither route is MCP is explained in
+[`docs/onboarding.md` §4b](docs/onboarding.md#4b-see-it-answer-in-a-chat-ui--open-webui).
+
+### 9. Stop it
+
+```sh
+docker compose -f docker-compose.newcomer.yml down
+```
+
+That leaves your data in place, so starting again picks up where you left off.
+To throw the database and search index away as well:
+
+```sh
+docker compose -f docker-compose.newcomer.yml down -v
+```
+
+The sections below are for **working on** the backend, which needs the full
+toolchain.
 
 
 ## Prerequisites
@@ -106,7 +302,7 @@ If you don't use Mise, you'll need:
 ### 1) Configure environment variables
 
 The repo uses environment variables for secrets and for selecting config mode.
-Set these for development in `mise.local.toml` (gitignored) or your shell profile — never in tracked files. **A `.env` file is not read by anything in this repo** (`mise.toml` has no `_.file` directive and no other loader picks one up), so values placed there are silently ignored (#302); `.env.example` is a reference catalog of the variables, not a file to copy into place.
+Set these for development in `mise.local.toml` (gitignored) or your shell profile — never in tracked files. **On this host path a `.env` file is not read** (`mise.toml` has no `_.file` directive and no other loader picks one up), so values placed there are silently ignored — nothing warns you. Here `.env.example` is a reference catalog of the variables, not a file to copy into place. (The container path above is the exception: `docker-compose.newcomer.yml` declares `env_file: .env`, so docker compose *does* read one there.)
 
 **Config mode**
 
@@ -129,7 +325,8 @@ Datahike backends are supported for the bootstrap connection:
   decided in the config DB by `services.azure-openai.use-azure-openai-api`, and
   **both paths read that same `services.azure-openai.*` family** — the name is
   historical, not a scope:
-  - **Azure OpenAI** (`use-azure-openai-api true`, the shipped default) —
+  - **Azure OpenAI** (`use-azure-openai-api true` — you must SET this; there is
+    no longer a shipped default, and **unset means NOT Azure**) —
     `AZURE_OPENAI_API_KEY`
   - **Any OpenAI-compatible server, including a local one** (`false`) —
     `OPENAI_API_ENDPOINT` *and* `OPENAI_API_KEY`, both read from the
@@ -150,7 +347,9 @@ into each imported tenant's config, so setting it before the import is enough
 ### 2) Run the server (dev)
 
 `bb dev` starts the **backend only** — Jetty plus a REPL, and no Electric
-client build (#330):
+client build. The client build needs a Hyperfiddle activation token that a
+fresh clone does not have, so keeping it out of `bb dev` means backend work is
+possible immediately:
 
 ```sh
 bb dev

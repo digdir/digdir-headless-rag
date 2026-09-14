@@ -128,8 +128,8 @@
        ([docs-collection-name chunks-collection-name title-fields chunk-fanout relaxed-queries filter-by opts]
         (retrieval/search-docs-by-title docs-collection-name chunks-collection-name title-fields chunk-fanout relaxed-queries filter-by opts)))
 
-     (defn get-typesense-collection [collection-name]
-       (retrieval/get-typesense-collection collection-name))
+     (defn get-typesense-collection [collection-name opts]
+       (retrieval/get-typesense-collection collection-name opts))
 
      (defn retrieve-chunks-by-id
        ([docs-collection-name chunks-collection-name chunk-id-list]

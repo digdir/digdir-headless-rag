@@ -9,7 +9,7 @@ this is the fastest way in — change the base URL and the key.
 
 | | |
 |---|---|
-| Base URL | `https://admin.kunnskap.digdir.cloud/v1` |
+| Base URL | `https://rag.digdir.cloud/v1` |
 | Auth | `Authorization: Bearer <your-api-key>` (or `X-API-Key`) |
 | Endpoints | `GET /v1/models`, `POST /v1/chat/completions` |
 
@@ -71,7 +71,7 @@ Lists one model per **(agent × allowed skill graph)** pair your key can see —
 the same surface MCP exposes as tools.
 
 ```bash
-curl -sS https://admin.kunnskap.digdir.cloud/v1/models \
+curl -sS https://rag.digdir.cloud/v1/models \
   -H "Authorization: Bearer $DIGDIR_API_KEY"
 ```
 
@@ -111,7 +111,7 @@ not, which is what `digdir.api.doc-fidelity-smoke-test` now catches.
 ## `POST /v1/chat/completions`
 
 ```bash
-curl -sS https://admin.kunnskap.digdir.cloud/v1/chat/completions \
+curl -sS https://rag.digdir.cloud/v1/chat/completions \
   -H "Authorization: Bearer $DIGDIR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -244,14 +244,14 @@ Anything that speaks OpenAI needs two settings:
 
 | Setting | Value |
 |---|---|
-| Base URL / API base | `https://admin.kunnskap.digdir.cloud/v1` |
+| Base URL / API base | `https://rag.digdir.cloud/v1` |
 | API key | your digdir API key |
 
 ```python
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://admin.kunnskap.digdir.cloud/v1",
+    base_url="https://rag.digdir.cloud/v1",
     api_key="rag_your_api_key_here",
 )
 

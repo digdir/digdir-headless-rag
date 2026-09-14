@@ -8,6 +8,44 @@
             [digdir.data.db :as db]
             [digdir.rag.filters :as filters]))
 
+;; ----------------------------------------------------------------------------
+;; #498: a missing collection is a CONFIGURATION FAULT, not a search outcome
+;; ----------------------------------------------------------------------------
+
+(defn multi-search
+  "`ts-client/multi-search`, with per-search failures made visible.
+
+   ⚠️ TYPESENSE ANSWERS 200 WHEN AN INDIVIDUAL SEARCH FAILED. A multi-search whose
+   target collection does not exist comes back as a normal response whose entry
+   carries `{:code 404 :error \"Not found.\"}` and NO `:hits` key. Every reader here
+   does `(mapcat :hits ...)`, so that entry contributes nothing and the result is
+   indistinguishable from a corpus with nothing relevant: `search_attribution`
+   all zeros, no error, and — measured — not one line in the server log while the
+   collection was returning 404 to a direct request.
+
+   That is the failure mode that most needs to be loud in a system whose whole
+   value is grounding: the agent then answers fluently from model weights with
+   zero retrieved chunks, and nothing distinguishes that from working correctly.
+
+   This does not decide whether an agent that retrieved nothing should answer —
+   that is a product question (#498). It makes the fault VISIBLE rather than
+   settling it silently."
+  [settings args opts]
+  (let [response (ts-client/multi-search settings args opts)
+        failures (->> (:results response)
+                      (keep (fn [r]
+                              (when-let [err (or (:error r) (:message r))]
+                                {:code (:code r) :error err})))
+                      vec)]
+    (when (seq failures)
+      (log/error "Typesense multi-search returned per-search failures"
+                 {:failures failures
+                  :collections (mapv :collection (:searches args))
+                  :hint (str "A 404 here means the collection does not exist — a "
+                             "configuration fault, not an empty result set. "
+                             "Retrieval will otherwise report zero hits silently.")}))
+    (assoc response :digdir/search-failures failures)))
+
 (defn- rag-debug-logging-enabled? []
   (let [env-val (System/getenv "RAG_DEBUG_LOGGING")]
     (contains? #{"1" "true" "yes" "on"}
@@ -68,7 +106,7 @@
                          filter-map
                          (:docs-collection conversation-pipeline))]
        (try
-         (let [response (ts-client/multi-search
+         (let [response (multi-search
                          ts-config multi-search {:query_by "doc_num"})
                results (:results response)
                facet-opts (options results)]
@@ -113,7 +151,7 @@
                                                 (when (not-empty typesense-filter)
                                                   {:filter_by typesense-filter})))
                                              relaxed-queries)}
-           response (ts-client/multi-search (ts-utils/make-ts-settings opts) multi-search-args {:query_by "search_phrase,phrase_vec"})
+           response (multi-search (ts-utils/make-ts-settings opts) multi-search-args {:query_by "search_phrase,phrase_vec"})
            indexed-search-phrase-hits (->> (:results response)
                                            (mapcat :hits)
                                            (map-indexed (fn [idx phrase]
@@ -174,7 +212,7 @@
                                                 (when (not-empty typesense-filter)
                                                   {:filter_by typesense-filter})))
                                              relaxed-queries)}
-           response (ts-client/multi-search (ts-utils/make-ts-settings opts)
+           response (multi-search (ts-utils/make-ts-settings opts)
                                             multi-search-args
                                             {:query_by "question,question_vec"})
            indexed-hits (->> (:results response)
@@ -237,7 +275,7 @@
                                     :drop_tokens_threshold 5}
                              (not-empty raw-filter) (assoc :filter_by raw-filter)))
                          queries)
-           response (ts-client/multi-search (ts-utils/make-ts-settings opts)
+           response (multi-search (ts-utils/make-ts-settings opts)
                                             {:searches searches}
                                             {:query_by "search_phrase,phrase_vec"})]
        ;; Preserve per-probe rank (rank within each probe's own result set)
@@ -292,7 +330,7 @@
                                                 (when (not-empty typesense-filter)
                                                   {:filter_by typesense-filter})))
                                              relaxed-queries)}
-           response (ts-client/multi-search (ts-utils/make-ts-settings opts)
+           response (multi-search (ts-utils/make-ts-settings opts)
                                             multi-search-args
                                             {:query_by "phrase,phrase_vec"})
            indexed-hits (->> (:results response)
@@ -356,7 +394,7 @@
                                                 (when (not-empty typesense-filter)
                                                   {:filter_by typesense-filter})))
                                              relaxed-queries)}
-           response (ts-client/multi-search (ts-utils/make-ts-settings opts)
+           response (multi-search (ts-utils/make-ts-settings opts)
                                             multi-search-args
                                             {:query_by "triple_text,triple_vec"})
            indexed-hits (->> (:results response)
@@ -410,7 +448,7 @@
                                             :drop_tokens_threshold 5}
                                            (when (not-empty typesense-filter)
                                              {:filter_by typesense-filter})))}
-           response (ts-client/multi-search (ts-utils/make-ts-settings opts) multi-search-args {})
+           response (multi-search (ts-utils/make-ts-settings opts) multi-search-args {})
            indexed-metadata-hits (->> (:results response)
                                       (mapcat :hits)
                                       (map-indexed (fn [idx hit]
@@ -455,7 +493,7 @@
                                             :drop_tokens_threshold 5}
                                            (when (not-empty typesense-filter)
                                              {:filter_by typesense-filter})))}
-           response (ts-client/multi-search (ts-utils/make-ts-settings opts) multi-search-args {})
+           response (multi-search (ts-utils/make-ts-settings opts) multi-search-args {})
            indexed-content-hits (->> (:results response)
                                      (mapcat :hits)
                                      (map-indexed (fn [idx hit]
@@ -536,7 +574,7 @@
                             :drop_tokens_threshold 5}
                            (when (not-empty direct-filter)
                              {:filter_by direct-filter})))}
-             docs-resp (ts-client/multi-search (ts-utils/make-ts-settings opts) docs-multi-search {})
+             docs-resp (multi-search (ts-utils/make-ts-settings opts) docs-multi-search {})
              matched-docs (->> (:results docs-resp)
                                (mapcat :hits)
                                (map (fn [hit]
@@ -567,7 +605,7 @@
                                     :sort_by "chunk_index:asc"
                                     :limit k})
                                  matched-docs)}
-                 chunks-resp (ts-client/multi-search (ts-utils/make-ts-settings opts)
+                 chunks-resp (multi-search (ts-utils/make-ts-settings opts)
                                                     chunks-multi-search {})
                  rank-by-doc (into {} (map (juxt :doc_num :rank) matched-docs))]
              (->> (:results chunks-resp)
@@ -582,9 +620,9 @@
 
 (defn get-typesense-collection
   "Retrieves a Typesense collection by name. Returns nil if collection doesn't exist."
-  [collection-name]
+  [collection-name opts]
   (try
-    (ts-client/retrieve-collection (ts-utils/make-ts-settings) collection-name)
+    (ts-client/retrieve-collection (ts-utils/make-ts-settings opts) collection-name)
     (catch Exception e
       (when-not (= 404 (:status (ex-data e)))
         (throw e))
@@ -642,7 +680,7 @@
                                       :page 1
                                       :per_page (count chunk-ids)}]
                           :limit_multi_searches 1}
-             response (ts-client/multi-search
+             response (multi-search
                        (ts-utils/make-ts-settings opts)
                        search-args
                        {:query_by "chunk_id"})
@@ -694,7 +732,7 @@
                                      :page 1
                                      :per_page (count chunk-ids)}]
                          :limit_multi_searches 1}
-            response (ts-client/multi-search
+            response (multi-search
                       (ts-utils/make-ts-settings opts)
                       search-args
                       {:query_by "chunk_id"})
@@ -735,7 +773,7 @@
                                  :page 1
                                  :per_page per-page}]
                      :limit_multi_searches 1}
-        response (ts-client/multi-search
+        response (multi-search
                    (ts-utils/make-ts-settings opts)
                    search-args
                    {:query_by "chunk_id"})]

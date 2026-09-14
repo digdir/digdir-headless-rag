@@ -6,6 +6,7 @@
             [digdir.config.accessor :as cfg]
             [digdir.config.api-keys :as api-keys]
             [digdir.config.db :as config-db]
+            [digdir.data.db :as data-db]
             [digdir.config.structure :as structure]))
 
 (deftest root-config-key-params-derive-from-the-server-structure
@@ -208,6 +209,15 @@
     (let [runtime-call (atom nil)
           ceiling-call (atom nil)]
       (with-redefs [config-db/get-conn (fn [] (atom :config-db))
+                    ;; Also stubbed so this test does not depend on the config DB
+                    ;; having been initialised by something else first. It used to
+                    ;; be: `digdir.rag.typesense/ts-admin` resolved settings at
+                    ;; NAMESPACE LOAD, which called get-conn and initialised the DB
+                    ;; as a side effect before any test ran. #476 deleted that value,
+                    ;; so first touch moved into this test — where `get-conn` is
+                    ;; faked and `init-db!` then queried the fake. The test was
+                    ;; always this fragile; the load-time call was hiding it.
+                    data-db/get-conn (fn [] (atom :config-db))
                     ;; #349: selection resolves candidates against the enabled
                     ;; registry — the agent has to be reachable, not just found.
                     agents-db/list-enabled-agents (fn [_] [(example-agent)])
@@ -305,6 +315,9 @@
 (deftest test-resolve-request-execution-context-skip-agent-preserves-dataset-only-flow
   (testing "Dataset-only flows bypass agent loading and still resolve dataset config"
     (with-redefs [config-db/get-conn (fn [] (atom :config-db))
+                  ;; See the note on the sibling test: stubbed so this does not
+                  ;; depend on the config DB already being initialised (#476).
+                  data-db/get-conn (fn [] (atom :config-db))
                   agents-db/get-agent (fn [& _]
                                         (throw (ex-info "skip-agent path should not load agents" {})))
                   config-db/get-dataset-by-ref (fn [_ dataset-ref _]

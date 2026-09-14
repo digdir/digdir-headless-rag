@@ -1,9 +1,27 @@
 (ns digdir.docs.pipeline.storage-test
   "Tests for digdir.docs.pipeline.storage - TypeSense storage operations."
-  (:require [clojure.test :refer [deftest testing is ]]
+  (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [clojure.string :as str]
             [digdir.docs.pipeline.storage :as storage]
+            [digdir.rag.typesense :as ts-utils]
             [typesense.client :as ts]))
+
+(defn- stub-resolver
+  "These tests exercise storage LOGIC, not config resolution. #476 made the
+   storage functions resolve Typesense per tenant, so without this they would
+   fail on `cfg` having no platform tree — which is a fact about the test DB,
+   not about the code under test."
+  [f]
+  (with-redefs [ts-utils/make-ts-settings (fn [_] {:uri "http://stub:8108" :key "stub"})]
+    (f)))
+
+(use-fixtures :each stub-resolver)
+
+(def ^:private cfg
+  "#476: the storage functions take the pipeline config so they resolve
+   Typesense for the tenant the pipeline belongs to, instead of a hidden
+   namespace-level default."
+  {:tenant "test-tenant"})
 
 ;; ============================================================================
 ;; Configuration Utilities Tests
@@ -95,13 +113,13 @@
 (deftest document-inserted-returns-true-when-exists
   (testing "Returns true when document exists"
     (with-redefs [ts/retrieve-document (fn [_ _ _] {:id "exists"})]
-      (is (true? (storage/document-inserted? "test_coll" {:id "exists"}))))))
+      (is (true? (storage/document-inserted? cfg "test_coll" {:id "exists"}))))))
 
 (deftest document-inserted-returns-false-when-missing
   (testing "Returns false when document doesn't exist"
     (with-redefs [ts/retrieve-document (fn [_ _ _]
                                          (throw (ex-info "Not found" {})))]
-      (is (false? (storage/document-inserted? "test_coll" {:id "missing"}))))))
+      (is (false? (storage/document-inserted? cfg "test_coll" {:id "missing"}))))))
 
 ;; ============================================================================
 ;; prepare-chunks Tests
@@ -175,7 +193,7 @@
                                             (reset! created schema)
                                             schema)]
         (let [schema {:name "test_coll" :fields []}
-              result (storage/create-collection! schema)]
+              result (storage/create-collection! cfg schema)]
           (is (= schema result))
           (is (= schema @created)))))))
 
@@ -185,7 +203,7 @@
                   (fn [_ _]
                     (throw (ex-info "Conflict"
                                     {:type :typesense.client/conflict})))]
-      (let [result (storage/create-collection! {:name "test_coll"})]
+      (let [result (storage/create-collection! cfg {:name "test_coll"})]
         (is (= :already-exists result))))))
 
 (deftest create-collection-other-error-throws
@@ -195,7 +213,7 @@
                     (throw (ex-info "Server error"
                                     {:type :typesense.client/server-error})))]
       (is (thrown? clojure.lang.ExceptionInfo
-                   (storage/create-collection! {:name "test_coll"}))))))
+                   (storage/create-collection! cfg {:name "test_coll"}))))))
 
 ;; ============================================================================
 ;; Orphan-cleanup Tests
@@ -207,7 +225,7 @@
       (with-redefs [ts/delete-documents! (fn [_settings coll opts]
                                            (reset! captured {:coll coll :opts opts})
                                            {:num_deleted 3})]
-        (storage/delete-orphan-chunks! "chunks_coll" "doc-A" ["c1" "c2" "c3"])
+        (storage/delete-orphan-chunks! cfg "chunks_coll" "doc-A" ["c1" "c2" "c3"])
         (is (= "chunks_coll" (:coll @captured)))
         (is (= "doc_num:=doc-A && id:!=[c1,c2,c3]"
                (get-in @captured [:opts :filter_by])))))))
@@ -216,8 +234,8 @@
   (testing "delete-orphan-chunks! is a no-op when current-chunk-ids is empty"
     (let [called? (atom false)]
       (with-redefs [ts/delete-documents! (fn [& _] (reset! called? true) nil)]
-        (storage/delete-orphan-chunks! "chunks_coll" "doc-A" [])
-        (storage/delete-orphan-chunks! "chunks_coll" "doc-A" nil)
+        (storage/delete-orphan-chunks! cfg "chunks_coll" "doc-A" [])
+        (storage/delete-orphan-chunks! cfg "chunks_coll" "doc-A" nil)
         (is (false? @called?)
             "must not issue a delete when keep-set is empty — would wipe the doc's chunks")))))
 
@@ -225,8 +243,8 @@
   (testing "delete-orphan-chunks! is a no-op when doc-num is blank"
     (let [called? (atom false)]
       (with-redefs [ts/delete-documents! (fn [& _] (reset! called? true) nil)]
-        (storage/delete-orphan-chunks! "chunks_coll" nil ["c1"])
-        (storage/delete-orphan-chunks! "chunks_coll" "" ["c1"])
+        (storage/delete-orphan-chunks! cfg "chunks_coll" nil ["c1"])
+        (storage/delete-orphan-chunks! cfg "chunks_coll" "" ["c1"])
         (is (false? @called?))))))
 
 (deftest delete-orphan-phrases-builds-correct-filter
@@ -234,7 +252,7 @@
     (let [captured (atom nil)]
       (with-redefs [ts/delete-documents! (fn [_settings coll opts]
                                            (reset! captured {:coll coll :opts opts}))]
-        (storage/delete-orphan-phrases! "phrases_coll" "doc-B" ["p1" "p2"])
+        (storage/delete-orphan-phrases! cfg "phrases_coll" "doc-B" ["p1" "p2"])
         (is (= "phrases_coll" (:coll @captured)))
         (is (= "doc_num:=doc-B && id:!=[p1,p2]"
                (get-in @captured [:opts :filter_by])))))))
@@ -253,17 +271,17 @@
           ;; so the test exercises the real :id keep-set passed to deletes.
           prepare-chunks-fn (fn [chunks] (mapv #(assoc % :id (:chunk_id %)) chunks))]
       (with-redefs [storage/coll-ids (fn [_] ["docs_c" "chunks_c" "phrases_c"])
-                    storage/upsert-document!   (fn [coll _doc]
+                    storage/upsert-document!   (fn [_cfg coll _doc]
                                                  (swap! calls conj [:upsert-doc coll]))
-                    storage/store-chunks!      (fn [coll chunks]
+                    storage/store-chunks!      (fn [_cfg coll chunks]
                                                  (swap! calls conj [:upsert-chunks coll (count chunks)
                                                                     :chunk-ids (mapv :id chunks)]))
-                    storage/store-phrases!     (fn [coll phrases _id]
+                    storage/store-phrases!     (fn [_cfg coll phrases _id]
                                                  (swap! calls conj [:upsert-phrases coll (count phrases)
                                                                     :phrase-ids (mapv :id phrases)]))
-                    storage/delete-orphan-chunks!  (fn [coll doc-num keep-ids]
+                    storage/delete-orphan-chunks!  (fn [_cfg coll doc-num keep-ids]
                                                      (swap! calls conj [:del-orphan-chunks coll doc-num keep-ids]))
-                    storage/delete-orphan-phrases! (fn [coll doc-num keep-ids]
+                    storage/delete-orphan-phrases! (fn [_cfg coll doc-num keep-ids]
                                                      (swap! calls conj [:del-orphan-phrases coll doc-num keep-ids]))]
         (storage/store-complete-document! {} fake-doc prepare-doc-fn prepare-chunks-fn)
         (let [phrase-ids-from-upsert (->> @calls (filter #(= (first %) :upsert-phrases)) first (drop-while #(not= % :phrase-ids)) second)]
@@ -296,7 +314,7 @@
                              {:chunk_id "c2" :doc_num "d1" :content_markdown "y"}]]
       (with-redefs [ts/upsert-documents! (fn [_settings _coll docs]
                                            (reset! captured docs))]
-        (storage/store-chunks! "chunks_coll" chunks-without-id)
+        (storage/store-chunks! cfg "chunks_coll" chunks-without-id)
         (is (= ["c1" "c2"] (mapv :id @captured))
             "store-chunks! must enforce :id := :chunk_id at the storage boundary")))))
 
@@ -307,7 +325,7 @@
                               {:chunk_id "c1" :doc_num "d1" :search_phrase "beta"}]]
       (with-redefs [ts/upsert-documents! (fn [_settings _coll docs]
                                            (reset! captured docs))]
-        (storage/store-phrases! "phrases_coll" phrases-without-id "doc1")
+        (storage/store-phrases! cfg "phrases_coll" phrases-without-id "doc1")
         (is (every? :id @captured)
             ":id must be set on every phrase row")
         (is (apply distinct? (map :id @captured))
@@ -315,7 +333,7 @@
         ;; Determinism: storing the same phrases again yields the same ids
         (let [captured2 (atom nil)]
           (with-redefs [ts/upsert-documents! (fn [_ _ docs] (reset! captured2 docs))]
-            (storage/store-phrases! "phrases_coll" phrases-without-id "doc1")
+            (storage/store-phrases! cfg "phrases_coll" phrases-without-id "doc1")
             (is (= (mapv :id @captured) (mapv :id @captured2)))))))))
 
 (deftest extract-phrases-pins-deterministic-id

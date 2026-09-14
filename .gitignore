@@ -63,3 +63,15 @@ config/*.json
 server/local-db/
 local-db/
 server/target/
+
+# Rehydrated demo corpus (#447). Fetched at setup by `bb demo-corpus`, never
+# committed: NorQuAD's CC0 covers its questions and answers, not the Wikipedia
+# prose in its context field, so the article text is fetched from Wikipedia
+# under CC BY-SA at setup. Committing it would break that licence argument.
+#
+# `--out-dir` is caller-supplied, so this covers the documented default only.
+# The fetch script ALSO writes a self-ignoring `.gitignore` into whatever
+# directory it is given, which is what makes the invariant hold for any path.
+/demo-corpus/
+ATTRIBUTION.tsv
+MANIFEST.txt

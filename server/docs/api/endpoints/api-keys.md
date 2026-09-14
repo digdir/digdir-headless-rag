@@ -92,7 +92,7 @@ sending either used to return `201` with the request quietly half-applied:
 ### Example Request
 
 ```bash
-curl -X POST https://admin.kunnskap.digdir.cloud/console-api/api-keys \
+curl -X POST https://rag.digdir.cloud/console-api/api-keys \
   -H "Content-Type: application/json" \
   -H "X-User-Email: user@example.com" \
   --cookie "auth-token=your_jwt_token" \
@@ -181,7 +181,7 @@ Invalid dataset scope:
 ### Example Request
 
 ```bash
-curl -X PUT https://admin.kunnskap.digdir.cloud/console-api/api-keys/key_abc123/allowed-config-keys \
+curl -X PUT https://rag.digdir.cloud/console-api/api-keys/key_abc123/allowed-config-keys \
   -H "Content-Type: application/json" \
   -H "X-User-Email: user@example.com" \
   --cookie "auth-token=your_jwt_token" \

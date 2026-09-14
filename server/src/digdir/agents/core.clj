@@ -411,7 +411,18 @@
                            "docs/release-cross-check"
                            "docs/release-cross-check-v2"
                            "docs/translation-drift"]
-    :allowed-dataset-scopes [{:tenant "digdir" :dataset-config-key "public-docs"}]
+    ;; Unrestricted, like every other builtin. It previously named
+    ;; {:tenant "digdir" :dataset-config-key "public-docs"} — a tenant the
+    ;; product no longer ships, so the declaration was a dangling reference.
+    ;;
+    ;; Widening is safe because #470 made the API KEY'S GRANT THE FLOOR: an
+    ;; agent declaration can only narrow what a key may reach, never widen it.
+    ;; Measured before changing it, with an enabled agent and a key granting a
+    ;; different tenant: the stale scope failed LOUDLY either way —
+    ;; `no_dataset_scope` with no arguments, `dataset_not_authorized` when the
+    ;; removed tenant was named explicitly — so this was never a silent grant.
+    ;; It is removed because a dangling name is wrong, not because it leaked.
+    :allowed-dataset-scopes []
     :guardrails {:answer-style :research
                  :citations-required true}
     :enabled? false}])

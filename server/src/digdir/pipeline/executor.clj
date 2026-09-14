@@ -8,6 +8,7 @@
             [taoensso.telemere :as t]
             [digdir.pipeline.core :as pipeline]
             [digdir.pipeline.collections :as collections]
+            [digdir.docs.pipeline.storage :as ingest-storage]
             [digdir.pipeline.materialization :as materialization]
             [nano-id.core :refer [nano-id]]))
 
@@ -492,11 +493,36 @@
 
            dataset-id (:id dataset-config)
 
+           ;; ⚠️ TWO IDS, AND ONLY ONE OF THEM KEYS THE DATASET TREE.
+           ;; `pipeline/get-dataset` stamps `:id` with `make-pipeline-id` — the
+           ;; COMPOSITE "tenant:tenant-config-key:pipeline-name" that execution
+           ;; records, telemetry and authorization are keyed by. The config tree
+           ;; is keyed by the DURABLE dataset id, which the same map carries
+           ;; separately, because several materialization pipelines share one
+           ;; dataset. `dataset-base-node-id` takes the second; handing it the
+           ;; first builds "dataset/demo/demo:default:norquad-docs/default",
+           ;; which names no node, and the persist step below threw on it —
+           ;; marking a materialization that had already succeeded as failed.
+           durable-dataset-id (:dataset-id dataset-config)
+
            collection-names (collections/get-or-generate-collection-names
                              dataset-config conn master-key)
            dataset-config-with-colls (merge dataset-config collection-names)
 
            loader-config (convert-pipeline-config-to-loader-format dataset-config-with-colls)
+
+             ;; #497: the names the INGEST PATH actually writes to. `coll-ids`
+             ;; derives them from the loader config, and its result — not the
+             ;; `collection-names` merged in above — is what the loader uses. The
+             ;; two were computed by different functions over different config
+             ;; shapes, so what retrieval later read from
+             ;; `pipeline.storage.*-collection` named collections ingest had never
+             ;; written to, and every query 404'd against a full corpus.
+             materialized-collections (let [[docs chunks phrases]
+                                            (ingest-storage/coll-ids loader-config)]
+                                        {:docs-collection docs
+                                         :chunks-collection chunks
+                                         :phrases-collection phrases})
 
            execution-id (or execution-id
                             (create-execution-record! conn dataset-id user-id))
@@ -511,6 +537,26 @@
          (let [loader-task (dispatch-to-loader dataset-config-with-colls loader-config)
                _ (m/? loader-task)
                final (final-progress-counts execution-id)]
+
+           ;; #497: record what this run actually created, so the read path
+           ;; resolves collections that now exist rather than whatever was written
+           ;; the last time a different function computed a name. AFTER the loader
+           ;; succeeds, deliberately: persisting up front would publish names for
+           ;; collections a failed run never created.
+           ;;
+           ;; ⚠️ AND BEFORE THE STATUS FLIP, ALSO DELIBERATELY. Marking :completed
+           ;; first publishes "this run succeeded" while the config still names the
+           ;; collections a PREVIOUS computation guessed — and a process that dies
+           ;; in that window leaves it there permanently, because nothing revisits a
+           ;; run already recorded as completed. Observed: a run killed between
+           ;; these two statements kept `demo_norquad_*_d4aab9b4a5ea`, three names
+           ;; that no collection has ever answered to, against a fully ingested
+           ;; corpus. Persisting first makes :completed mean the names are durable;
+           ;; a throw here still reaches the catch below and marks the run :failed,
+           ;; which is the honest outcome for a run whose names were never recorded.
+           (collections/track-pipeline-collections!
+            conn tenant tenant-config-key durable-dataset-id pipeline-name
+            materialized-collections master-key)
 
            (update-execution-status! conn execution-id :completed
                                      (merge {:documents-processed 0

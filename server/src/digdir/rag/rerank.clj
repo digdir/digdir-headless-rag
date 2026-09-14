@@ -18,6 +18,39 @@
   (when (rag-debug-logging-enabled?)
     (log/info msg data)))
 
+(defn reranker-configured?
+  "Is there a ColBERT reranker to call?
+
+   Blank counts as absent, not as a value: `COLBERT_API_URL=` in a `.env` reads
+   as an empty string rather than nil, and that is the SHIPPED state — the
+   reranker is infrastructure the product deliberately supplies no value for."
+  [rerank-url]
+  (not (str/blank? rerank-url)))
+
+(defonce ^:private !reranking-disabled-warned
+  ;; Tenants already told. Once per tenant per process, not once per request:
+  ;; this is read on every query, and a line per query is noise an operator
+  ;; learns to scroll past — which is the same as not saying it.
+  (atom #{}))
+
+(defn- warn-reranking-disabled-once!
+  "Say once, loudly, that reranking is off — the shape of the placeholder-secret
+   boot warning.
+
+   An operator should be able to learn this from the log rather than by
+   noticing that answers got worse, which is the failure mode a silent
+   degradation would have."
+  [tenant]
+  (when-not (contains? @!reranking-disabled-warned tenant)
+    (swap! !reranking-disabled-warned conj tenant)
+    (log/warn
+     (str "RERANKING DISABLED for tenant '" tenant "': COLBERT_API_URL is not set. "
+          "Results are returned in retrieval order, which is WORSE ORDERING, not "
+          "fewer or wrong answers — retrieval, synthesis and citations are "
+          "unaffected. This is the expected state on a fresh install; the "
+          "reranker is infrastructure this product ships no value for. To enable "
+          "it, set COLBERT_API_URL (and COLBERT_API_KEY) and restart."))))
+
 (defn- build-context-doc
   "Build a context document from a search hit for inclusion in the LLM prompt."
   [search-hit docs-collection-kw]
@@ -188,8 +221,21 @@
        :used-docs []
        :full-prompt (build-prompt "")}
       (do
-        (when (nil? rerank-url)
-          (throw (ex-info (str "Environment variable 'COLBERT_API_URL' is invalid: '" rerank-url "'") {})))
+        ;; ⚠️ AN UNCONFIGURED RERANKER DEGRADES; IT DOES NOT THROW (#519).
+        ;;
+        ;; This used to throw "Environment variable 'COLBERT_API_URL' is
+        ;; invalid: ''" when the value was absent — which is the EXPECTED state
+        ;; on a fresh install, because the reranker is infrastructure the
+        ;; product deliberately ships no value for. `env-bridge` declares it
+        ;; `:tier :optional` and its own `:what` says "Retrieval works without
+        ;; it, less well". The code disagreed, and the throw took the whole
+        ;; skill graph down: a newcomer choosing AI Overview got a failed
+        ;; request rather than a slightly worse answer.
+        ;;
+        ;; Reranking improves ORDERING. Its absence costs quality, not
+        ;; availability.
+        (when-not (reranker-configured? rerank-url)
+          (warn-reranking-disabled-once! tenant))
         (let [user-input (subs (:translated_user_query params)
                                0 (min (count (:translated_user_query params)) rerank-api-max-input-length))
               docs-collection-kw (keyword (:docsCollectionName params))
@@ -202,9 +248,25 @@
                                (content-snippet (:content_markdown doc)
                                                 (:translated_user_query params)))
                              rerank-candidates)
-              rerank-body (json/write-str
-                           {:user_input user-input
-                            :k (count rerank-candidates)
+              ;; The un-reranked result: candidates in their retrieval order,
+              ;; carrying snippets but no rerank score or rank.
+              ;;
+              ;; This is not a new code path. It is the SAME expression the
+              ;; empty-response branch below already used, lifted so the
+              ;; unconfigured case and the empty-response case cannot drift into
+              ;; two different ideas of "un-reranked". Everything downstream then
+              ;; runs unchanged: `threshold-enabled?` requires a numeric
+              ;; :rerank-score, so with none it falls through to plain top-k
+              ;; selection, which is exactly the wanted behaviour.
+              unreranked-hits (mapv (fn [c s] (assoc c :snippet s))
+                                    rerank-candidates snippets)
+              ;; Skipped entirely when there is no reranker: building this body
+              ;; runs `best-content-windows` over every candidate, which is real
+              ;; work to produce a request nothing will send.
+              rerank-body (when (reranker-configured? rerank-url)
+                            (json/write-str
+                             {:user_input user-input
+                              :k (count rerank-candidates)
                             :documents (mapv (fn [doc]
                                                (let [title (get-in doc [docs-collection-kw :title])
                                                      metadata (:metadata doc)
@@ -222,14 +284,18 @@
                                                                               (:translated_user_query params)
                                                                               (max 200 (- (or max-len 1000) (count prefix)))))
                                                    (formatting/truncate-head-tail (str prefix content) max-len))))
-                                             rerank-candidates)})
-              rerank-response (http/post rerank-url {:body rerank-body
-                                                     :content-type :json
-                                                     :headers {"X-API-Key" rerank-api-key}})
-              rerank-response-body (json/read-str (:body rerank-response) :key-fn keyword)
+                                             rerank-candidates)}))
+              ;; nil when there is no reranker, which the `empty?` test below
+              ;; then treats exactly as it already treated an empty response —
+              ;; ONE degradation path, not a second one that could drift.
+              rerank-response-body (when rerank-body
+                                     (-> (http/post rerank-url {:body rerank-body
+                                                                :content-type :json
+                                                                :headers {"X-API-Key" rerank-api-key}})
+                                         :body
+                                         (json/read-str :key-fn keyword)))
               search-hits-reranked (if (empty? rerank-response-body)
-                                     (mapv (fn [c s] (assoc c :snippet s))
-                                           rerank-candidates snippets)
+                                     unreranked-hits
                                      (keep (fn [rerank-entry]
                                              (when-let [idx (:index rerank-entry)]
                                                (when (and (number? idx)

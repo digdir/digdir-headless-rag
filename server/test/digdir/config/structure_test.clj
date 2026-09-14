@@ -101,9 +101,23 @@
      config/ops/bootstrap.clj     explicit, exhaustively checked root policy
      api/routes/datasets.clj      per-prefix :root tags
      config/db.clj                :platform-specific definition lookup
-     config/ops/topology.clj      per-root resolution calls"
+     config/ops/topology.clj      per-root resolution calls
+     tools/config.clj             per-root resolution calls
+
+   `tools/config.clj` was added by #505 and is the same category as
+   `config/ops/topology.clj`: a `case` sending each root to a DIFFERENT accessor
+   (`get-platform-value-with-trace` / `get-runtime-value-with-trace` /
+   `get-dataset-value-with-trace`). Three roots, three functions — there is no
+   set to derive it from, and `structure/config-roots` would not help.
+
+   ⚠️ IT IS NEW TO THIS LIST ONLY BECAUSE IT MOVED, NOT BECAUSE IT CHANGED. The
+   file lived in `src-dev` until #505 moved it to `src` so the uberjar would
+   carry it; this scan only reads `src`, so the dispatch was always there and
+   simply out of scope. Worth noting as a property of the guard: it measures
+   `src`, so anything moving INTO `src` gets audited for the first time on the
+   commit that moves it."
   #{"config/ops/bootstrap.clj" "api/routes/datasets.clj" "config/db.clj"
-    "config/ops/topology.clj"})
+    "config/ops/topology.clj" "tools/config.clj"})
 
 (defn- source-files []
   (->> (file-seq (io/file "src"))

@@ -14,11 +14,14 @@
             [digdir.config.permissions :as perms]))
 
 (defn get-admin-emails-from-env
-  "Get admin emails from ADMIN_USER_EMAILS environment variable."
+  "Get admin emails from ADMIN_USER_EMAILS environment variable.
+
+   Delegates to `digdir.config.permissions/get-admin-emails` rather than
+   parsing again. The two copies of this parse were byte-identical and both
+   wrong the same way (#515); a second copy is only a way for one of them to
+   be fixed."
   []
-  (let [admins-str (or (System/getenv "ADMIN_USER_EMAILS") "")]
-    (when (seq admins-str)
-      (set (map str/trim (str/split admins-str #" "))))))
+  (perms/get-admin-emails))
 
 (defn get-allowed-domains-from-db
   "Get allowed domains from legacy database entities."
@@ -79,6 +82,20 @@
 
     (println "=== Migrating Admin Users ===")
     (println "Found" (count admin-emails) "admin emails in ADMIN_USER_EMAILS")
+
+    ;; Name the cause here or nowhere. With no addresses this function runs
+    ;; cleanly to "0 created, 0 granted, 0 skipped" - a summary that reads like
+    ;; a successful no-op and is in fact the state where nobody can log in.
+    ;; The commonest way to reach it is not an unset variable but a SET one
+    ;; that is still commented out in .env, which looks identical from here
+    ;; (#515b).
+    (when-not (seq admin-emails)
+      (println "  ⚠ No admin emails. Nothing will be able to log in.")
+      (println "    ADMIN_USER_EMAILS is unset, empty, or - the usual case -")
+      (println "    still commented out in .env. Check for a leading '#':")
+      (println "        # ADMIN_USER_EMAILS=you@example.org   <- inactive")
+      (println "        ADMIN_USER_EMAILS=you@example.org     <- active")
+      (println "    ./scripts/setup-env.sh asks for it and writes it uncommented."))
 
     (doseq [email admin-emails]
       (let [db @conn

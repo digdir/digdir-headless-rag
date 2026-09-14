@@ -155,10 +155,10 @@
           enrich "self_improve_test_enrichment_verified_phrases_abc123"
           captured (atom nil)]
       (with-redefs [storage/create-collection!
-                    (fn [schema] (reset! captured schema) :stub)]
+                    (fn [_config schema] (reset! captured schema) :stub)]
         (is (= :stub
                (enrich-coll/ensure-collection-by-name!
-                docs enrich :verified-phrases))
+                {:tenant "test"} docs enrich :verified-phrases))
             "Return value passes through from storage/create-collection!")
         (let [schema @captured]
           (is (some? schema) "create-collection! actually got called")
@@ -167,3 +167,22 @@
           (is (= (enrich-coll/verified-phrases-schema [docs enrich])
                  schema)
               "Schema is byte-identical to schema-for output"))))))
+
+(deftest enrichment-moves-when-chunking-moves
+  ;; CARRIED FROM #502's REVIEW, and the reason is worth keeping. Enrichment
+  ;; collections exist to annotate the chunks of a specific configuration. If a
+  ;; chunking change renames the chunks collection but NOT the enrichment one, the
+  ;; enrichment silently annotates chunks that no longer exist — a defect that
+  ;; surfaces long after the change that caused it and is miserable to attribute.
+  ;;
+  ;; #501 made the chunks suffix vary. This pins the other half: whatever the hash
+  ;; becomes, enrichment must move with it.
+  (testing "a chunking change renames the enrichment collection too"
+    (let [bumped (assoc fixture-config :chunk-strategy :semantic)]
+      (is (not= (enrich-coll/enrichment-collection-name fixture-config :hypothetical-questions)
+                (enrich-coll/enrichment-collection-name bumped :hypothetical-questions))
+          "enrichment must not keep pointing at the previous chunking")))
+  (testing "POSITIVE CONTROL — an unrelated change moves neither, so the
+            inequality above is the chunking and not instability"
+    (is (= (enrich-coll/enrichment-collection-name fixture-config :hypothetical-questions)
+           (enrich-coll/enrichment-collection-name fixture-config :hypothetical-questions)))))

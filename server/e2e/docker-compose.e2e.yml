@@ -7,8 +7,8 @@ services:
     #
     # E2E_API_KEY triggers boot-time auto-seed in
     # digdir.e2e.seed/maybe-seed! — built-in agents land in the DB and
-    # an API key with this exact plaintext is stored, so MCPO can talk
-    # to /api/mcp without an out-of-band seed step.
+    # an API key with this exact plaintext is stored, so Open WebUI can
+    # reach /api/mcp, /v1 and /api/tools without an out-of-band seed step.
     build:
       context: ../..
       dockerfile: server.Dockerfile
@@ -33,60 +33,64 @@ services:
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/up"]
+      # ⚠️ NOT `/up`, and the reason is the whole point of this file's history.
+      #
+      # `/up` answers as soon as Jetty is listening — before the skills registry
+      # is initialised. `depends_on: service_healthy` then releases Open WebUI,
+      # whose first fetch of the tool document hits a cold `list-tools`, times
+      # out against its default tool-server timeout, and logs
+      # `Initialized 0 tool server(s)`. Observed exactly that. It recovers on a
+      # later fetch, so the stack works — it just greets a newcomer with an
+      # ERROR line and a briefly empty tool list.
+      #
+      # This is the same defect as MCPO's old healthcheck, which GET'd a page
+      # that returned 200 with nothing behind it: a check that passes before
+      # the thing it gates is ready. So check the surface the dependent
+      # actually needs. Warm, this endpoint answers in ~65ms.
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS -o /dev/null
+          -H "Authorization: Bearer $$E2E_API_KEY"
+          http://localhost:8080/api/tools/openapi.json
       interval: 5s
-      timeout: 3s
+      timeout: 10s
       retries: 30
 
-  mcpo:
-    # MCPO acts as the bridge: it speaks Streamable-HTTP MCP to our
-    # /api/mcp endpoint and exposes the discovered tools as OpenAPI
-    # for Open WebUI to consume.
-    #
-    # config.json.template carries `${E2E_API_KEY}` literally; the
-    # entrypoint substitutes it from the container's env (provided via
-    # env_file: .env) before exec'ing MCPO. docker-compose only does
-    # env-var substitution inside the YAML itself, never in mounted
-    # files — hence the shell-side substitution here.
-    image: ghcr.io/open-webui/mcpo:latest
-    container_name: digdir-rag-mcpo-e2e
+  # ⚠️ THE `mcpo` SERVICE IS GONE, DELIBERATELY — do not add it back.
+  #
+  # MCPO bridged MCP -> OpenAPI so Open WebUI could tool-call our agents. It
+  # cannot do that any more: it opens with `initialize`, and this server
+  # implements MCP 2026-07-28, which has no handshake. That is not fixable by
+  # bumping its SDK (measured — see README.md, "What fixing MCPO would take")
+  # and MCPO has had no commit since 2026-02-27.
+  #
+  # The bridge existed only because the translation had to happen SOMEWHERE.
+  # We own the server, so it happens here: /api/tools/openapi.json renders the
+  # same (agent, mode) tools as OpenAPI directly. One less container, one less
+  # unmaintained dependency, and no protocol-era problem to inherit.
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:0.11.3
+    container_name: digdir-rag-openwebui-e2e
     depends_on:
       digdir-rag:
         condition: service_healthy
     env_file:
       - .env
-    volumes:
-      - ./mcpo/config.json.template:/app/config.json.template:ro
-    entrypoint:
-      - sh
-      - -c
-      - |
-        sed "s|\$${E2E_API_KEY}|$$E2E_API_KEY|g" \
-          /app/config.json.template > /tmp/config.json
-        exec mcpo --config /tmp/config.json --host 0.0.0.0 --port 8765
-    ports:
-      - "8765:8765"
-    healthcheck:
-      # MCPO's image ships curl but not wget.
-      test: ["CMD", "curl", "-fsS", "http://localhost:8765/openapi.json"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-
-  open-webui:
-    image: ghcr.io/open-webui/open-webui:0.6.18
-    container_name: digdir-rag-openwebui-e2e
-    depends_on:
-      mcpo:
-        condition: service_healthy
     environment:
-      # Wire Open WebUI's tool discovery to MCPO's OpenAPI surface.
-      # The user is auto-created on first boot.
-      OPENAPI_SERVERS: '[{"url":"http://mcpo:8765","label":"digdir-rag"}]'
+      # Agents as TOOLS — the surface MCPO used to provide, served by the
+      # backend itself. `config.enable` is required: Open WebUI's
+      # `get_tool_servers_data` skips a connection without it and reports an
+      # empty tool list with nothing logged.
+      TOOL_SERVER_CONNECTIONS: '[{"url":"http://digdir-rag:8080","path":"/api/tools/openapi.json","type":"openapi","auth_type":"bearer","key":"${E2E_API_KEY}","config":{"enable":true},"info":{"id":"digdir-rag","name":"digdir-rag"}}]'
+      # Agents as MODELS — the other half, unchanged.
+      OPENAI_API_BASE_URLS: "http://digdir-rag:8080/v1"
+      OPENAI_API_KEYS: "${E2E_API_KEY}"
+      # Nothing here runs Ollama; probing for it just slows the first paint.
+      ENABLE_OLLAMA_API: "false"
       # Disable the LLM auth flow for the deterministic test run.
       WEBUI_AUTH: "false"
-      # Skip the welcome wizard.
-      DEFAULT_USER_ROLE: "admin"
     ports:
       # Host 3030 instead of 3000 — 3000 commonly collides with local
       # node dev servers. Override via OPENWEBUI_PORT env in .env if

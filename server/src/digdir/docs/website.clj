@@ -549,25 +549,28 @@
 
 (defn document-inserted?
   "Checks if a document with the given ID exists in the collection."
-  [_config coll-name doc]
-  (storage/document-inserted? coll-name doc))
+  ;; `config` was `_config`: the tenant was threaded to this boundary and
+  ;; discarded here, which is how the storage layer ended up resolving
+  ;; Typesense with no tenant at all (#476).
+  [config coll-name doc]
+  (storage/document-inserted? config coll-name doc))
 
 (defn create-website-docs-coll
   "Creates the documents collection."
-  [name]
-  (storage/create-collection! (website-docs-schema name)))
+  [config name]
+  (storage/create-collection! config (website-docs-schema name)))
 
 (defn create-website-chunks-coll
   "Creates the chunks collection."
   [config]
   (let [ids (coll-ids config)]
-    (storage/create-collection! (website-chunks-schema ids))))
+    (storage/create-collection! config (website-chunks-schema ids))))
 
 (defn create-website-phrases-coll
   "Creates the phrases collection."
   [config]
   (let [ids (coll-ids config)]
-    (storage/create-collection! (website-phrases-schema ids))))
+    (storage/create-collection! config (website-phrases-schema ids))))
 
 (defn create-stores
   "Creates all three collections."

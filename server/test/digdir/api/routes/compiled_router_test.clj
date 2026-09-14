@@ -36,6 +36,11 @@
    "/api/conversations"            "/api/conversations"
    "/api/conversations/c1"         "/api/conversations/:id"
    "/api/mcp"                      "/api/mcp"
+   "/api/tools/openapi.json"       "/api/tools/openapi.json"
+   ;; A real tool name, dots and `__` included, so the wildcard is exercised
+   ;; with the shape it will actually receive rather than with "x".
+   "/api/tools/call/builtin.agent-rag-agent__agent-rag-graph-faithful"
+   "/api/tools/call/:tool-name"
    "/v1/models"                    "/v1/models"
    "/v1/chat/completions"          "/v1/chat/completions"})
 

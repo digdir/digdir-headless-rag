@@ -306,3 +306,81 @@
           "Snippets are non-empty strings")
       (is (some #(re-find #"filstørrelse" (:snippet %)) reranked)
           "Snippet reflects the chunk's actual content"))))
+
+;; ---------------------------------------------------------------------------
+;; #519 — an unconfigured reranker degrades, it does not throw
+;;
+;; ⚠️ THE BUG THIS PINS TOOK DOWN A WHOLE SKILL GRAPH. `COLBERT_API_URL` is
+;; declared `:tier :optional` in `env-bridge`, and its own `:what` says
+;; "Retrieval works without it, less well" — but the code threw
+;; "Environment variable 'COLBERT_API_URL' is invalid: ''" when it was absent,
+;; which is the EXPECTED state on a fresh install. A newcomer choosing AI
+;; Overview got a failed request rather than a slightly worse answer.
+;; ---------------------------------------------------------------------------
+
+(defn- stub-cfg-no-reranker
+  "Config with the reranker unset — the shipped state. Blank rather than nil,
+   because `COLBERT_API_URL=` in a .env reads as an empty string, and that is
+   the exact value the throw reported as invalid."
+  [_opts & path]
+  (case (vec path)
+    [:services :colbert :api-url] ""
+    [:services :colbert :api-key] ""
+    nil))
+
+(defn- exploding-post [& _]
+  (throw (ex-info "http/post was called with no reranker configured" {})))
+
+(deftest unconfigured-reranker-degrades-instead-of-throwing
+  (with-redefs [cfg/get stub-cfg-no-reranker
+                http/post exploding-post]
+    (let [chunks (mapv #(make-chunk %) (range 5))
+          result (rerank/rerank-chunks chunks (make-params {:tenant "demo"}))]
+
+      (testing "it returns a result at all, rather than throwing"
+        ;; The whole defect in one assertion: this used to throw and fail the graph.
+        (is (some? result)))
+
+      (testing "the candidates survive — absence costs ordering, not availability"
+        (is (= 5 (count (:reranked-chunks result)))
+            "chunks were dropped; an absent reranker must cost quality, not answers")
+        (is (= (mapv :chunk_id chunks) (mapv :chunk_id (:reranked-chunks result)))
+            "chunks are not in retrieval order, so something reordered them without a reranker"))
+
+      (testing "and they carry no rerank score, because nothing ranked them"
+        ;; Inventing a score would be worse than having none: downstream
+        ;; threshold logic keys on it being a number.
+        (is (every? #(nil? (:rerank-score %)) (:reranked-chunks result))
+            "a rerank score appeared with no reranker, which means it was fabricated"))
+
+      (testing "the prompt is still assembled, so synthesis proceeds"
+        (is (string? (:full-prompt result)))
+        (is (str/includes? (:full-prompt result) "test query"))))))
+
+(deftest an-unconfigured-reranker-is-not-called
+  ;; Control on the test above: if http/post were reached, `exploding-post`
+  ;; would throw and the degradation assertions would be passing for the wrong
+  ;; reason. This states it directly.
+  (with-redefs [cfg/get stub-cfg-no-reranker
+                http/post exploding-post]
+    (is (some? (rerank/rerank-chunks (mapv #(make-chunk %) (range 3))
+                                     (make-params {:tenant "demo"})))
+        "the reranker HTTP endpoint was called despite being unconfigured")))
+
+(deftest blank-and-nil-both-count-as-unconfigured
+  ;; `COLBERT_API_URL=` yields "", not nil. Treating only nil as absent is how
+  ;; the original check let a blank through to a request that could not work.
+  (is (false? (rerank/reranker-configured? "")))
+  (is (false? (rerank/reranker-configured? "   ")))
+  (is (false? (rerank/reranker-configured? nil)))
+  (is (true? (rerank/reranker-configured? "https://colbert.example/rerank"))))
+
+(deftest a-configured-reranker-still-reranks
+  ;; The other half: degradation must not become the only path.
+  (with-colbert (stub-colbert-identity [2 0 1])
+    (let [chunks (mapv #(make-chunk %) (range 3))
+          result (rerank/rerank-chunks chunks (make-params {:tenant "demo"}))]
+      (is (= ["chunk-2" "chunk-0" "chunk-1"]
+             (mapv :chunk_id (:reranked-chunks result)))
+          "a configured reranker no longer reorders, so the degraded path is being taken always")
+      (is (every? #(number? (:rerank-score %)) (:reranked-chunks result))))))

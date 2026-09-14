@@ -80,7 +80,18 @@
                    value-type, and drives coercion of the env var's string.
      :tier         :boot (the server refuses to start without it), :query (it
                    boots, but a real query needs it) or :optional. The same
-                   three groups `.env.example` already uses.
+                   three groups `.env.example` already uses. `:boot` is
+                   ENFORCED, from this key, by `digdir.boot.required-env`.
+     :alternative-group
+                   present when the row is one of several ALTERNATIVES rather
+                   than a flat requirement. Rows sharing a group are grouped
+                   again by `:service`, and supplying every variable of ANY
+                   ONE of those services satisfies the whole group. Only the
+                   database pointer uses it: a deployment picks the file store
+                   or Postgres, never both, so a flat presence check over the
+                   six `:boot` rows would refuse every correct environment.
+                   This used to be prose above the rows only, which is
+                   exactly the kind of sentence a check cannot read.
      :secret?      true when the value must never be echoed, logged or printed.
      :what         one line for a human reading a checklist."
   [;; --- Tier 0: the database pointer. Pick ONE family ----------------------
@@ -88,20 +99,25 @@
    ;; table's credential markers are right for these rows too. Which family
    ;; WINS is precedence logic and stays in `selected-db-backend`, mirroring
    ;; `digdir.config.core/load-bootstrap-config`.
+   ;;
+   ;; "Pick ONE" is now :alternative-group rather than only this sentence, so
+   ;; the boot check can read it. The gate needs no precedence: it asks whether
+   ;; EITHER family is complete, and precedence only decides which of two
+   ;; complete families is used.
    {:env-var "DATAHIKE_FILE_PATH" :path nil :service :database-file
-    :destination :bootstrap :tier :boot :secret? false
+    :destination :bootstrap :tier :boot :secret? false :alternative-group :database
     :what "Local Datahike file-store path. Preferred for dev; needs no Postgres."}
 
    {:env-var "ADH_POSTGRES_URL" :path nil :service :database-postgres
-    :destination :bootstrap :tier :boot :secret? true
+    :destination :bootstrap :tier :boot :secret? true :alternative-group :database
     :what "Postgres-backed Datahike URL. Secret because such URLs routinely embed the password."}
 
    {:env-var "ADH_POSTGRES_USER" :path nil :service :database-postgres
-    :destination :bootstrap :tier :boot :secret? false
+    :destination :bootstrap :tier :boot :secret? false :alternative-group :database
     :what "Postgres user."}
 
    {:env-var "ADH_POSTGRES_PWD" :path nil :service :database-postgres
-    :destination :bootstrap :tier :boot :secret? true
+    :destination :bootstrap :tier :boot :secret? true :alternative-group :database
     :what "Postgres password."}
 
    ;; --- Tier 0: needed before configuration can be read at all ---------------
@@ -313,6 +329,70 @@
   "Environment variable names in `tier`, in table order."
   [tier]
   (mapv :env-var (bindings-for-tier tier)))
+
+(defn services-in-alternative-group
+  "The `:service` keywords that are alternatives to each other within `group`.
+
+   Derived, so a caller that needs to know \"which services are the database
+   families\" asks the table instead of keeping a set of its own."
+  [group]
+  (into (sorted-set)
+        (comp (filter #(= group (:alternative-group %))) (map :service))
+        env-config-bindings))
+
+(defn- env-present?
+  "Whether `env-var` has a usable value.
+
+   Blank counts as ABSENT. An exported-but-empty variable is what a half-filled
+   `.env` produces, and a check that accepts it passes while the thing it
+   guards fails anyway - the same shape as the defect this file exists to stop."
+  [lookup env-var]
+  (some? (not-empty (some-> (lookup env-var) str/trim))))
+
+(defn boot-requirements
+  "What `:tier :boot` demands of THIS environment, and what is missing.
+
+   The whole point is that nothing here is a second list of variable names:
+   the requirement IS the table's `:tier` and `:alternative-group` keys, read
+   at call time. A seventh `:boot` row added tomorrow is enforced the day it
+   lands, and a row whose real requirement is conditional says so with
+   `:alternative-group` instead of being quietly exempted somewhere else.
+
+   Returns
+
+       {:checked   n          ; boot rows examined - 0 means a vacuous run
+        :missing   [\"VAR\" ...]  ; flat boot rows with no value
+        :unsatisfied-groups
+          [{:group :database
+            :options [{:service :database-file :missing [...]} ...]}]}
+
+   A group is unsatisfied only when EVERY one of its service options is
+   incomplete; a complete option means the deployment made its choice.
+
+   NAMES ONLY. No value is read into the return, the message or the log."
+  ([] (boot-requirements secrets/*env-lookup*))
+  ([lookup]
+   (let [boot (bindings-for-tier :boot)
+         by-kind (group-by (comp boolean :alternative-group) boot)
+         flat (get by-kind false)
+         alternatives (get by-kind true)
+         absent (fn [rows]
+                  (into [] (comp (map :env-var) (remove #(env-present? lookup %))) rows))
+         groups (->> (group-by :alternative-group alternatives)
+                     (map (fn [[group rows]]
+                            {:group group
+                             :options (->> (group-by :service rows)
+                                           (map (fn [[service srows]]
+                                                  {:service service :missing (absent srows)}))
+                                           (sort-by :service)
+                                           vec)}))
+                     (remove (fn [{:keys [options]}]
+                               (some (comp empty? :missing) options)))
+                     (sort-by :group)
+                     vec)]
+     {:checked (count boot)
+      :missing (absent flat)
+      :unsatisfied-groups groups})))
 
 (defn env-vars-for-service
   "Environment variable names belonging to `service`, in table order."

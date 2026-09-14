@@ -471,7 +471,7 @@ In the HTTP path, `resolve-request-execution-context!` orchestrates: (1) select 
 - `server/src/digdir/pipeline/loaders/{kudos,website,folder,episerver}.clj` — thin adapters delegating to the legacy implementations under `digdir.docs.*`.
 - `server/src/digdir/docs/pipeline/protocol.clj` — `DocumentSource` protocol that every source implements.
 - `server/src/digdir/docs/pipeline/orchestration.clj` — Missionary-based parallel document prepare / store flows with fault tolerance.
-- `server/src/digdir/docs/pipeline/search_phrases.clj` — LLM-backed phrase generation with a file-based cache keyed by chunk + model + prompt.
+- `server/src/digdir/docs/pipeline/search_phrases.clj` — LLM-backed phrase generation with a file-based cache keyed by chunk CONTENT + model + prompt + parser version.
 - `server/src/digdir/docs/pipeline/storage.clj` — Typesense upsert operations for documents / chunks / phrases.
 - `server/src/digdir/docs/pipeline/core.clj` — shared helpers: SHA256 hashing, retry, telemetry.
 - `server/src/digdir/docs/pipeline/telemetry.clj` — centralized telemetry handlers.
@@ -498,7 +498,7 @@ In the HTTP path, `resolve-request-execution-context!` orchestrates: (1) select 
 
 *Collection naming.* Every run targets three Typesense collections (`documents`, `chunks`, `phrases`) whose names are deterministic functions of a config hash. When any hashed property changes (e.g., chunking strategy), the hash changes and new collections are created — the old ones are orphaned but not deleted, which lets an operator swap to the re-ingested version atomically by updating the dataset's collection-name references (`server/src/digdir/pipeline/collections.clj:42-70`).
 
-*Search phrases.* Phrases are lightweight query-equivalent summaries of a chunk (comma-separated keyword phrases that should match the chunk in a BM25 search). `mk-distill-search-phrases-t` (`server/src/digdir/docs/pipeline/search_phrases.clj:112-151`) looks up a file-backed cache keyed by `{chunk_id}-{model_hash}-{prompt_hash}.edn`. On a miss, it calls the configured model (default `gpt-4o`) and falls back to a cheaper model on failure, then writes the result to the cache.
+*Search phrases.* Phrases are lightweight query-equivalent summaries of a chunk (comma-separated keyword phrases that should match the chunk in a BM25 search). `mk-distill-search-phrases-t` (`server/src/digdir/docs/pipeline/search_phrases.clj:112-151`) looks up a file-backed cache keyed by `{content_hash}-{model_hash}-{prompt_hash}-{parser_version}.edn`. NOT `chunk_id`: ids became document-scoped in #72, so keying on them would re-generate phrases for every copy of a duplicated chunk (this corpus is ~9% duplicates). The committed warm archive's own keys carry that shape. On a miss, it calls the configured model (default `gpt-4o`) and falls back to a cheaper model on failure, then writes the result to the cache.
 
 *Split between `digdir.pipeline.*` and `digdir.docs.*`.* `digdir.pipeline.*` is the outer orchestration (CRUD, execution records, collection naming, validation); it does not touch documents. `digdir.docs.*` is where the actual fetching, chunking, and storing happens. The adapters in `digdir.pipeline.loaders.*` delegate from the first into the second. A full migration would fold the legacy implementations into `digdir.pipeline.*`, but that has not been completed.
 

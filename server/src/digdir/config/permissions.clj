@@ -14,7 +14,8 @@
   (:require [datahike.api :as d]
             [clojure.edn :as edn]
             [clojure.set]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [digdir.secrets :as secrets]))
 
 ;; =============================================================================
 ;; Attribute Parsing
@@ -384,14 +385,45 @@
 ;; Admin User Sync
 ;; =============================================================================
 
+(def admin-emails-env-var
+  "The variable that names the bootstrap admins. Read here and in
+   `digdir.auth.migration`, which delegates rather than parsing again."
+  "ADMIN_USER_EMAILS")
+
+(def admin-email-separator
+  "What separates one address from the next.
+
+   `.env.example` documents the field as \"Comma/space-separated\", and this
+   accepts exactly that. It used to split on a single SPACE, so the
+   comma-separated form the documentation puts FIRST parsed as one address
+   with commas inside it - an account that is created, reported as created,
+   and can never log in (#515). Splitting on a run of commas-or-whitespace
+   accepts both forms, so no value that worked before stops working."
+  #"[,\s]+")
+
+(defn parse-admin-emails
+  "The addresses in an ADMIN_USER_EMAILS value: split, trimmed, no empties.
+
+   Pure, so the separator is testable without an environment. Returns nil
+   rather than an empty set when nothing survives, so \"unset\" and \"set to
+   punctuation\" reach callers as the same absence."
+  [admins-str]
+  (when-not (str/blank? admins-str)
+    (not-empty
+      (into #{}
+            (comp (map str/trim) (remove str/blank?))
+            (str/split admins-str admin-email-separator)))))
+
 (defn get-admin-emails
   "Get admin emails from ADMIN_USER_EMAILS env var (bootstrap config).
    This is read directly from environment, not from config database,
-   since it's needed before the system is fully configured."
+   since it's needed before the system is fully configured.
+
+   Reads through `digdir.secrets/*env-lookup*` - the seam that namespace
+   exposes because `System/getenv` cannot be redefined - so the parse is
+   observable in a test without mutating the JVM's environment."
   []
-  (let [admins-str (or (System/getenv "ADMIN_USER_EMAILS") "")]
-    (when (seq admins-str)
-      (set (map str/trim (str/split admins-str #" "))))))
+  (parse-admin-emails (secrets/*env-lookup* admin-emails-env-var)))
 
 (defn get-user-by-email
   "Get a user entity by email."

@@ -346,8 +346,8 @@
   (observability/NextDetailedResponseView message diagnostics dataset-config on-select-chunk))
 (defn agent-status-messages [diagnostics] (common/agent-status-messages diagnostics))
 (e/defn DiagnosticsChunkModal [id d c oc] (base/DiagnosticsChunkModal id d c oc))
-(e/defn DiagnosticsChunkPanel [id d c oc position total on-previous on-next]
-  (base/DiagnosticsChunkPanel id d c oc position total on-previous on-next))
+(e/defn DiagnosticsChunkPanel [id d c oc position total on-previous on-next tenant]
+  (base/DiagnosticsChunkPanel id d c oc position total on-previous on-next tenant))
 (defn normalize-debug-playground-mode [mode] (common/normalize-debug-playground-mode mode))
 
 (def source-title-ellipsis-style base/source-title-ellipsis-style)
@@ -1989,7 +1989,10 @@
                  (fn [current] (max 0 (dec (or current 0)))))
          #(swap! !playground-chat-state update :reference-index
                  (fn [current] (min (dec total)
-                                    (inc (or current 0)))))))))))
+                                    (inc (or current 0)))))
+         ;; #479/#516: the tenant Typesense is resolved through. Without it
+         ;; make-ts-settings throws and every fetch in this panel returns nil.
+         (:effective-selected-tenant derived)))))))
 
 (e/defn PlaygroundChatFull
   "Multi-message chat playground with persistence and diagnostics."
@@ -2076,9 +2079,18 @@
          ;; thunk avoids the bad watch and runs on the offload thread.
          ;; Re-runs naturally when the conversation/execution refresh inputs
          ;; below change.
-         all-messages (when conversation-id
-                        (e/server
-                         (let [convo-id (e/client conversation-id)
+         ;; ⚠️ THE e/server FRAME STAYS MOUNTED; THE GUARD IS INSIDE IT (#525).
+         ;; Written as `(when conversation-id (e/server ...))`, the nil ->
+         ;; non-nil transition MOUNTED A NEW e/server frame that transferred
+         ;; the very value the condition had just tested. The fresh frame emits
+         ;; a grow-from-empty for a slot the session already holds one element
+         ;; for, and the runtime dies applying it:
+         ;;   :diff-corruption ... {:degree 1 :grow 1 :session-size 1}
+         ;; Value -> value never did this; only nil -> value, which is why it
+         ;; only ever bit a send that CREATES a conversation.
+         all-messages (e/server
+                        (when-some [convo-id (e/client conversation-id)]
+                         (let [
                                ;; Reactive refetch trigger: track the
                                ;; current execution's :status and
                                ;; :assistant-msg-id. Without this hook,

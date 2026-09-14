@@ -45,12 +45,19 @@ LLM provider, admin emails) is only needed once you try to run a real query
 or log in.
 
 **Set these in `mise.local.toml` (gitignored) or in your shell profile — not
-in a `.env` file.** Nothing in this repo reads `.env`: `mise.toml` carries no
+in a `.env` file.** Nothing *on this path* reads `.env`: `mise.toml` carries no
 `_.file` directive and no other loader picks one up, so a filled-in `.env` is
 silently ignored and you meet the boot pre-flight several steps later with no
 reason to suspect the file (#302). `.env.example` (repo root) is still worth
 opening — it is the annotated catalog of every variable, grouped by when you
-need it — but read it as a reference list, not as a file to copy into place.
+need it — but on this path read it as a reference list, not as a file to copy
+into place.
+
+> **The container path is the exception, and it is the opposite.**
+> `docker-compose.newcomer.yml` declares `env_file: .env`, so there a `.env`
+> *is* read — by docker compose, not by the JVM — and `cp .env.example .env` is
+> the documented first step (§4b). Which rule applies is decided by how you
+> start the server, not by the file.
 
 **Database — pick one:**
 
@@ -151,11 +158,37 @@ weren't previously written down together.
 
 1. **Boot minimum is set** (§3): `DATAHIKE_FILE_PATH`, `CONFIG_MASTER_KEY`,
    `JWT_SECRET`.
-2. **Import the committed config snapshot** — datasets, dataset-pipelines,
-   config definitions, and the built-in agents, but **no API key**:
+2. **Import the committed config snapshot** — config definitions and the
+   built-in agents, but **no tenant, no dataset and no API key**:
 
    ```sh
    bb migration-import config/system-import.normalized.20260821.json
+   ```
+
+   ⚠️ **The snapshot ships no tenant, so this is two commands rather than one.**
+   It used to carry the `digdir` and `public-sector-knowledge` tenants — our own
+   deployment's configuration, which does not belong in the product. Give
+   yourself the shipped demo tenant:
+
+   ```sh
+   bb demo-tenant
+   ```
+
+   The demo tenant is **deliberately seeded by a command rather than authored
+   into the snapshot**: the snapshot is a generated export, so hand-written rows
+   in it would survive only until somebody regenerated it, and then vanish
+   without a sound.
+
+   After these two you have a working tenant and **no datasets**, which is the
+   intended state — asking a question returns a `404` naming the next step. That
+   is deliberate: seeding a dataset whose corpus has not been fetched answers
+   unhelpfully with no sign that a step remains (#473), which is worse than an
+   error that tells you what to do. To go further now, fetch the corpus and seed
+   the dataset together:
+
+   ```sh
+   bb demo-corpus     # 352 Wikipedia articles, nothing is checked in
+   bb demo-seed       # the demo tenant AND its dataset
    ```
 
    The import also **writes whatever service config you already have in the
@@ -291,12 +324,109 @@ The whole flow, start to finish:
    and the same code appears in the `bb dev` log tagged `[dev-login]`.
 4. Click **Log in** → you get an `auth-token` cookie and land in the admin UI.
 
-The fallback is **dev-only and cannot be switched on in production**: it is
-armed exclusively from `server/src-dev/dev.cljc`, and `src-dev` is on the
+The fallback is **off by default outside dev**. In dev it is armed
+unconditionally from `server/src-dev/dev.cljc`, and `src-dev` is on the
 classpath of the `:dev` and `:test` aliases only — a production build carries
 `src-prod` instead (see `server/deps.edn`). It also stays out of the way if you
 *do* have credentials: when the email service is configured, the code is mailed
 as normal, and the log fallback only kicks in if that send fails.
+
+> ⚠️ **Corrected (#436).** This section used to say the fallback *"cannot be
+> switched on in production"*. That is no longer true, and the sentence is
+> corrected rather than deleted because it is exactly the kind someone relies
+> on. A production build can arm it, but only when an operator sets
+> `DIGDIR_LOG_CONFIRMATION_CODES=true` — see the container section below.
+
+### First login in a container (a fresh deployment)
+
+The dev instructions above assume `bb`, a source tree and `bb setup`. A
+container has none of those: `/app` holds one file, `app.jar`. Before #436 a
+fresh deployment could not be logged into at all — **two gates, stacked**:
+
+1. `perms/can-login?` runs **before** the code is delivered, so an empty
+   database is rejected at `302 /not-approved` and the mail path is never
+   reached. There is no administrator to contact, because there is no
+   administrator.
+2. The log fallback above was armed only from `src-dev`, which the uberjar
+   does not contain — so even past gate 1, the code had nowhere to go.
+
+Both are addressed by explicit operator commands, never by anything automatic:
+
+```bash
+# 1. Name who may claim this instance, on the HOST, in .env.
+#    .env.example ships this line COMMENTED OUT. Editing the address but
+#    leaving the leading `#` is indistinguishable from never setting it:
+#    step 2 refuses with "ADMIN_USER_EMAILS is empty" and nothing says why.
+#    `./scripts/setup-env.sh` asks for it and writes it uncommented.
+ADMIN_USER_EMAILS=you@example.com
+
+# 2. Seed the database and create that account — BEFORE the server starts.
+#    Both are second-JVM writers and neither survives a running server; see
+#    the warning below. `run --rm` executes in a one-off container, which is
+#    what lets these run with no server up. Requires shell access to the
+#    container, which is the authority being exercised: nothing on the HTTP
+#    surface can do it.
+docker compose -f docker-compose.newcomer.yml run --rm digdir-rag \
+  java -cp /app/app.jar clojure.main -m digdir.setup.bootstrap
+
+docker compose -f docker-compose.newcomer.yml run --rm digdir-rag \
+  java -cp /app/app.jar clojure.main -m digdir.setup.first-admin
+
+# 3. Now start the server. There is NO restart step — see below.
+docker compose -f docker-compose.newcomer.yml up -d
+```
+
+> ⚠️ **Seed before the server starts. There is no restart step, and the advice
+> to restart that used to be here was wrong.**
+>
+> These commands open the Datahike file store in a **second JVM**. With the
+> server already running, the write does not survive — and the command
+> **reports success either way**, which is what makes it dangerous. Measured on
+> two independent fresh container stacks: `first-admin` printed
+> `[CREATED] … ✔ created 1` and the account did not exist afterwards; a second
+> JVM reading the same store reported `can-login? -> false` and zero admins
+> immediately after, and again 45 s later.
+>
+> Seeded with the server **down**, the identical command persists — a re-run
+> reports `[SKIPPED] Already has admin-full` — and on a fresh volume **login
+> succeeds on the first attempt, with no restart at all** (`302
+> /auth/confirm-email` straight away).
+>
+> ⇒ So correct ordering **deletes** the restart step rather than improving the
+> advice about when to restart. The old text here claimed the account existed
+> but was merely unseen until the server reconnected, citing a
+> `can-login? -> true` reading that does not reproduce. There is nothing for a
+> restart to recover.
+>
+> `digdir.setup.first-admin` (#436) is a **restatement** of this passage in a
+> code comment; both are corrected together under #526. The exact mechanism —
+> whether the write never lands or is clobbered by the server's next write — is
+> still being pinned down in #537 and #538, which currently describe it
+> differently; the observed behaviour above is what you can rely on.
+>
+> Every setup entry point now **refuses** rather than documenting this: #538
+> probes `/up` on three addresses (inside the container, a sibling `run`
+> container, and the host's `HTTP_PORT`) and exits 1 if a server answers.
+> `DIGDIR_ALLOW_SEED_WITH_SERVER_RUNNING=true` overrides it, mirroring
+> `DIGDIR_ALLOW_PLACEHOLDER_SECRETS`.
+
+`ADMIN_USER_EMAILS` is **not** a new mechanism — it already existed and was
+already bridged to `services.auth.admin-user-emails`. Note the trap it carries:
+**one variable, two consumers, opposite behaviour.** The boot-time hook
+(`permissions/sync-admin-permissions!`) only *grants* to users that already
+exist, so on an empty database it prints `User not found` and continues, which
+reads as a dead end. The command above *creates* them.
+
+For a local stack with no mail service, add:
+
+```bash
+DIGDIR_LOG_CONFIRMATION_CODES=true
+```
+
+and read the code from the server log, tagged `[dev-login]` exactly as in dev.
+**Do not set this on a deployment anyone else can reach** — an armed instance
+writes login codes to its own log, so anyone who can read logs can complete a
+login as any permitted user. It warns loudly on every boot for that reason.
 
 If you only need API access and not the web UI, the `E2E_API_KEY` auto-seed in
 step 3 above is still the shortest path.
@@ -319,7 +449,7 @@ switch that decides which client the family configures:
 
 | Switch | Client | Endpoint from | Key from | Model from |
 | --- | --- | --- | --- | --- |
-| `true` (shipped default) | wkok's Azure client (`:impl :azure`) | `services.azure-openai.api-endpoint` | `services.azure-openai.api-key` | `services.azure-openai.deployment-name` |
+| `true` (must be set explicitly — unset is NOT this row) | wkok's Azure client (`:impl :azure`) | `services.azure-openai.api-endpoint` | `services.azure-openai.api-key` | `services.azure-openai.deployment-name` |
 | `false` | `digdir.llm.client` — a plain OpenAI-compatible POST | **`OPENAI_API_ENDPOINT`** (environment) | **`OPENAI_API_KEY`** (environment) | `services.azure-openai.model-name` |
 
 Nothing renames when you flip the switch. A config family named after Azure is
@@ -478,7 +608,8 @@ credentials, calling `tools/call` on `builtin.agent-rag-agent__agent-rag-graph-b
 
 | What is wrong | What you see |
 | --- | --- |
-| Nothing changed yet — the shipped `use-azure-openai-api true` with no Azure key | `LLM request failed at iteration 0 (status 401): Interceptor Exception: status: 401` |
+| Nothing changed yet — switch UNSET, which since #500 means the OpenAI-compatible path, not Azure | `LLM request failed at iteration 0: Missing secret :openai-api-key: set OPENAI_API_KEY. Tried [:env].` |
+| Switch explicitly `true`, no Azure key (what "nothing changed yet" used to mean, when a value was still shipped) | `LLM request failed at iteration 0 (status 401): Interceptor Exception: status: 401` |
 | Switch flipped, **neither** variable set | `LLM request failed at iteration 0: Missing secret :openai-api-key: set OPENAI_API_KEY. Tried [:env].` |
 | `OPENAI_API_KEY` set, **`OPENAI_API_ENDPOINT` missing** | `LLM request failed at iteration 0 (status 401): clj-http: status 401` |
 | Everything set correctly | a real answer |
@@ -517,6 +648,164 @@ from `/v1/models` even when it seems not to matter.
   `tools/call` (`qwen/qwen3-8b` in LM Studio, Apple M4 Max), almost all of it in
   the agent-iteration stage. No cloud comparison was run, so treat that as one
   data point on one machine, not a ratio.
+
+## 4b. See it answer in a chat UI — Open WebUI
+
+Everything above reaches the system by composing an HTTP request. That is the
+right way to *learn* the surface and a poor way to *see whether it works*: a
+`/api/mcp` call needs three mirrored request-metadata headers a newcomer has no
+way to guess ([`mcp.md`](../server/docs/api/endpoints/mcp.md)), and getting one
+wrong returns `400` rather than an answer.
+
+So the newcomer stack ships a chat UI. Nothing extra to run — it is a service in
+the same compose file as the backend:
+
+```sh
+cp .env.example .env
+./scripts/setup-env.sh          # generates the three local secrets
+
+# setup-env.sh generates CONFIG_MASTER_KEY, JWT_SECRET and
+# TYPESENSE_API_KEY_ADMIN, and skips the Azure prompts when nothing is
+# attached to a terminal. It does NOT invent an Azure key, so ONE placeholder
+# remains — and the boot check counts it. Measured: without the line below the
+# server refuses to start with
+# "1 secret(s) still hold their .env.example placeholder — AZURE_OPENAI_API_KEY".
+#
+# For THIS walkthrough that placeholder is the point: §4b stops at dataset
+# resolution, before any LLM call, so a real Azure key would change nothing you
+# are about to see.
+echo 'DIGDIR_ALLOW_PLACEHOLDER_SECRETS=true' >> .env
+
+docker compose -f docker-compose.newcomer.yml up --build
+```
+
+> ⚠️ **Run the script; do not skip it and set the flag alone.** Both boot, and
+> they are not equivalent: the flag on its own ships a stack whose master key,
+> JWT secret and Typesense admin key are the strings in `.env.example`, which
+> anyone with a clone can read. The script means the override covers exactly one
+> value that is not a credential to anything you are running.
+>
+> **And the flag is for a loopback-only stack you are about to throw away.**
+> Before this port is reachable from anywhere else, supply a real
+> `AZURE_OPENAI_API_KEY` and drop the flag. Without it the boot refuses and
+> names exactly which secrets are still placeholders, which is the behaviour you
+> want everywhere except here.
+
+| Service | Where | What it is |
+| --- | --- | --- |
+| `digdir-rag` | <http://localhost:8080> | the backend and its admin UI |
+| `open-webui` | <http://localhost:3030> | [Open WebUI](https://github.com/open-webui/open-webui) — pick an agent from the model dropdown and ask it something |
+| `typesense` | (no host port) | the search backend |
+
+The model dropdown is populated on boot, with no visit to Settings: the stack
+seeds an API key (`E2E_API_KEY`, defaulted in the compose file) and points Open
+WebUI at the backend, which advertises **one model per (agent × mode) pair** —
+13 of them on a fresh database.
+
+**The dropdown filling is as far as a fresh stack gets, and you should know
+where it stops before you type a question.** Measured on this exact stack, not
+inferred — asking anything returns:
+
+```json
+{"error":{"message":"No datasets are configured for this tenant. No datasets are configured yet. Create one, or run the demo corpus import, before querying.",
+          "type":"invalid_request_error","param":null,"code":"no-datasets-configured"}}
+```
+
+…with HTTP **404**, not 500.
+
+That is **not** "the corpus is empty, so the agent found nothing". It fails
+*earlier* than that, at dataset resolution, before any search and before any LLM
+call — so the placeholder `AZURE_OPENAI_API_KEY` your `.env` was copied with is
+not what stops you either. It is the same wall every other path in this repo
+meets on a fresh database (§7) — and it now reports itself as one. #492 fixed the
+crash that made every failed dataset resolution a 500 (a tenant string handed to a
+function that reduces over a collection), and #434 classified what remains: a
+named `no-datasets-configured` code, a 404, and a next step in the message rather
+than an invitation to the issue tracker. What corpus a newcomer should start with
+is an open product question — #328.
+
+So what §4b buys you is the wiring, proven end to end: auth, agent discovery,
+the model surface, and a real third-party client that renders it. Materialise a
+dataset and the same chat box answers.
+
+### Why Open WebUI, specifically
+
+Two reasons, and only the second is about onboarding.
+
+1. **It is a client we did not write.** Every other check in this repo is our
+   code calling our code — a `curl` we composed against a contract we authored.
+   Open WebUI is an ordinary third-party client with its own idea of what an
+   OpenAI-compatible endpoint owes it, so it fails on divergences our own tests
+   are constitutionally unable to notice. That is worth more than the demo.
+2. **It converts "is this alive" into a chat box**, which is the question a
+   newcomer actually has on day one.
+
+### How it attaches — two surfaces, neither of them MCP
+
+An agent is reachable as two different things, and the stack wires both:
+
+| | Open WebUI calls it | The agent is | Good for |
+| --- | --- | --- | --- |
+| [`/v1`](../server/docs/api/endpoints/openai-compat.md) | a **model** | the whole conversation | asking the RAG system a question |
+| [`/api/tools/openapi.json`](../server/docs/api/endpoints/openapi-tools.md) | a **tool** | one capability another model calls | letting some other model reach our corpus mid-answer |
+
+Neither goes through MCP, and that is measured rather than preferred.
+**As of 2026-09-01 Open WebUI cannot be an MCP client of this server by either
+route it offers:**
+
+| Route | Result |
+| --- | --- |
+| [MCPO](https://github.com/open-webui/mcpo) (the MCP→OpenAPI bridge the e2e stack used to run) | ❌ opens with `initialize`, gets `400` / `-32022`, crashes, and serves an empty tool list — `{"paths":{}}` |
+| Open WebUI 0.11.3's own native MCP client | ❌ `POST /api/mcp` → `400`; the UI reports *"Failed to create MCP client"* |
+| *Control* — that same Open WebUI verify path against the official MCP `everything` server | ✅ `200`, full tool list |
+
+The control is the point: the failure is ours, not the harness's. Both routes
+build on the **v1-era** Python MCP SDK, whose `ClientSession.initialize()` is a
+mandatory opening — and this server implements MCP revision `2026-07-28`, which
+has no handshake. Open WebUI has no fall-forward path, so it cannot recover.
+
+**The tools half is the interesting one, because it did not have to stay
+broken.** MCPO existed only to translate MCP into OpenAPI so Open WebUI could
+tool-call our agents. We own the server, so the backend now renders that
+OpenAPI itself — same tools, same `list-tools`/`invoke-tool` code path as
+`/api/mcp`, no bridge container and no unmaintained dependency in between.
+`server/e2e/README.md` has the working: a dependency bump does not fix MCPO,
+and MCPO has had no commit since 2026-02-27.
+
+### If you specifically want an MCP client, use a modern one
+
+**Do not read the table above as "MCP clients cannot talk to this server."** It
+says Open WebUI cannot, and the reason is the SDK era it pins rather than
+anything about the revision.
+
+A modern client works, and this was run rather than argued. The MCP Python
+SDK's own reference client at **2.1.1**, `Client(mode="auto")`, against
+`http://digdir-rag:8080/api/mcp`:
+
+```text
+negotiated protocol_version: 2026-07-28
+server_info: name='digdir-rag' version='1.0'
+tools: 13
+calling: builtin.retrieve-only-agent__retrieve-only
+  → MCPError -32603: No datasets are configured for this tenant
+```
+
+`server/discover`, `tools/list` and `tools/call` all dispatch cleanly. The one
+error is the empty corpus again — the same wall as above, reached *through* the
+protocol rather than instead of it. Note what that proves in passing: a
+third-party client's `tools/call` does carry the mirrored `Mcp-Name` header, so
+our request-metadata contract is not an adoption barrier.
+
+That is the same SDK Open WebUI and MCPO are built on, one major version later.
+
+[Chatbox](https://github.com/chatboxai/chatbox) 1.23.0 negotiates the same
+revision and is the client to reach for if you want a GUI over MCP rather than
+over `/v1`. Point it at `http://localhost:8080/api/mcp` with an `X-API-Key`
+header. It is a desktop Electron app, so it cannot be a service in the compose
+stack — that is the trade.
+
+So the split is deliberate: **Open WebUI for the chat UI, over `/v1`, in the
+box; a modern MCP client for the MCP surface, outside it.**
 
 ## 5. Day-one `bb` tasks
 

@@ -9,61 +9,39 @@ name: digdir-rag-host
 #
 # Prereq:
 #   1. bb dev running with E2E_API_KEY env var matching server/e2e/.env's
-#      E2E_API_KEY (so digdir.e2e.seed/maybe-seed! stores the API key MCPO
-#      will use).
+#      E2E_API_KEY (so digdir.e2e.seed/maybe-seed! stores the API key Open
+#      WebUI will use for both surfaces below).
 #   2. server/e2e/.env present (copy .env.example and fill in E2E_API_KEY).
 
 services:
-  mcpo:
-    # Bridge Streamable-HTTP MCP <-> OpenAPI for Open WebUI.
-    # Points at host.docker.internal:8181/api/mcp (the host's bb dev).
-    image: ghcr.io/open-webui/mcpo:latest
-    container_name: digdir-rag-mcpo-host
-    env_file:
-      - .env
-    volumes:
-      - ./mcpo/config-host.json.template:/app/config.json.template:ro
-    entrypoint:
-      - sh
-      - -c
-      - |
-        sed "s|\$${E2E_API_KEY}|$$E2E_API_KEY|g" \
-          /app/config.json.template > /tmp/config.json
-        exec mcpo --config /tmp/config.json --host 0.0.0.0 --port 8765
-    ports:
-      - "8765:8765"
-    extra_hosts:
-      # Required for host.docker.internal to resolve on Linux Docker.
-      # Docker Desktop on macOS/Windows resolves it natively; the
-      # mapping is a no-op there.
-      - "host.docker.internal:host-gateway"
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8765/openapi.json"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
+  # ⚠️ THE `mcpo` SERVICE IS GONE — see docker-compose.e2e.yml for why. Both
+  # surfaces below now come straight from the host's `bb dev`, so this stack is
+  # a single container.
 
   open-webui:
-    image: ghcr.io/open-webui/open-webui:0.6.18
+    image: ghcr.io/open-webui/open-webui:0.11.3
     container_name: digdir-rag-openwebui-host
-    depends_on:
-      mcpo:
-        condition: service_healthy
+    env_file:
+      - .env
     environment:
-      # Auto-discover agents as OpenAI-compatible models via the host
-      # bb dev's /v1 surface. OWUI fetches /v1/models on boot and
-      # populates the "Select a model" dropdown — no manual Settings
-      # click required.
+      # Agents as MODELS. OWUI fetches /v1/models on boot and populates the
+      # "Select a model" dropdown — no manual Settings click required.
       OPENAI_API_BASE_URLS: "http://host.docker.internal:8181/v1"
       OPENAI_API_KEYS: "${E2E_API_KEY}"
-      # Also keep the OpenAPI tools surface for clients that want
-      # tool-calling instead of agent-as-model. Both work
-      # side-by-side.
-      OPENAPI_SERVERS: '[{"url":"http://mcpo:8765","label":"digdir-rag"}]'
+      # Agents as TOOLS, for tool-calling instead of agent-as-model. Both work
+      # side by side. This used to require the MCPO container; the backend now
+      # renders the same tools as OpenAPI itself.
+      TOOL_SERVER_CONNECTIONS: '[{"url":"http://host.docker.internal:8181","path":"/api/tools/openapi.json","type":"openapi","auth_type":"bearer","key":"${E2E_API_KEY}","config":{"enable":true},"info":{"id":"digdir-rag","name":"digdir-rag"}}]'
+      ENABLE_OLLAMA_API: "false"
       # Disable auth for local dev. Don't expose this port to a network
       # you don't trust.
       WEBUI_AUTH: "false"
-      DEFAULT_USER_ROLE: "admin"
+    extra_hosts:
+      # Required for host.docker.internal to resolve on Linux Docker.
+      # Docker Desktop on macOS/Windows resolves it natively; the
+      # mapping is a no-op there. It moved here from the deleted mcpo
+      # service — this is the container that needs it now.
+      - "host.docker.internal:host-gateway"
     ports:
       # Default 3030 host port to avoid the common 3000 collision.
       # Override with OPENWEBUI_PORT=... in .env if 3030 is also taken.

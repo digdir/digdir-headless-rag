@@ -448,8 +448,21 @@
 ;;
 ;; The switch is off by default and is only ever flipped by `src-dev/dev.cljc`.
 ;; `src-dev` is on the classpath of the :dev and :test aliases only — the :prod
-;; alias carries `src-prod` instead (see server/deps.edn) — so a production
-;; build contains no code path that can turn this on.
+;; alias carries `src-prod` instead (see server/deps.edn) — so `dev.cljc`'s
+;; unconditional arming cannot happen in a production build.
+;;
+;; ⚠️ CORRECTED (#436): a production build IS now able to turn this on, but
+;; only when an operator sets DIGDIR_LOG_CONFIRMATION_CODES=true, which
+;; `prod.cljc` reads and warns about on every boot. It is off by default and
+;; nothing on the HTTP surface can set it.
+;;
+;; That change was necessary rather than convenient: `src-dev` not being in
+;; the uberjar meant the fallback existed in the image and was unreachable
+;; from it, so a fresh containerised deployment had no way to complete a login
+;; without a configured mail service — the second of the two gates in #436.
+;; The previous wording said a production build "contains no code path that
+;; can turn this on", which is exactly the sentence someone would rely on; it
+;; is left corrected rather than deleted so the change is visible.
 
 (defonce ^:private !dev-confirmation-code-logging (atom false))
 
@@ -459,8 +472,11 @@
   @!dev-confirmation-code-logging)
 
 (defn set-dev-confirmation-code-logging!
-  "Arm/disarm the dev confirmation-code fallback. Called from the dev
-   entrypoint; unreachable from a production build (see the comment above)."
+  "Arm/disarm the confirmation-code log fallback.
+
+   Called unconditionally from the dev entrypoint, and from `prod.cljc` only
+   when DIGDIR_LOG_CONFIRMATION_CODES=true (#436). Off by default in a
+   production build; see the comment above."
   [enabled?]
   (reset! !dev-confirmation-code-logging (boolean enabled?)))
 

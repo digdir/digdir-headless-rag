@@ -1,4 +1,5 @@
-# The newcomer stack: the whole backend, with Docker as the only prerequisite.
+# The newcomer stack: the whole backend AND a chat UI, with Docker as the only
+# prerequisite.
 #
 # WHAT THIS IS FOR, AND HOW IT DIFFERS FROM THE OTHER TWO COMPOSE FILES:
 #
@@ -6,13 +7,44 @@
 #                                and needs the mise-pinned toolchain. This is
 #                                the file to use while DEVELOPING.
 #   server/e2e/docker-compose.e2e.yml
-#                                the server in a container, plus mcpo and
-#                                open-webui, for Playwright end-to-end runs. It
-#                                has NO Typesense, so retrieval cannot work there
-#                                — measured, see #328.
-#   THIS FILE                    the server AND its search backend, targeted at
-#                                somebody who has just cloned the repo and
-#                                installed nothing but Docker.
+#                                the server in a container plus open-webui, for
+#                                Playwright end-to-end runs. It has NO
+#                                Typesense, so retrieval cannot work there —
+#                                measured, see #328.
+#   THIS FILE                    the server, its search backend AND Open WebUI,
+#                                targeted at somebody who has just cloned the
+#                                repo and installed nothing but Docker.
+#
+# WHY OPEN WEBUI IS PART OF THE NEWCOMER STACK RATHER THAN A SEPARATE DEMO.
+# Before this, the only way to see the thing answer was to compose an HTTP
+# request by hand — a `/api/mcp` POST needs three mirrored request-metadata
+# headers that a newcomer has no way to guess (see
+# server/docs/api/endpoints/mcp.md). Open WebUI turns "is this thing alive"
+# into a chat box, and it is the one client that exercises the surface a real
+# integrator would use rather than a curl we wrote ourselves.
+#
+# IT ATTACHES TWICE, because an agent is reachable as two different things:
+#
+#   /v1                       each agent is a MODEL — it IS the conversation.
+#   /api/tools/openapi.json   each agent is a TOOL — some other model runs the
+#                             conversation and calls our RAG when it needs to.
+#
+# NEITHER IS MCP, and that is measured rather than preferred: as of 2026-09-01
+# Open WebUI cannot be an MCP client of this server by either route it offers.
+# MCPO (the MCP→OpenAPI bridge) and Open WebUI's own native MCP client both use
+# the v1-era Python MCP SDK, whose `ClientSession.initialize()` is a mandatory
+# opening; this server implements MCP 2026-07-28, which has no handshake, so it
+# answers 400 / -32022 and their client crashes with an empty tool list.
+#
+# THAT IS CLIENT LAG, NOT A PROTOCOL DEAD END. The same SDK's v2 reference
+# client negotiates 2026-07-28 against this server and round-trips a
+# `tools/call` fine.
+#
+# The tools half did not have to stay broken, and did not: MCPO existed only to
+# translate MCP into OpenAPI, and we own the server, so the backend renders
+# that OpenAPI itself — same tools, same list-tools/invoke-tool code path as
+# /api/mcp, no bridge container. See server/e2e/README.md and
+# docs/onboarding.md §4b.
 #
 # ⚠️ IT REUSES server.Dockerfile RATHER THAN DEFINING ITS OWN.
 # That is deliberate and load-bearing: a newcomer-specific Dockerfile would drift
@@ -66,7 +98,12 @@ services:
     build:
       context: .
       dockerfile: server.Dockerfile
-    image: digdir-rag-server:newcomer
+    # Same override the corpus-fetch service below already honours. That one
+    # had it and this one did not, so DIGDIR_RAG_IMAGE moved one service and
+    # not the other — and because the tag is daemon-global while compose scopes
+    # only containers and volumes, a build here silently rewrote the default tag
+    # every other stack on the machine also uses. The default is unchanged.
+    image: ${DIGDIR_RAG_IMAGE:-digdir-rag-server:newcomer}
     container_name: digdir-rag-newcomer
     depends_on:
       typesense:
@@ -89,18 +126,171 @@ services:
       # Overrides whatever .env says: inside the container the database lives on
       # the named volume below, not wherever the host copy of .env points.
       DATAHIKE_FILE_PATH: /var/lib/digdir/db
-      TENANT: ${TENANT:-digdir}
-      DATASET_CONFIG_KEY: ${DATASET_CONFIG_KEY:-public-docs}
+      # The product ships the `demo` tenant only; `digdir` is no longer in the
+      # config snapshot, so defaulting to it would boot pointing at nothing.
+      TENANT: ${TENANT:-demo}
+      # Must match what the demo seeder creates — digdir.setup.demo-dataset/demo-dataset-id.
+      # It said `public-docs` while the seeder created `norquad-docs`, so a newcomer who
+      # did everything right got "Dataset ref does not match any configured dataset" (#499).
+      # `newcomer-stack-defaults-test` now pins the two together.
+      DATASET_CONFIG_KEY: ${DATASET_CONFIG_KEY:-norquad-docs}
+      # Seeds the built-in agents and stores this exact plaintext as an API key
+      # on first boot (digdir.e2e.seed/maybe-seed!, gated on this variable being
+      # non-empty; a no-op in production, where it is never set). Open WebUI
+      # below authenticates with the SAME value, which is why it is supplied
+      # here with a default rather than left to .env: the two services must
+      # agree, and a newcomer whose .env omits it would otherwise get a chat UI
+      # with an empty model list and no indication why.
+      #
+      # The default is a LOCAL DEV PLACEHOLDER, on the same footing as
+      # docker-compose.dev.yml's `dev-typesense-key`: intentionally committed,
+      # intentionally worthless, guarding a loopback-only stack. Override it in
+      # .env for anything that is not your own laptop.
+      E2E_API_KEY: ${E2E_API_KEY:-rag_7f1a8b53f51894c20bcd8145c44501f92c148fc50c7664ee819162a01b58edd3}
     volumes:
       - digdir-db:/var/lib/digdir
+      # #495: the search-phrase cache. Every chunk's phrases are generated by an
+      # LLM call, so an un-mounted cache means a container recreation silently
+      # re-buys the entire corpus — ~4,800 calls for the demo alone. `deploy.yml`
+      # has mounted /app/cache since it shipped; this file did not, which is why
+      # re-materialising here has been expensive and re-materialising in
+      # production has not. The path matches the `cache/` root the loaders use
+      # relative to WORKDIR /app.
+      - digdir-cache:/app/cache
+      # #556: the demo corpus, which the container had no way to see. The demo
+      # dataset is seeded with `./demo-corpus`, and that resolves against the
+      # JVM's cwd — WORKDIR /app — so the container looked for /app/demo-corpus
+      # and found nothing. `bb demo-corpus` fetches to the HOST, so without this
+      # mount a materialization ran against a path that did not exist.
+      #
+      # It used to COMPLETE with 0 documents and no error, which is why nobody
+      # noticed. The loader now refuses instead (digdir.docs.folder), so the
+      # worst case here is a loud failure naming the resolved absolute path
+      # rather than a silent success.
+      #
+      # Read-only: nothing in the pipeline writes to the corpus, and a loader
+      # bug should not be able to damage a corpus that costs 352 Wikipedia
+      # fetches to rebuild. Same DEMO_CORPUS_DIR the seeder reads, so pointing
+      # one at a different directory points both.
+      - ${DEMO_CORPUS_DIR:-./demo-corpus}:/app/demo-corpus:ro
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/up"]
+      # ⚠️ NOT `/up`, and the reason is the whole point of this file's history.
+      #
+      # `/up` answers as soon as Jetty is listening — before the skills registry
+      # is initialised. `depends_on: service_healthy` then releases Open WebUI,
+      # whose first fetch of the tool document hits a cold `list-tools`, times
+      # out against its default tool-server timeout, and logs
+      # `Initialized 0 tool server(s)`. Observed exactly that. It recovers on a
+      # later fetch, so the stack works — it just greets a newcomer with an
+      # ERROR line and a briefly empty tool list.
+      #
+      # This is the same defect as MCPO's old healthcheck, which GET'd a page
+      # that returned 200 with nothing behind it: a check that passes before
+      # the thing it gates is ready. So check the surface the dependent
+      # actually needs. Warm, this endpoint answers in ~65ms.
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS -o /dev/null
+          -H "Authorization: Bearer $$E2E_API_KEY"
+          http://localhost:8080/api/tools/openapi.json
       interval: 5s
-      timeout: 3s
+      timeout: 10s
       retries: 30
+
+  # ---------------------------------------------------------------------------
+  # Fetching the demo corpus, from the image (#yardarm-fetch-in-image)
+  # ---------------------------------------------------------------------------
+  # `docker compose --profile fetch run --rm corpus-fetch`
+  #
+  # A SEPARATE SERVICE ON PURPOSE, for one reason: the server mounts the corpus
+  # READ-ONLY, which is right for the server and wrong for the thing that writes
+  # it. Reusing digdir-rag would have failed inside the fetch as a permissions
+  # error, which reads like a broken container rather than a deliberate mount
+  # choice. This service mounts the SAME host directory read-WRITE and does
+  # nothing else.
+  #
+  # `profiles:` keeps it out of `docker compose up` — it is a one-shot job, not
+  # part of the running stack, and it must not be started or restarted with the
+  # others.
+  #
+  # No `depends_on`: the fetch talks to Wikipedia and HuggingFace and needs
+  # neither Typesense nor the database. It is the FIRST thing a newcomer runs,
+  # before anything else exists.
+  corpus-fetch:
+    profiles: ["fetch"]
+    build:
+      context: .
+      dockerfile: server.Dockerfile
+    image: ${DIGDIR_RAG_IMAGE:-digdir-rag-server:newcomer}
+    entrypoint: ["java", "-cp", "/app/app.jar", "clojure.main",
+                 "-m", "digdir.corpus.rehydrate-norquad", "/app/demo-corpus"]
+    volumes:
+      # READ-WRITE, unlike the server's mount of the same directory.
+      - ${DEMO_CORPUS_DIR:-./demo-corpus}:/app/demo-corpus
+    restart: "no"
+
+  open-webui:
+    # Pinned, not `latest`, for the same reason Typesense is: a newcomer and a
+    # developer should hit the same UI. Open WebUI ships several releases a
+    # week and has rewritten its chat view at least once, so `latest` would
+    # make "it looked different for me" unanswerable.
+    image: ghcr.io/open-webui/open-webui:0.11.3
+    container_name: digdir-rag-openwebui-newcomer
+    depends_on:
+      digdir-rag:
+        condition: service_healthy
+    environment:
+      # Each agent × mode pair is advertised as an OpenAI model, so Open WebUI
+      # populates its model dropdown from GET /v1/models on boot with no visit
+      # to Settings. Container-to-container over the compose network — NOT
+      # localhost, which inside this container is Open WebUI itself.
+      OPENAI_API_BASE_URLS: "http://digdir-rag:8080/v1"
+      OPENAI_API_KEYS: "${E2E_API_KEY:-rag_7f1a8b53f51894c20bcd8145c44501f92c148fc50c7664ee819162a01b58edd3}"
+      # The SECOND way in, and a different product from the one above.
+      #
+      #   OPENAI_API_BASE_URLS  — each agent is a MODEL. The agent is the whole
+      #                           conversation; you pick it from the dropdown.
+      #   TOOL_SERVER_CONNECTIONS — each agent is a TOOL. Some other model runs
+      #                           the conversation and calls our RAG when it
+      #                           decides it needs to. This is what "MCP client"
+      #                           was meant to buy, and it needs no MCPO: the
+      #                           server renders its own OpenAPI at
+      #                           /api/tools/openapi.json.
+      #
+      # `config.enable` is not optional — Open WebUI's `get_tool_servers_data`
+      # skips any connection without it, silently, and the tool list is simply
+      # empty with nothing logged.
+      TOOL_SERVER_CONNECTIONS: '[{"url":"http://digdir-rag:8080","path":"/api/tools/openapi.json","type":"openapi","auth_type":"bearer","key":"${E2E_API_KEY:-rag_7f1a8b53f51894c20bcd8145c44501f92c148fc50c7664ee819162a01b58edd3}","config":{"enable":true},"info":{"id":"digdir-rag","name":"digdir-rag"}}]'
+      # Open WebUI probes Ollama on startup when this is left on, and the wait
+      # for a service nothing here runs shows up as a slow first paint.
+      ENABLE_OLLAMA_API: "false"
+      # No login wall on a stack that publishes to loopback only. This is the
+      # single setting to revisit before putting the port anywhere else: with
+      # it false, anyone who can reach the port is an admin.
+      WEBUI_AUTH: "false"
+    ports:
+      # 3030, NOT Open WebUI's own default of 3000. server/e2e/ reached the same
+      # conclusion first and its README says why — 3000 is what local node dev
+      # servers grab. Confirmed the hard way while writing this file: a host
+      # node process already held *:3000, `docker port` still reported
+      # `0.0.0.0:3000`, and a probe of localhost:3000 came back 200 — from the
+      # OTHER program. The publish had silently not taken. A collision here does
+      # not look like a collision; it looks like Open WebUI behaving strangely,
+      # so check WHAT answered (`/api/config` names itself) and not just that
+      # something did.
+      #
+      # Sharing 3030 with server/e2e/ costs nothing: that stack publishes 8080
+      # too, so the two can never run at the same time regardless. Override
+      # with OPENWEBUI_PORT in .env if 3030 is also taken.
+      - "${OPENWEBUI_PORT:-3030}:8080"
+    volumes:
+      - open-webui-data:/app/backend/data
 
 volumes:
   typesense-data:
   digdir-db:
+  digdir-cache:
+  open-webui-data:

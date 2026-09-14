@@ -28,6 +28,7 @@ The contract is dataset-first:
 | [Getting Started](./getting-started.md) | Quick start guide |
 | [Authentication](./authentication.md) | Auth and header requirements |
 | [OpenAI-Compatible API](./endpoints/openai-compat.md) | `/v1` — use any OpenAI client |
+| [OpenAPI Tool Server](./endpoints/openapi-tools.md) | `/api/tools` — let another model tool-call an agent |
 | [Datasets](./endpoints/datasets.md) | Public dataset endpoints |
 | [API Keys](./endpoints/api-keys.md) | Operator API key management |
 | [Pipelines](./endpoints/pipelines.md) | Operator dataset/materialization endpoints |
@@ -55,6 +56,8 @@ The contract is dataset-first:
 | [`/api/mcp`](./endpoints/mcp.md) | POST | Model Context Protocol — `tools/list`, `tools/call`, with optional SSE streaming |
 | [`/v1/models`](./endpoints/openai-compat.md) | GET | OpenAI-compatible — one model per agent × skill graph |
 | [`/v1/chat/completions`](./endpoints/openai-compat.md) | POST | OpenAI-compatible chat, blocking or SSE streaming |
+| [`/api/tools/openapi.json`](./endpoints/openapi-tools.md) | GET | OpenAPI document for the tools this key can reach |
+| [`/api/tools/call/:tool-name`](./endpoints/openapi-tools.md) | POST | Invoke one agent tool |
 | [`/api/datasets`](./endpoints/datasets.md) | GET | List visible datasets |
 | [`/api/datasets/:dataset-id`](./endpoints/datasets.md) | GET | Get one visible dataset |
 | [`/api/conversations`](./endpoints/conversations.md) | GET, POST | List or create conversations |
@@ -94,14 +97,14 @@ is refused with `dataset_not_authorized`. See
 Then, list the models:
 
 ```bash
-curl -sS https://admin.kunnskap.digdir.cloud/v1/models \
+curl -sS https://rag.digdir.cloud/v1/models \
   -H "Authorization: Bearer $DIGDIR_API_KEY"
 ```
 
 and chat with one, using an `id` from that response:
 
 ```bash
-curl -sS https://admin.kunnskap.digdir.cloud/v1/chat/completions \
+curl -sS https://rag.digdir.cloud/v1/chat/completions \
   -H "Authorization: Bearer $DIGDIR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -137,8 +140,8 @@ Need per-call dataset selection, citations, or progress events? Use
 
 | Environment | URL |
 |-------------|-----|
-| Production | `https://admin.kunnskap.digdir.cloud` |
-| Staging | `https://admin.staging.kunnskap.digdir.cloud` |
+| Production | `https://rag.digdir.cloud` |
+| Test | `https://test.rag.digdir.cloud` |
 
 ## Error Format
 
