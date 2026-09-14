@@ -40,7 +40,7 @@ When `tags` is supplied, the list only returns conversations that include every 
 ### Example Request
 
 ```bash
-curl -X GET "https://admin.kunnskap.digdir.cloud/api/conversations?page_size=10&page_index=0&tags=alpha,beta" \
+curl -X GET "https://rag.digdir.cloud/api/conversations?page_size=10&page_index=0&tags=alpha,beta" \
   -H "X-API-Key: rag_your_api_key" \
   -H "X-User-Id: customer-user-123"
 ```
@@ -101,7 +101,7 @@ Create a new conversation.
 ### Example Request
 
 ```bash
-curl -X POST https://admin.kunnskap.digdir.cloud/api/conversations \
+curl -X POST https://rag.digdir.cloud/api/conversations \
   -H "Content-Type: application/json" \
   -H "X-API-Key: rag_your_api_key" \
   -H "X-User-Id: customer-user-123" \
@@ -171,7 +171,7 @@ Get a specific conversation with all its messages.
 ### Example Request
 
 ```bash
-curl -X GET "https://admin.kunnskap.digdir.cloud/api/conversations/dPPIA0UWuF4JPMGBUDbjD?include_diagnostics=true" \
+curl -X GET "https://rag.digdir.cloud/api/conversations/dPPIA0UWuF4JPMGBUDbjD?include_diagnostics=true" \
   -H "X-API-Key: rag_your_api_key" \
   -H "X-User-Id: customer-user-123"
 ```
@@ -274,7 +274,7 @@ Update a conversation (e.g., rename).
 ### Example Request
 
 ```bash
-curl -X PUT https://admin.kunnskap.digdir.cloud/api/conversations/dPPIA0UWuF4JPMGBUDbjD \
+curl -X PUT https://rag.digdir.cloud/api/conversations/dPPIA0UWuF4JPMGBUDbjD \
   -H "Content-Type: application/json" \
   -H "X-API-Key: rag_your_api_key" \
   -H "X-User-Id: customer-user-123" \
@@ -318,7 +318,7 @@ Delete a conversation and all its messages.
 ### Example Request
 
 ```bash
-curl -X DELETE https://admin.kunnskap.digdir.cloud/api/conversations/dPPIA0UWuF4JPMGBUDbjD \
+curl -X DELETE https://rag.digdir.cloud/api/conversations/dPPIA0UWuF4JPMGBUDbjD \
   -H "X-API-Key: rag_your_api_key" \
   -H "X-User-Id: customer-user-123"
 ```

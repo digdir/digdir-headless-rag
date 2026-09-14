@@ -115,14 +115,14 @@ it.
 ### Public API Example
 
 ```bash
-curl -X GET https://admin.kunnskap.digdir.cloud/api/datasets \
+curl -X GET https://rag.digdir.cloud/api/datasets \
   -H "X-API-Key: rag_your_api_key_here"
 ```
 
 The same call with the Bearer form:
 
 ```bash
-curl -X GET https://admin.kunnskap.digdir.cloud/api/datasets \
+curl -X GET https://rag.digdir.cloud/api/datasets \
   -H "Authorization: Bearer rag_your_api_key_here"
 ```
 
@@ -201,7 +201,7 @@ Some Operator Console mutation routes also require `X-User-Email`:
 ### Operator Console Example
 
 ```bash
-curl -X GET https://admin.kunnskap.digdir.cloud/console-api/datasets \
+curl -X GET https://rag.digdir.cloud/console-api/datasets \
   --cookie "auth-token=YOUR_JWT_TOKEN"
 ```
 
@@ -217,7 +217,7 @@ API keys are created through the Operator Console surface, not the Public API.
 Example:
 
 ```bash
-curl -X POST https://admin.kunnskap.digdir.cloud/console-api/api-keys \
+curl -X POST https://rag.digdir.cloud/console-api/api-keys \
   -H "Content-Type: application/json" \
   --cookie "auth-token=YOUR_JWT_TOKEN" \
   -d '{

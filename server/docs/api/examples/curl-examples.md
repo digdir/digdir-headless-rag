@@ -5,7 +5,7 @@ Command-line examples for both the Public API and the internal Operator Console 
 ## Setup
 
 ```bash
-export RAG_BASE_URL="https://admin.kunnskap.digdir.cloud"
+export RAG_BASE_URL="https://rag.digdir.cloud"
 export RAG_API_KEY="rag_your_api_key_here"
 export RAG_JWT_COOKIE="auth-token=YOUR_JWT_TOKEN"
 ```

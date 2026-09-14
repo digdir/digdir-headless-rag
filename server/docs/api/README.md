@@ -97,14 +97,14 @@ is refused with `dataset_not_authorized`. See
 Then, list the models:
 
 ```bash
-curl -sS https://admin.kunnskap.digdir.cloud/v1/models \
+curl -sS https://rag.digdir.cloud/v1/models \
   -H "Authorization: Bearer $DIGDIR_API_KEY"
 ```
 
 and chat with one, using an `id` from that response:
 
 ```bash
-curl -sS https://admin.kunnskap.digdir.cloud/v1/chat/completions \
+curl -sS https://rag.digdir.cloud/v1/chat/completions \
   -H "Authorization: Bearer $DIGDIR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -140,8 +140,8 @@ Need per-call dataset selection, citations, or progress events? Use
 
 | Environment | URL |
 |-------------|-----|
-| Production | `https://admin.kunnskap.digdir.cloud` |
-| Staging | `https://admin.staging.kunnskap.digdir.cloud` |
+| Production | `https://rag.digdir.cloud` |
+| Test | `https://test.rag.digdir.cloud` |
 
 ## Error Format
 

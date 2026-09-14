@@ -452,7 +452,7 @@ Omitting them returns `400` with `-32020`, so these are the minimum that works.
 Discovering the server:
 
 ```bash
-curl -sS -X POST https://admin.kunnskap.digdir.cloud/api/mcp \
+curl -sS -X POST https://rag.digdir.cloud/api/mcp \
   -H "X-API-Key: $RAG_API_KEY" \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2026-07-28" \
@@ -468,7 +468,7 @@ curl -sS -X POST https://admin.kunnskap.digdir.cloud/api/mcp \
 Blocking `tools/list`:
 
 ```bash
-curl -sS -X POST https://admin.kunnskap.digdir.cloud/api/mcp \
+curl -sS -X POST https://rag.digdir.cloud/api/mcp \
   -H "X-API-Key: $RAG_API_KEY" \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2026-07-28" \
@@ -485,7 +485,7 @@ Streaming `tools/call`. Note `Mcp-Name` — required for this method, and it
 must equal `params.name` or the request is rejected:
 
 ```bash
-curl -N -X POST https://admin.kunnskap.digdir.cloud/api/mcp \
+curl -N -X POST https://rag.digdir.cloud/api/mcp \
   -H "X-API-Key: $RAG_API_KEY" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \

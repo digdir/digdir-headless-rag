@@ -7,7 +7,7 @@
   "variable": [
     {
       "key": "base_url",
-      "value": "https://admin.kunnskap.digdir.cloud",
+      "value": "https://rag.digdir.cloud",
       "type": "string"
     },
     {
