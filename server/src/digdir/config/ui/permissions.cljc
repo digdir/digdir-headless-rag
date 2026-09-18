@@ -6,6 +6,7 @@
             [com.itonomi.komponentkassen.shell :as ks]
             [clojure.string :as str]
             #?(:clj [clojure.edn :as edn])
+            #?(:clj [digdir.auth.core :as auth])
             #?(:clj [digdir.config.permissions :as perms])
             #?(:clj [digdir.config.db :as config-db])
             #?(:clj [datahike.api :as d])))
@@ -121,6 +122,51 @@
      (when-let [conn (config-db/get-conn)]
        (perms/grant-permission! conn user-id permission-id)
        :ok)))
+
+#?(:clj
+   (defn create-user-and-grant!
+     "Create a user by email and grant them `permission-id`.
+
+      ⚠️ DELEGATES; DOES NOT REIMPLEMENT. `auth/create-new-user` is the only
+      thing in the system that brings a user into existence, and
+      `perms/grant-permission!` is the only thing that grants. This composes the
+      two in the same order `create-user-handler` (POST /console-api/users)
+      already does, so the console and the HTTP endpoint share one mechanism
+      rather than acquiring a second. Two callers of one mechanism is the defect
+      class that has cost this repository most this month — see #541 and #550.
+
+      ⚠️ AND IT REFUSES A DUPLICATE RATHER THAN SWALLOWING IT.
+      `create-new-user` already returns `{:error \"User already exists\"}` for a
+      taken address; the value of that refusal is entirely in whether the caller
+      propagates it. Returning nil here — or granting anyway — would turn a
+      refusal into a silent no-op, which is the shape that makes a broken
+      control indistinguishable from a working one.
+
+      Returns `{:ok true :user-id … :email …}` or `{:error message}`."
+     [email permission-id]
+     (let [email (some-> email str str/trim)]
+       (cond
+         (str/blank? email)
+         {:error "Email is required."}
+
+         (str/blank? (str permission-id))
+         {:error "No permission selected."}
+
+         :else
+         (if-let [conn (config-db/get-conn)]
+           (let [result (auth/create-new-user {:email email})]
+             (if-let [err (:error result)]
+               ;; The duplicate case. Named rather than generic, because the
+               ;; admin's next step differs: an existing user is granted through
+               ;; the dropdown immediately above this control.
+               {:error err}
+               (if-let [user-id (:user/id (auth/user-by-email email))]
+                 (do (perms/grant-permission! conn user-id permission-id)
+                     {:ok true :user-id user-id :email email})
+                 ;; Created but unreadable: report it rather than claiming
+                 ;; success, so a half-done state cannot look finished.
+                 {:error (str "User " email " was created but could not be read back.")})))
+           {:error "No database connection."})))))
 
 #?(:clj
    (defn revoke-permission-from-user!
@@ -291,6 +337,73 @@
            (swap! !refresh inc)
            (t))))))))
 
+(e/defn CreateUserWithPermission
+  "Create a user who has never logged in, and grant them this permission (#573).
+
+   ⚠️ THE CONTROL ABOVE THIS ONE CANNOT DO THIS, AND THAT IS THE WHOLE GAP.
+   `AddUserToPermission` populates its dropdown from `get-all-users`, so it can
+   only offer people who already exist. Nothing in the console created a user,
+   and logging in does not: `can-login?` returns \"User not found\" and creates
+   nothing. To appear in the dropdown you had to exist; to exist, someone had to
+   POST /console-api/users by hand.
+
+   ⚠️ THE ERROR IS RENDERED, NOT LOGGED. A duplicate address is the expected
+   mistake here — the admin cannot see from this input whether the person is
+   already in the dropdown above. Swallowing that would make \"already added\"
+   look identical to \"added\", which is the failure mode that lets a broken
+   control pass for a working one."
+  [permission-id !refresh]
+  (e/client
+   (let [!email (atom "")
+         !status (atom nil)
+         email (e/watch !email)
+         status (e/watch !status)
+         ready? (not (str/blank? (str/trim (or email ""))))]
+     (dom/div
+      (dom/props {:style {:margin-top "0.75rem"
+                          :padding-top "0.75rem"
+                          :border-top "1px dashed #e5e7eb"}})
+      (dom/div
+       (dom/props {:style {:font-size "0.75rem" :color "#6b7280" :margin-bottom "0.375rem"}})
+       (dom/text "Or add someone who has never logged in:"))
+      (dom/div
+       (dom/props {:style {:display "flex" :gap "0.5rem"}})
+       (dom/input
+        (dom/props {:type "email"
+                    :placeholder "name@example.com"
+                    :value (or email "")
+                    :style {:flex "1"
+                            :padding "0.5rem"
+                            :border "1px solid #d1d5db"
+                            :border-radius "4px"}})
+        (dom/On "change" #(reset! !email (.. % -target -value)) nil)
+        (dom/On "input" #(reset! !email (.. % -target -value)) nil))
+       (dom/button
+        (dom/props {:style {:padding "0.5rem 1rem"
+                            :background (if ready? "#3b82f6" "#e5e7eb")
+                            :color (if ready? "white" "#9ca3af")
+                            :border "none"
+                            :border-radius "4px"
+                            :cursor (if ready? "pointer" "not-allowed")}})
+        (dom/text "Create and add")
+        (let [[t _err] (e/Token (dom/On "click" identity nil))]
+          (when (and t ready?)
+            (let [result (e/server (create-user-and-grant! (e/client (str/trim email))
+                                                           permission-id))]
+              (if (:error result)
+                (reset! !status {:kind :error :text (:error result)})
+                (do (reset! !status {:kind :ok
+                                     :text (str "Created " (:email result) " and granted this permission.")})
+                    (reset! !email "")
+                    (swap! !refresh inc))))
+            (t)))))
+      (when status
+        (dom/div
+         (dom/props {:style {:margin-top "0.5rem"
+                             :font-size "0.75rem"
+                             :color (if (= :error (:kind status)) "#b91c1c" "#15803d")}})
+         (dom/text (:text status))))))))
+
 (e/defn PermissionDetails [permission-id !refresh-outer]
   (e/client
    (let [!refresh (atom 0)
@@ -308,7 +421,8 @@
        (dom/text "Users with this permission"))
 
       (PermissionUserList permission-id !refresh)
-      (AddUserToPermission permission-id !refresh)))))
+      (AddUserToPermission permission-id !refresh)
+      (CreateUserWithPermission permission-id !refresh)))))
 
 ;; =============================================================================
 ;; Main Permissions Component
