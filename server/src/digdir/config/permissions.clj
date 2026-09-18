@@ -147,18 +147,39 @@
 (defn get-user-permissions
   "Get all permissions assigned to a user.
 
+   ⚠️ A BLANK USER-ID IS REFUSED HERE, AND THAT IS A SECURITY FIX RATHER THAN
+   TIDINESS. Datahike treats a nil `:in` binding as UNBOUND, so `?user-id` = nil
+   left `[?u :user/id ?user-id]` matching EVERY user and this function returned
+   the union of everyone's permissions. Measured, not reasoned:
+
+       (get-user-permissions db 'admin-1') => [admin-full]
+       (get-user-permissions db nil)       => [admin-full]   ; <- nobody's
+       (get-user-permissions db 'no-such') => []
+
+   Every predicate below derives from this one, so `is-admin?` answered TRUE for
+   a nil user on any deployment that has an admin — which is all of them — and
+   so did `user-has-any-permission?` and `can-access?`. A caller that lost its
+   user-id was therefore granted more than one that had a real, unprivileged
+   one: the guard failed OPEN, and failed open hardest exactly where the
+   identity was missing.
+
+   Fixed at the root rather than at each caller, because the seven call sites
+   that ask whether a user is allowed cannot each be relied on to re-check.
+
    Args:
      db - Datahike database value
      user-id - User ID
 
-   Returns: List of permission entities"
+   Returns: List of permission entities; empty for an absent or blank user-id"
   [db user-id]
-  (d/q '[:find [(pull ?p [*]) ...]
-         :in $ ?user-id
-         :where
-         [?u :user/id ?user-id]
-         [?u :user/permissions ?p]]
-       db user-id))
+  (if (str/blank? (str user-id))
+    []
+    (d/q '[:find [(pull ?p [*]) ...]
+           :in $ ?user-id
+           :where
+           [?u :user/id ?user-id]
+           [?u :user/permissions ?p]]
+         db user-id)))
 
 (defn is-admin?
   "Check if a user has admin-full permission."
