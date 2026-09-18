@@ -12,6 +12,7 @@
    the outer wrappers."
   (:require [digdir.rag.skills.core :as skills-core]
             [digdir.skills.api :as skills-api]
+            [digdir.telemetry.langfuse :as langfuse]
             [taoensso.telemere :as t]))
 
 (defn- extract-response
@@ -132,8 +133,22 @@
                dataset-ref         (assoc :dataset-ref dataset-ref)
                runtime-config-key  (assoc :runtime-config-key runtime-config-key)
                progress-fn         (assoc :progress-fn progress-fn))]
-    (try
-      (let [result (skills-api/run-skill-graph skill-graph-id inputs opts)]
+    ;; Langfuse tracing wraps the WHOLE body, catch included, so a run that
+    ;; ended in `:status :error` is traced too — a failed answer is the one
+    ;; you most want to open afterwards. No-op unless LANGFUSE_ENABLED is set
+    ;; and the keys are present; never throws (digdir.telemetry.langfuse).
+    (langfuse/wrap-invocation
+     {:user-query user-query
+      :ctx {:agent-id agent-id
+            :tenant tenant
+            :skill-graph-id skill-graph-id
+            ;; nil in the normal case — the emitter then resolves the
+            ;; tenant's configured model itself. Passed so an explicit
+            ;; per-call override wins over the configured value.
+            :model model}}
+     (fn []
+       (try
+         (let [result (skills-api/run-skill-graph skill-graph-id inputs opts)]
         (if (skills-core/result-error? result)
           (let [error (skills-core/get-result-error result)]
             (t/log! :error [:invoke-rag/failed {:skill-graph skill-graph-id
@@ -248,4 +263,4 @@
                        :ex-data (ex-data e)}
          :raw-result nil
          :error {:error-type :exception
-                 :error-message (.getMessage e)}}))))
+                 :error-message (.getMessage e)}}))))))

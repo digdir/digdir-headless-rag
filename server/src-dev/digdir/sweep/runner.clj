@@ -38,6 +38,7 @@
             [digdir.config.core :as cfg-core]
             [digdir.config.db :as cfg-db]
             [digdir.rag.typesense :as ts]
+            [digdir.skills.usage :as usage]
             [digdir.sweep.invoke :as sweep-invoke]
             [digdir.sweep.judge :as judge]
             [digdir.sweep.questions :as questions]
@@ -357,16 +358,24 @@
     (when (and (string? pattern) (string? response) (seq response))
       (re-find (re-pattern pattern) response))))
 
-(defn- find-stage-timings
-  "The agent surfaces stage-timings in a couple of places depending on
-   skill-graph topology — directly on the diagnostics meta, or nested
-   under :outputs :trace. Return whichever has entries, else nil."
-  [result]
-  (or (not-empty (get-in result [:diagnostics :stage-timings]))
-      (not-empty (get-in result [:diagnostics :outputs :trace :stage-timings]))
-      (not-empty (get-in result [:diagnostics :outputs :workspace-final :stage-timings]))
-      (not-empty (get-in result [:trace :stage-timings]))
-      (not-empty (:stage-timings result))))
+;; `find-stage-timings` MOVED to `digdir.skills.usage/stage-timings`, and the
+;; call sites below now delegate.
+;;
+;; It had a twin in `digdir.api.routes.endpoints.openai-compat`, whose own
+;; docstring called itself a "mirror" of THIS function. The two were
+;; byte-identical — same five probes, same order — so the move is behaviourally
+;; a no-op, which matters here: this namespace writes `runs.csv`, and a silent
+;; change to how timings are found would have changed recorded research numbers
+;; rather than just refactored code.
+;;
+;; Consolidated when a third caller appeared (Langfuse tracing). Same move #500
+;; made for the Azure switch: a mirror is a copy nothing checks, and #497 and
+;; #500 are both bugs this repository got from exactly that.
+;;
+;; NOT consolidated: the token summing below. It looks like the twin in
+;; openai-compat but is a superset — it also reads `cached_tokens` and
+;; `reasoning_tokens` — so folding it in would change CSV columns, which is a
+;; behaviour change dressed as tidying.
 
 (def ^:private io-stage-groups
   "Stages whose wall-clock is I/O the model cannot change: the Typesense
@@ -419,7 +428,7 @@
    cells rather than zeros — `no data` must stay distinguishable from
    `summed to zero`."
   [result]
-  (when-let [timings (find-stage-timings result)]
+  (when-let [timings (usage/stage-timings result)]
     (let [dur     #(or (:duration-ms %) 0)
           io?     #(contains? io-stage? (:stage %))
           llm?    #(some? (:usage %))
@@ -545,7 +554,7 @@
    the judge silently run a different model — and only the response can tell
    you which."
   [result]
-  (some->> (find-stage-timings result) (keep :llm-model) distinct seq (str/join ";")))
+  (some->> (usage/stage-timings result) (keep :llm-model) distinct seq (str/join ";")))
 
 (defn reported-models
   "Distinct non-blank model-reported values across `rows`.
@@ -623,7 +632,7 @@
    its `llm-ms` fallback and its `:unknown` state — this fixes the cause
    for future rows without making the past unreadable."
   [result]
-  (when-let [timings (find-stage-timings result)]
+  (when-let [timings (usage/stage-timings result)]
     (let [usages (keep :usage timings)
           pt (fn [u] (or (:prompt_tokens u) (:prompt-tokens u) 0))
           ct (fn [u] (or (:completion_tokens u) (:completion-tokens u) 0))
@@ -651,7 +660,7 @@
       ;; NO INNER GATE ON `usages` (#284). This used to be wrapped in
       ;; `(when (seq usages) …)`, which returned nil — and therefore BLANK
       ;; CELLS — for a run that executed stages but never reached an LLM.
-      ;; `stage-duration-totals` reads the SAME `find-stage-timings` and
+      ;; `stage-duration-totals` reads the SAME `usage/stage-timings` and
       ;; gates only on the timings, so the two disagreed on exactly those
       ;; rows and the artifact recorded a blank `llm-calls` beside an
       ;; `llm-ms` of 0. A blank cannot distinguish its own causes — "no call
@@ -679,7 +688,7 @@
    Returns nil when no stage-timings carry a finish-reason, so the CSV
    renders blanks rather than misleading defaults."
   [result]
-  (when-let [timings (find-stage-timings result)]
+  (when-let [timings (usage/stage-timings result)]
     (let [reasons (keep :finish-reason timings)]
       (when (seq reasons)
         {:finish-reason (last reasons)
