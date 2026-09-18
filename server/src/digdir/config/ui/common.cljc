@@ -579,7 +579,18 @@
        value)))
 
 #?(:clj
-   (defn- ensure-config-ui-admin!
+   (defn ensure-config-ui-admin!
+     "Refuse a config-console write unless `user-id` holds admin-full.
+
+      PUBLIC RATHER THAN PRIVATE, DELIBERATELY. The permissions panel needs the
+      same check (#573), and the alternative was a second three-line copy of it
+      — which is the duplication class that has cost this repository most this
+      month (#541, #550). One guard with two callers, not two guards.
+
+      THROWS rather than returning a refusal, because the two callers that
+      ignore a return value would turn a refusal into a silent no-op. Callers
+      that can reach this in normal use should ALSO not render the control —
+      enforcement here, explanation there."
      [db user-id]
      (when-not (perms/is-admin? db user-id)
        (throw (ex-info "Permission denied - admin required" {})))))

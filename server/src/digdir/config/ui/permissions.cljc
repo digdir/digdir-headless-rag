@@ -9,6 +9,7 @@
             #?(:clj [digdir.auth.core :as auth])
             #?(:clj [digdir.config.permissions :as perms])
             #?(:clj [digdir.config.db :as config-db])
+            #?(:clj [digdir.config.ui.common :as ui-common])
             #?(:clj [datahike.api :as d])))
 
 ;; =============================================================================
@@ -135,9 +136,15 @@
 
 #?(:clj
    (defn grant-permission-to-user!
-     "Grant a permission to a user."
-     [user-id permission-id]
+     "Grant a permission to a user.
+
+      `actor-id` is WHO IS ASKING, and it is not the same as `user-id`, who is
+      the subject. Read it on the SERVER from `e/http-request` at the call site
+      — never accept it from client scope, or the check is the caller's to
+      forge."
+     [user-id permission-id actor-id]
      (when-let [conn (config-db/get-conn)]
+       (ui-common/ensure-config-ui-admin! @conn actor-id)
        (perms/grant-permission! conn user-id permission-id)
        :ok)))
 
@@ -160,37 +167,57 @@
       refusal into a silent no-op, which is the shape that makes a broken
       control indistinguishable from a working one.
 
+      ⚠️ AND IT REFUSES A NON-ADMIN CALLER, THROUGH THE SHARED GUARD. Bringing a
+      user into existence and granting them a permission is the most privileged
+      thing this panel does, and until #573's follow-up the panel was reachable
+      by anyone holding ANY permission — so a read-only user could grant
+      themselves admin-full. The guard THROWS rather than returning `{:error}`
+      like the refusals above it: those describe a mistake the admin can correct
+      in the form, whereas this one is not the admin's to correct, and a
+      client that reaches it has bypassed the UI.
+
+      `actor-id` is the caller, not the subject — see `grant-permission-to-user!`.
+
       Returns `{:ok true :user-id … :email …}` or `{:error message}`."
-     [email permission-id]
-     (let [email (some-> email str str/trim)]
-       (cond
-         (str/blank? email)
-         {:error "Email is required."}
+     [email permission-id actor-id]
+     (if-let [conn (config-db/get-conn)]
+       ;; AUTHORIZE BEFORE VALIDATING, deliberately. Checking the form first
+       ;; would answer an unauthorized caller's questions about it — and it puts
+       ;; the one check that must never be skipped ahead of every branch that
+       ;; could return early past it.
+       (do
+         (ui-common/ensure-config-ui-admin! @conn actor-id)
+         (let [email (some-> email str str/trim)]
+           (cond
+             (str/blank? email)
+             {:error "Email is required."}
 
-         (str/blank? (str permission-id))
-         {:error "No permission selected."}
+             (str/blank? (str permission-id))
+             {:error "No permission selected."}
 
-         :else
-         (if-let [conn (config-db/get-conn)]
-           (let [result (auth/create-new-user {:email email})]
-             (if-let [err (:error result)]
-               ;; The duplicate case. Named rather than generic, because the
-               ;; admin's next step differs: an existing user is granted through
-               ;; the dropdown immediately above this control.
-               {:error err}
-               (if-let [user-id (:user/id (auth/user-by-email email))]
-                 (do (perms/grant-permission! conn user-id permission-id)
-                     {:ok true :user-id user-id :email email})
-                 ;; Created but unreadable: report it rather than claiming
-                 ;; success, so a half-done state cannot look finished.
-                 {:error (str "User " email " was created but could not be read back.")})))
-           {:error "No database connection."})))))
+             :else
+             (let [result (auth/create-new-user {:email email})]
+               (if-let [err (:error result)]
+                 ;; The duplicate case. Named rather than generic, because the
+                 ;; admin's next step differs: an existing user is granted
+                 ;; through the dropdown immediately above this control.
+                 {:error err}
+                 (if-let [user-id (:user/id (auth/user-by-email email))]
+                   (do (perms/grant-permission! conn user-id permission-id)
+                       {:ok true :user-id user-id :email email})
+                   ;; Created but unreadable: report it rather than claiming
+                   ;; success, so a half-done state cannot look finished.
+                   {:error (str "User " email " was created but could not be read back.")}))))))
+       {:error "No database connection."})))
 
 #?(:clj
    (defn revoke-permission-from-user!
-     "Revoke a permission from a user."
-     [user-id permission-id]
+     "Revoke a permission from a user.
+
+      `actor-id` is the caller, not the subject — see `grant-permission-to-user!`."
+     [user-id permission-id actor-id]
      (when-let [conn (config-db/get-conn)]
+       (ui-common/ensure-config-ui-admin! @conn actor-id)
        (perms/revoke-permission! conn user-id permission-id)
        :ok)))
 
@@ -279,7 +306,7 @@
           (e/for [action (e/diff-by identity (if (set? actions) actions #{actions}))]
             (ActionBadge action)))))))))
 
-(e/defn PermissionUserList [permission-id !refresh]
+(e/defn PermissionUserList [permission-id !refresh admin?]
   (e/client
    (let [refresh (e/watch !refresh)
          _ refresh
@@ -301,20 +328,22 @@
                                :border-radius "4px"
                                :margin-bottom "0.25rem"}})
            (dom/span (dom/text (:user/email user)))
-           (dom/button
-            (dom/props {:style {:padding "0.25rem 0.5rem"
-                                :background "#fee2e2"
-                                :color "#991b1b"
-                                :border "none"
-                                :border-radius "4px"
-                                :cursor "pointer"
-                                :font-size "0.75rem"}})
-            (dom/text "Revoke")
-            (let [[t err] (e/Token (dom/On "click" identity nil))]
-              (when t
-                (e/server (revoke-permission-from-user! (:user/id user) permission-id))
-                (swap! !refresh inc)
-                (t)))))))))))
+           (when admin?
+             (dom/button
+              (dom/props {:style {:padding "0.25rem 0.5rem"
+                                  :background "#fee2e2"
+                                  :color "#991b1b"
+                                  :border "none"
+                                  :border-radius "4px"
+                                  :cursor "pointer"
+                                  :font-size "0.75rem"}})
+              (dom/text "Revoke")
+              (let [[t err] (e/Token (dom/On "click" identity nil))]
+                (when t
+                  (e/server (revoke-permission-from-user! (:user/id user) permission-id
+                                                          (:user/id e/http-request)))
+                  (swap! !refresh inc)
+                  (t))))))))))))
 
 (e/defn AddUserToPermission [permission-id !refresh]
   (e/client
@@ -355,7 +384,8 @@
        (dom/text "Add")
        (let [[t err] (e/Token (dom/On "click" identity nil))]
          (when (and t selected-user)
-           (e/server (grant-permission-to-user! selected-user permission-id))
+           (e/server (grant-permission-to-user! selected-user permission-id
+                                                (:user/id e/http-request)))
            (reset! !selected-user nil)
            (swap! !refresh inc)
            (t))))))))
@@ -427,7 +457,8 @@
       ;; result — including the refresh that makes the list above re-read.
       (when-some [pending-email (not-empty (or pending ""))]
         (let [result (e/server (create-user-and-grant! (e/client pending-email)
-                                                       permission-id))]
+                                                       permission-id
+                                                       (:user/id e/http-request)))]
           (when (some? result)
             (e/client
              (if-let [err (:error result)]
@@ -448,7 +479,15 @@
 (e/defn PermissionDetails [permission-id !refresh-outer]
   (e/client
    (let [!refresh (atom 0)
-         refresh (e/watch !refresh)]
+         refresh (e/watch !refresh)
+         ;; ⚠️ READ ON THE SERVER, FROM THE REQUEST — not passed in, and not
+         ;; round-tripped through client scope where a modified client could
+         ;; choose its own answer. This value decides only what is OFFERED;
+         ;; every write re-reads the actor server-side and refuses on its own
+         ;; (`ensure-config-ui-admin!`), so hiding the controls is the
+         ;; explanation, not the enforcement.
+         admin? (e/server (boolean (when-let [conn (config-db/get-conn)]
+                                     (perms/is-admin? @conn (:user/id e/http-request)))))]
      (dom/div
       (dom/props {:style {:background "white"
                           :border "1px solid #e5e7eb"
@@ -461,9 +500,18 @@
                            :border-bottom "1px solid #e5e7eb"}})
        (dom/text "Users with this permission"))
 
-      (PermissionUserList permission-id !refresh)
-      (AddUserToPermission permission-id !refresh)
-      (CreateUserWithPermission permission-id !refresh)))))
+      (PermissionUserList permission-id !refresh admin?)
+      (if admin?
+        (e/client
+         (AddUserToPermission permission-id !refresh)
+         (CreateUserWithPermission permission-id !refresh))
+        (dom/div
+         (dom/props {:style {:margin-top "1rem"
+                             :padding-top "1rem"
+                             :border-top "1px solid #e5e7eb"
+                             :font-size "0.75rem"
+                             :color "#6b7280"}})
+         (dom/text "Changing who holds a permission requires the admin-full permission.")))))))
 
 ;; =============================================================================
 ;; Main Permissions Component
