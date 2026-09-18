@@ -94,8 +94,26 @@
 
 #?(:clj
    (defn get-permission-users
-     "Get users who have a specific permission."
-     [permission-id]
+     "Get users who have a specific permission.
+
+      ⚠️ `refresh-token` IS LOAD-BEARING AND DELIBERATELY UNUSED. Electric is
+      dataflow: an `e/server` expression re-runs when its INPUTS change, and the
+      only input here used to be `permission-id`. The callers bound the refresh
+      counter next to the call —
+
+          (let [refresh (e/watch !refresh)
+                _ refresh                      ; <- intended to create a dependency
+                users (e/server (get-permission-users permission-id))]
+
+      — which reads like a dependency and is not one: nothing the server
+      expression consumes ever changed, so the query never re-ran. The list did
+      not update after revoke, after add, or after create-and-add, and the only
+      way to see a change was to reload the page. Observed on a real console,
+      across all three operations (#573 render pass).
+
+      Taking the counter as an ARGUMENT makes the dependency real, because the
+      value now flows into the call. Do not \"tidy\" this parameter away."
+     [permission-id _refresh-token]
      (when-let [conn (config-db/get-conn)]
        (perms/get-users-with-permission @conn permission-id))))
 
@@ -265,7 +283,9 @@
   (e/client
    (let [refresh (e/watch !refresh)
          _ refresh
-         users (e/server (get-permission-users permission-id))]
+         ;; `refresh` is passed INTO the server call, not merely bound beside
+         ;; it — see get-permission-users. That is what makes this re-read.
+         users (e/server (get-permission-users permission-id (e/client refresh)))]
      (if (empty? users)
        (dom/div
         (dom/props {:style {:color "#6b7280" :font-size "0.875rem"}})
@@ -300,8 +320,11 @@
   (e/client
    (let [!selected-user (atom nil)
          selected-user (e/watch !selected-user)
+         refresh-token (e/watch !refresh)
          all-users (e/server (get-all-users))
-         existing-users (e/server (set (map :user/id (get-permission-users permission-id))))
+         ;; Same dependency, same reason: without it the dropdown keeps
+         ;; offering somebody who has just been added.
+         existing-users (e/server (set (map :user/id (get-permission-users permission-id (e/client refresh-token)))))
          available-users (filter #(not (contains? existing-users (:user/id %))) all-users)]
      (dom/div
       (dom/props {:style {:display "flex"
@@ -356,8 +379,10 @@
   (e/client
    (let [!email (atom "")
          !status (atom nil)
+         !pending (atom nil)
          email (e/watch !email)
          status (e/watch !status)
+         pending (e/watch !pending)
          ready? (not (str/blank? (str/trim (or email ""))))]
      (dom/div
       (dom/props {:style {:margin-top "0.75rem"
@@ -386,17 +411,33 @@
                             :border-radius "4px"
                             :cursor (if ready? "pointer" "not-allowed")}})
         (dom/text "Create and add")
+        ;; ⚠️ THE BUTTON ONLY SIGNALS INTENT — it does NOT call the server.
+        ;; Doing the `e/server` call inline in the click branch is what the
+        ;; first version did, and the result was the worst possible shape: the
+        ;; user WAS created and granted, and the UI showed nothing at all. The
+        ;; server effect and the client state update race, and the token
+        ;; completes before the reactive list has refreshed.
+        ;; See CLAUDE.md, "Pending Signal Pattern".
         (let [[t _err] (e/Token (dom/On "click" identity nil))]
           (when (and t ready?)
-            (let [result (e/server (create-user-and-grant! (e/client (str/trim email))
-                                                           permission-id))]
-              (if (:error result)
-                (reset! !status {:kind :error :text (:error result)})
-                (do (reset! !status {:kind :ok
-                                     :text (str "Created " (:email result) " and granted this permission.")})
-                    (reset! !email "")
-                    (swap! !refresh inc))))
+            (reset! !pending (str/trim (or email "")))
             (t)))))
+      ;; The reactive half: it runs BECAUSE :pending changed, performs the
+      ;; server work, and only then writes the client state that depends on the
+      ;; result — including the refresh that makes the list above re-read.
+      (when-some [pending-email (not-empty (or pending ""))]
+        (let [result (e/server (create-user-and-grant! (e/client pending-email)
+                                                       permission-id))]
+          (when (some? result)
+            (e/client
+             (if-let [err (:error result)]
+               (reset! !status {:kind :error :text err})
+               (do (reset! !status {:kind :ok
+                                    :text (str "Created " (:email result)
+                                               " and granted this permission.")})
+                   (reset! !email "")
+                   (swap! !refresh inc)))
+             (reset! !pending nil)))))
       (when status
         (dom/div
          (dom/props {:style {:margin-top "0.5rem"
