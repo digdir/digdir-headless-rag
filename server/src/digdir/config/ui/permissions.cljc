@@ -97,23 +97,8 @@
    (defn get-permission-users
      "Get users who have a specific permission.
 
-      ⚠️ `refresh-token` IS LOAD-BEARING AND DELIBERATELY UNUSED. Electric is
-      dataflow: an `e/server` expression re-runs when its INPUTS change, and the
-      only input here used to be `permission-id`. The callers bound the refresh
-      counter next to the call —
-
-          (let [refresh (e/watch !refresh)
-                _ refresh                      ; <- intended to create a dependency
-                users (e/server (get-permission-users permission-id))]
-
-      — which reads like a dependency and is not one: nothing the server
-      expression consumes ever changed, so the query never re-ran. The list did
-      not update after revoke, after add, or after create-and-add, and the only
-      way to see a change was to reload the page. Observed on a real console,
-      across all three operations (#573 render pass).
-
-      Taking the counter as an ARGUMENT makes the dependency real, because the
-      value now flows into the call. Do not \"tidy\" this parameter away."
+      `refresh-token` is unused on purpose: passing it makes this query re-read
+      when the caller invalidates it. Keep the parameter (#587)."
      [permission-id _refresh-token]
      (when-let [conn (config-db/get-conn)]
        (perms/get-users-with-permission @conn permission-id))))
@@ -309,9 +294,6 @@
 (e/defn PermissionUserList [permission-id !refresh admin?]
   (e/client
    (let [refresh (e/watch !refresh)
-         _ refresh
-         ;; `refresh` is passed INTO the server call, not merely bound beside
-         ;; it — see get-permission-users. That is what makes this re-read.
          users (e/server (get-permission-users permission-id (e/client refresh)))]
      (if (empty? users)
        (dom/div
@@ -351,8 +333,6 @@
          selected-user (e/watch !selected-user)
          refresh-token (e/watch !refresh)
          all-users (e/server (get-all-users))
-         ;; Same dependency, same reason: without it the dropdown keeps
-         ;; offering somebody who has just been added.
          existing-users (e/server (set (map :user/id (get-permission-users permission-id (e/client refresh-token)))))
          available-users (filter #(not (contains? existing-users (:user/id %))) all-users)]
      (dom/div
@@ -441,20 +421,16 @@
                             :border-radius "4px"
                             :cursor (if ready? "pointer" "not-allowed")}})
         (dom/text "Create and add")
-        ;; ⚠️ THE BUTTON ONLY SIGNALS INTENT — it does NOT call the server.
-        ;; Doing the `e/server` call inline in the click branch is what the
-        ;; first version did, and the result was the worst possible shape: the
-        ;; user WAS created and granted, and the UI showed nothing at all. The
-        ;; server effect and the client state update race, and the token
-        ;; completes before the reactive list has refreshed.
+        ;; The button only signals intent; it does not call the server. An
+        ;; `e/server` call inline in the click branch races the client state
+        ;; update, so the write can land while the UI shows nothing.
         ;; See CLAUDE.md, "Pending Signal Pattern".
         (let [[t _err] (e/Token (dom/On "click" identity nil))]
           (when (and t ready?)
             (reset! !pending (str/trim (or email "")))
             (t)))))
-      ;; The reactive half: it runs BECAUSE :pending changed, performs the
-      ;; server work, and only then writes the client state that depends on the
-      ;; result — including the refresh that makes the list above re-read.
+      ;; The reactive half: it runs because :pending changed, performs the
+      ;; server work, and only then writes the client state that depends on it.
       (when-some [pending-email (not-empty (or pending ""))]
         (let [result (e/server (create-user-and-grant! (e/client pending-email)
                                                        permission-id
