@@ -9,6 +9,7 @@
    #?(:clj [digdir.boot.placeholder-secrets :as placeholder-secrets])
    #?(:clj [digdir.boot.provider-switch :as provider-switch])
    #?(:clj [digdir.boot.required-env :as required-env])
+   #?(:clj [digdir.boot.agents :as boot-agents])
    #?(:clj [digdir.e2e.seed :as e2e-seed])
    ;; NOT digdir.skills.api. The two are different initialisers: api's
    ;; registers the builtin skills and graphs only (5 graphs), while
@@ -100,6 +101,7 @@
                         "Anyone who can read these logs can complete a login as any "
                         "permitted user. Intended for a local stack without mail; unset "
                         "it and configure Scaleway TEM for any deployment others reach.")))
+       (boot-agents/seed!)
        ;; Boot-time E2E auto-seed. No-op unless E2E_API_KEY is set,
        ;; so production starts unchanged.
        (e2e-seed/maybe-seed!)
