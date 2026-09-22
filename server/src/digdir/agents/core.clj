@@ -1,6 +1,7 @@
 (ns digdir.agents.core
   "Core agent model, validation, and builtin definitions."
-  (:require [clojure.string :as str]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
             [digdir.skills.api :as skills-api]))
 
 (declare builtin-agent-definitions)
@@ -231,6 +232,61 @@
                        {:errors errors
                         :agent agent})))
      agent)))
+
+(def ^:private drift-compared-fields
+  "Fields a reseed overwrites from the code definition."
+  [:name :description :instructions :guardrails :enabled? :allowed-dataset-scopes])
+
+(defn agent-drift
+  "What a reseed would do to one stored agent row, as data rather than by
+   doing it. Pure."
+  [{:keys [stored declared available-skill-graphs]}]
+  (let [available (into #{} (keep normalize-skill-graph-id) available-skill-graphs)
+        stored-agent (some-> stored normalize-agent)
+        declared-agent (some-> declared normalize-agent)]
+    (cond
+      (nil? declared-agent)
+      {:id (:id stored-agent)
+       :status :custom
+       :allowed-skill-graphs {:stored (:allowed-skill-graphs stored-agent)}
+       :differing-fields #{}}
+
+      (nil? stored-agent)
+      {:id (:id declared-agent)
+       :status :unseeded
+       :allowed-skill-graphs {:declared (:allowed-skill-graphs declared-agent)
+                              :unavailable (vec (remove available
+                                                        (:allowed-skill-graphs declared-agent)))}
+       :differing-fields #{}}
+
+      :else
+      (let [stored-graphs (:allowed-skill-graphs stored-agent)
+            declared-graphs (:allowed-skill-graphs declared-agent)
+            missing (set/difference (set declared-graphs) (set stored-graphs))
+            recoverable (vec (filter available missing))
+            unavailable (vec (remove available missing))
+            extra (vec (set/difference (set stored-graphs) (set declared-graphs)))
+            differing (into #{} (remove #(= (get stored-agent %) (get declared-agent %)))
+                            drift-compared-fields)
+            stored-default (:default-skill-graph stored-agent)
+            declared-default (:default-skill-graph declared-agent)]
+        {:id (:id declared-agent)
+         :status (cond
+                   (seq recoverable) :stale
+                   (seq unavailable) :narrowed
+                   (or (seq extra)
+                       (seq differing)
+                       (not= stored-default declared-default)) :diverged
+                   :else :matches-code)
+         :allowed-skill-graphs {:stored stored-graphs
+                                :declared declared-graphs
+                                :recoverable recoverable
+                                :unavailable unavailable
+                                :extra extra}
+         :default-skill-graph {:stored stored-default
+                               :declared declared-default
+                               :available? (contains? available declared-default)}
+         :differing-fields differing}))))
 
 (def ^:private production-agent-definitions
   "Agents that ship in every build. Every skill graph named here must be

@@ -14,6 +14,7 @@
             [digdir.config.ui.audit :refer [AuditLog]]
             [digdir.config.ui.permissions :refer [Permissions]]
             [digdir.config.ui.api-keys :refer [APIKeys]]
+            [digdir.config.ui.agents :refer [AgentsUI]]
             [digdir.config.ui.styles :as styles]
             [digdir.config.ui.common :as common]
             [digdir.config.ui.inheritance :refer [ConfigInheritanceEditor]]
@@ -2185,6 +2186,7 @@
                      (t :config/tab-permissions)
                      (t :nav/api-keys)
                      "Skills"
+                     "Agents"
                      "Diagnostics"
                      "Global Defaults"]]
      (dom/div
@@ -2204,8 +2206,9 @@
         3 (Permissions)
         4 (APIKeys)
         5 (SkillsUI)
-        6 (DiagnosticsPanel)
-        7 (GlobalDefaultsEditor user-id)
+        6 (AgentsUI)
+        7 (DiagnosticsPanel)
+        8 (GlobalDefaultsEditor user-id)
         (ConfigManagement all-tenants !refresh-counter user-id))))))
 
 (e/defn Config []

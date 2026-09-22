@@ -172,9 +172,20 @@
          dataset-scope-ids (mapv :db/id dataset-scope-tx)
          retracts (mapv (fn [eid] [:db/retractEntity eid])
                         (existing-dataset-scope-eids db (:id agent)))
+         ;; Cardinality-many: asserting alone would only ever add.
+         existing-eid (agent-eid db (:id agent))
+         graph-retracts (when existing-eid
+                          (mapv (fn [graph-id]
+                                  [:db/retract existing-eid
+                                   :agent/allowed-skill-graphs graph-id])
+                                (d/q '[:find [?graph-id ...]
+                                       :in $ ?e
+                                       :where [?e :agent/allowed-skill-graphs ?graph-id]]
+                                     db existing-eid)))
          tx-data (vec
                   (concat
                    retracts
+                   graph-retracts
                    dataset-scope-tx
                    [(cond-> {:agent/id (:id agent)
                              :agent/name (:name agent)
@@ -277,6 +288,17 @@
            :allowed-skill-graphs filtered-allowed
            :default-skill-graph filtered-default)))
 
+(defn- seed-one-agent!
+  "Filter one definition to the available graphs and persist it."
+  [conn agent-def available-skill-graphs]
+  (let [filtered (filter-to-available-skill-graphs agent-def available-skill-graphs)]
+    (if (seq (:allowed-skill-graphs filtered))
+      (upsert-agent! conn filtered {:available-skill-graphs available-skill-graphs})
+      (do (t/log! :warn [::agent-skipped-no-available-skill-graphs
+                         {:agent-id (:id agent-def)
+                          :declared-skill-graphs (:allowed-skill-graphs agent-def)}])
+          nil))))
+
 (defn seed-builtin-agents!
   "Seed builtin agent definitions for the current product surfaces.
    This is idempotent because agents are upserted by :agent/id.
@@ -292,15 +314,32 @@
   (skills-init/ensure-initialized!)
   (let [available-skill-graphs (agents/available-skill-graph-ids)]
     (vec
-     (keep (fn [agent-def]
-             (let [filtered (filter-to-available-skill-graphs agent-def available-skill-graphs)]
-               (if (seq (:allowed-skill-graphs filtered))
-                 (upsert-agent! conn filtered
-                                {:available-skill-graphs available-skill-graphs})
-                 ;; nil, not the log! return value — `keep` would otherwise
-                 ;; collect it as if the agent had been seeded.
-                 (do (t/log! :warn [::agent-skipped-no-available-skill-graphs
-                                    {:agent-id (:id agent-def)
-                                     :declared-skill-graphs (:allowed-skill-graphs agent-def)}])
-                     nil))))
+     (keep #(seed-one-agent! conn % available-skill-graphs)
            (agents/builtin-agent-definitions)))))
+
+(defn seed-agent!
+  "Reseed one builtin agent from its code definition."
+  [conn agent-id]
+  (skills-init/ensure-initialized!)
+  (let [available-skill-graphs (agents/available-skill-graph-ids)]
+    (when-let [agent-def (first (filter #(= agent-id (:id %))
+                                        (agents/builtin-agent-definitions)))]
+      (seed-one-agent! conn agent-def available-skill-graphs))))
+
+(defn drift-report
+  "What a reseed would do to every agent, stored or declared."
+  [db]
+  ;; skills-init, not skills.api: seeding resolves against the larger registry.
+  (skills-init/ensure-initialized!)
+  (let [available (agents/available-skill-graph-ids)
+        by-id #(into {} (map (juxt :id identity)) %)
+        stored (by-id (list-agents db))
+        declared (by-id (agents/builtin-agent-definitions))]
+    (->> (into (set (keys stored)) (keys declared))
+         sort
+         (mapv (fn [agent-id]
+                 (assoc (agents/agent-drift {:stored (get stored agent-id)
+                                             :declared (get declared agent-id)
+                                             :available-skill-graphs available})
+                        :stored (get stored agent-id)
+                        :declared (get declared agent-id)))))))

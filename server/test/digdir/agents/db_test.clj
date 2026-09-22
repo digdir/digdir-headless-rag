@@ -224,3 +224,111 @@
           "nothing survives, which is what seed-builtin-agents! keys its skip on")
       (is (nil? (:default-skill-graph filtered)))
       (is (some? filtered) "filtering degrades; it does not throw"))))
+
+(deftest test-drift-report
+  (testing "Covers agents that exist only in the database"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/ensure-schema! conn)
+        (agents-db/upsert-agent!
+         conn
+         {:id "e2e/hand-rolled"
+          :name "Hand Rolled"
+          :description "Stored without a code definition"
+          :instructions "Answer."
+          :default-skill-graph "builtin/agent-rag-graph-bundled"
+          :allowed-skill-graphs ["builtin/agent-rag-graph-bundled"]})
+        (let [by-id (into {} (map (juxt :id identity)) (agents-db/drift-report @conn))]
+          (is (= :custom (:status (get by-id "e2e/hand-rolled"))))
+          (is (some? (:stored (get by-id "e2e/hand-rolled")))))
+        (finally (delete-test-db conn)))))
+
+  (testing "Covers declared agents that were never seeded"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/ensure-schema! conn)
+        (let [by-id (into {} (map (juxt :id identity)) (agents-db/drift-report @conn))]
+          (is (seq by-id) "Declared agents appear even against an empty database")
+          (is (every? #(= :unseeded (:status %)) (vals by-id))))
+        (finally (delete-test-db conn)))))
+
+  (testing "A freshly seeded row matches the code definition"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/ensure-schema! conn)
+        (agents-db/seed-builtin-agents! conn)
+        (let [seeded (->> (agents-db/drift-report @conn)
+                          (filter #(= "builtin/agent-rag-agent" (:id %)))
+                          first)]
+          (is (= :matches-code (:status seeded))))
+        (finally (delete-test-db conn)))))
+
+  (testing "A row holding fewer graphs than the code declares is stale, and names the recoverable one"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/ensure-schema! conn)
+        (agents-db/upsert-agent!
+         conn
+         {:id "builtin/agent-rag-agent"
+          :name "Agentic RAG Agent"
+          :description "General-purpose agentic retrieval assistant."
+          :instructions "Use the available retrieval and reasoning tools."
+          :default-skill-graph "builtin/agent-rag-graph-bundled"
+          :allowed-skill-graphs ["builtin/agent-rag-graph-bundled"]})
+        (let [narrowed (->> (agents-db/drift-report @conn)
+                            (filter #(= "builtin/agent-rag-agent" (:id %)))
+                            first)]
+          (is (= :stale (:status narrowed)))
+          (is (contains? (set (get-in narrowed [:allowed-skill-graphs :recoverable]))
+                         "builtin/agent-rag-graph-faithful")))
+        (finally (delete-test-db conn))))))
+
+(deftest test-upsert-removes-skill-graphs
+  (testing "An upsert that drops a graph actually drops it"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/ensure-schema! conn)
+        (let [base {:id "t/narrowing"
+                    :name "Narrowing"
+                    :description "d"
+                    :instructions "i"
+                    :default-skill-graph "builtin/agent-rag-graph-bundled"}]
+          (agents-db/upsert-agent!
+           conn (assoc base :allowed-skill-graphs ["builtin/agent-rag-graph-bundled"
+                                                   "builtin/agent-rag-graph-faithful"]))
+          (is (= #{"builtin/agent-rag-graph-bundled" "builtin/agent-rag-graph-faithful"}
+                 (set (:allowed-skill-graphs (agents-db/get-agent @conn "t/narrowing")))))
+          (agents-db/upsert-agent!
+           conn (assoc base :allowed-skill-graphs ["builtin/agent-rag-graph-bundled"]))
+          (is (= ["builtin/agent-rag-graph-bundled"]
+                 (:allowed-skill-graphs (agents-db/get-agent @conn "t/narrowing")))))
+        (finally (delete-test-db conn))))))
+
+(deftest test-seed-agent
+  (testing "Reseeding one agent repairs it and leaves the others alone"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/ensure-schema! conn)
+        (agents-db/seed-builtin-agents! conn)
+        (let [before (agents-db/get-agent @conn "builtin/fact-checker-agent")]
+          (agents-db/upsert-agent!
+           conn (assoc (agents-db/get-agent @conn "builtin/agent-rag-agent")
+                       :allowed-skill-graphs ["builtin/agent-rag-graph-bundled"]
+                       :default-skill-graph "builtin/agent-rag-graph-bundled"
+                       :name "Hand edited"))
+          (is (= :stale (->> (agents-db/drift-report @conn)
+                             (filter #(= "builtin/agent-rag-agent" (:id %)))
+                             first :status)))
+          (agents-db/seed-agent! conn "builtin/agent-rag-agent")
+          (is (= :matches-code (->> (agents-db/drift-report @conn)
+                                    (filter #(= "builtin/agent-rag-agent" (:id %)))
+                                    first :status)))
+          (is (= before (agents-db/get-agent @conn "builtin/fact-checker-agent"))))
+        (finally (delete-test-db conn)))))
+
+  (testing "An id with no code definition seeds nothing"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/ensure-schema! conn)
+        (is (nil? (agents-db/seed-agent! conn "e2e/not-in-code")))
+        (finally (delete-test-db conn))))))
