@@ -42,6 +42,17 @@
            {:error (or (ex-message e) "Could not save the agent.")})))))
 
 #?(:clj
+   (defn delete-agent!
+     "Delete a custom agent. Admin only, and refuses one defined in code."
+     [user-id agent-id]
+     (let [conn (config-db/get-conn)]
+       (common/ensure-config-ui-admin! @conn user-id)
+       (if (some #(= agent-id (:id %)) (agents/builtin-agent-definitions))
+         {:error "Defined in code; the next restart would recreate it."}
+         (do (agents-db/delete-agent! conn agent-id)
+             {:ok agent-id})))))
+
+#?(:clj
    (defn reseed-all-agents!
      "Rewrite every builtin agent from its code definitions. Admin only."
      [user-id]
@@ -173,7 +184,25 @@
                      (dom/text "Edit")
                      (let [[tok _] (e/Token (dom/On "click" identity nil))]
                        (when tok
-                         (case (reset! !editing {:mode :edit :row row}) (tok))))))))))))
+                         (case (reset! !editing {:mode :edit :row row}) (tok))))))
+        (ks/Button (cond-> {:data-size "sm" :data-variant "tertiary" :data-color "danger"}
+                     (or (not is-admin) (not= :custom (:status row)))
+                     (assoc :disabled true
+                            :title (if is-admin
+                                     "Defined in code; the next restart would recreate it."
+                                     "Requires the admin-full permission.")))
+                   (e/fn []
+                     (dom/text "Delete")
+                     (let [[tok _] (e/Token (dom/On "click" identity nil))]
+                       (when tok
+                         (case (and (e/client
+                                     (js/confirm
+                                      (str "Delete " (:id row) "?\n\n"
+                                           "Conversations that used this agent keep its id and "
+                                           "will no longer resolve to an agent. This cannot be "
+                                           "undone.")))
+                                    (e/server (delete-agent! user-id (:id row))))
+                           (tok))))))))))))
 
 (e/defn Field [label value on-input & [{:keys [disabled placeholder multiline]}]]
   (e/client

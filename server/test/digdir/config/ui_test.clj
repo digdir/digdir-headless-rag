@@ -1281,3 +1281,28 @@
           (is (contains? (ui-agents/save-agent!
                           "user-1" (assoc an-agent :allowed-skill-graphs ["nope/not-registered"]) "")
                          :error)))))))
+
+(deftest test-delete-agent
+  (testing "Refuses a caller who does not hold admin-full"
+    (with-agent-db
+      (fn [_]
+        (with-redefs [perms/is-admin? (fn [_ _] false)]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Permission denied"
+                                (ui-agents/delete-agent! "user-1" "t/saved")))))))
+
+  (testing "Refuses an agent defined in code"
+    (with-agent-db
+      (fn [conn]
+        (with-redefs [perms/is-admin? (fn [_ _] true)]
+          (agents-db/seed-builtin-agents! conn)
+          (is (contains? (ui-agents/delete-agent! "user-1" "builtin/agent-rag-agent") :error))
+          (is (some? (agents-db/get-agent @conn "builtin/agent-rag-agent")))))))
+
+  (testing "Deletes a custom agent"
+    (with-agent-db
+      (fn [conn]
+        (with-redefs [perms/is-admin? (fn [_ _] true)]
+          (ui-agents/save-agent! "user-1" an-agent "")
+          (is (some? (agents-db/get-agent @conn "t/saved")))
+          (is (= {:ok "t/saved"} (ui-agents/delete-agent! "user-1" "t/saved")))
+          (is (nil? (agents-db/get-agent @conn "t/saved"))))))))
