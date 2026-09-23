@@ -117,6 +117,10 @@
      :created-at (or (:created-at agent) (:agent/created-at agent))
      :updated-at (or (:updated-at agent) (:agent/updated-at agent))}))
 
+(def ^:private agent-id-pattern
+  ;; No underscore, and no dot before the slash: both collide with the wire encoding.
+  #"[A-Za-z0-9][A-Za-z0-9-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)?")
+
 (defn validate-agent
   "Validate an agent definition and return a structured result.
 
@@ -147,6 +151,11 @@
          errors (cond-> []
                   (str/blank? (:id agent))
                   (conj "Agent :id is required.")
+
+                  (and (not (str/blank? (:id agent)))
+                       (not (re-matches agent-id-pattern (:id agent))))
+                  (conj (str "Agent :id must be <name> or <namespace>/<name>, using letters, "
+                             "digits and hyphens; got " (pr-str (:id agent))))
 
                   (str/blank? (:name agent))
                   (conj "Agent :name is required.")

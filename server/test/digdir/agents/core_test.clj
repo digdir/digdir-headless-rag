@@ -157,3 +157,30 @@
                   :available-skill-graphs both-graphs})]
       (is (= :stale (:status drift)))
       (is (contains? (:differing-fields drift) :instructions)))))
+
+(deftest test-agent-id-validation
+  (let [opts {:available-skill-graphs (agents/available-skill-graph-ids)}
+        base {:name "X" :description "d"
+              :default-skill-graph "builtin/agent-rag-graph-bundled"
+              :allowed-skill-graphs ["builtin/agent-rag-graph-bundled"]
+              :enabled? true}
+        valid? (fn [id] (:valid? (agents/validate-agent (assoc base :id id) opts)))]
+
+    (testing "Every id the codebase defines is accepted"
+      (doseq [id ["builtin/agent-rag-agent" "digdir/altinn-docs-tuned" "e2e/altinn-docs-default"
+                  "cross-sector-researcher" "interactive-doc-improve"
+                  "plain-language-qualtiy-check"]]
+        (is (valid? id) id)))
+
+    (testing "An id carrying the wire separator is refused"
+      (is (not (valid? "evil__agent-rag-graph-bundled"))))
+
+    (testing "A dot before the first slash is refused, since it decodes to another agent"
+      (is (not (valid? "builtin.agent-rag-agent"))))
+
+    (testing "A dot after the first slash survives the wire encoding and is allowed"
+      (is (valid? "tenant/name.with.dots")))
+
+    (testing "Spaces, traversal and markup are refused"
+      (doseq [id ["a b/c d" "../../etc" "<script>alert(1)</script>" "tenant//name"]]
+        (is (not (valid? id)) id)))))

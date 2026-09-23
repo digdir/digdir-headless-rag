@@ -259,9 +259,7 @@
      (dom/props {:style {:display "block" :font-size "0.8125rem" :font-weight "500"
                          :margin-bottom "0.25rem" :color "#374151"}})
      (dom/text label))
-    ;; The selected option is rendered first and the placeholder dropped, because
-    ;; a select shows its first option and Electric mounts options after any
-    ;; :value or :selected we set.
+    ;; Selected option first: Electric mounts options after any :value we set.
     (let [chosen (when-not (str/blank? value) value)
           ordered (cond-> (vec (remove #(= % chosen) options))
                     chosen (->> (into [chosen]))
