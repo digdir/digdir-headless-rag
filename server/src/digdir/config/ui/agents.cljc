@@ -259,14 +259,19 @@
      (dom/props {:style {:display "block" :font-size "0.8125rem" :font-weight "500"
                          :margin-bottom "0.25rem" :color "#374151"}})
      (dom/text label))
-    (dom/select
-     (dom/props {:value (or value "")
-                 :style {:width "100%" :padding "0.5rem" :border "1px solid #d1d5db"
-                         :border-radius "4px" :font-size "0.875rem" :background "#fff"}})
-     (dom/On "change" #(on-change (.. % -target -value)) nil)
-     (dom/option (dom/props {:value ""}) (dom/text "—"))
-     (e/for [o (e/diff-by identity options)]
-       (dom/option (dom/props {:value o}) (dom/text o)))))))
+    ;; The selected option is rendered first and the placeholder dropped, because
+    ;; a select shows its first option and Electric mounts options after any
+    ;; :value or :selected we set.
+    (let [chosen (when-not (str/blank? value) value)
+          ordered (cond-> (vec (remove #(= % chosen) options))
+                    chosen (->> (into [chosen]))
+                    (nil? chosen) (->> (into [""])))]
+      (dom/select
+       (dom/props {:style {:width "100%" :padding "0.5rem" :border "1px solid #d1d5db"
+                           :border-radius "4px" :font-size "0.875rem" :background "#fff"}})
+       (dom/On "change" #(on-change (.. % -target -value)) nil)
+       (e/for [o (e/diff-by identity ordered)]
+         (dom/option (dom/props {:value o}) (dom/text (if (= o "") "—" o)))))))))
 
 (e/defn AgentForm [editing is-admin user-id graphs catalogue !editing]
   (e/client
