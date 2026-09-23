@@ -7,6 +7,8 @@
             #?(:clj [clojure.edn :as edn])
             [clojure.string :as str]
             #?(:clj [digdir.agents.core :as agents])
+            #?(:clj [digdir.skills.api :as skills-api])
+            #?(:clj [digdir.skills.init :as skills-init])
             #?(:clj [digdir.agents.db :as agents-db])
             #?(:clj [digdir.config.db :as config-db])
             #?(:clj [digdir.config.permissions :as perms])
@@ -40,6 +42,30 @@
            {:ok (:id (agents-db/upsert-agent! conn (assoc agent :skill-params params)))})
          (catch Exception e
            {:error (or (ex-message e) "Could not save the agent.")})))))
+
+#?(:clj
+   (defn skill-param-catalogue
+     "Registered skills and the parameters they declare."
+     []
+     (skills-init/ensure-initialized!)
+     (->> (skills-api/list-skills)
+          (keep (fn [sk]
+                  (when (seq (:parameters sk))
+                    {:skill (str (:skill-id sk))
+                     :params (mapv (comp str symbol key) (sort-by key (:parameters sk)))})))
+          (sort-by :skill)
+          vec)))
+
+#?(:clj
+   (defn merge-skill-param
+     "Merge one parameter into EDN params text. Returns {:ok text} or {:error msg}."
+     [edn-text skill param value]
+     (try
+       (let [m (if (str/blank? edn-text) {} (edn/read-string edn-text))
+             v (try (edn/read-string value) (catch Exception _ value))]
+         {:ok (pr-str (assoc-in m [(keyword (subs skill 1)) (keyword param)] v))})
+       (catch Exception e
+         {:error (str "Could not merge: " (ex-message e))}))))
 
 #?(:clj
    (defn delete-agent!
@@ -225,7 +251,24 @@
                     disabled (assoc :disabled true)))
        (dom/On "input" #(on-input (.. % -target -value)) nil))))))
 
-(e/defn AgentForm [editing is-admin user-id graphs !editing]
+(e/defn Select [label value options on-change]
+  (e/client
+   (dom/div
+    (dom/props {:style {:margin-bottom "0.75rem"}})
+    (dom/label
+     (dom/props {:style {:display "block" :font-size "0.8125rem" :font-weight "500"
+                         :margin-bottom "0.25rem" :color "#374151"}})
+     (dom/text label))
+    (dom/select
+     (dom/props {:value (or value "")
+                 :style {:width "100%" :padding "0.5rem" :border "1px solid #d1d5db"
+                         :border-radius "4px" :font-size "0.875rem" :background "#fff"}})
+     (dom/On "change" #(on-change (.. % -target -value)) nil)
+     (dom/option (dom/props {:value ""}) (dom/text "—"))
+     (e/for [o (e/diff-by identity options)]
+       (dom/option (dom/props {:value o}) (dom/text o)))))))
+
+(e/defn AgentForm [editing is-admin user-id graphs catalogue !editing]
   (e/client
    (let [row (:row editing)
          mode (:mode editing)
@@ -243,96 +286,126 @@
          !default (atom (or (:default-skill-graph seed) ""))
          !enabled (atom (if (contains? seed :enabled?) (:enabled? seed) true))
          !err (atom nil)
+         !pick-skill (atom "") !pick-param (atom "") !pick-value (atom "")
          id-v (e/watch !id) name-v (e/watch !name) desc-v (e/watch !desc)
          instr-v (e/watch !instr) params-v (e/watch !params) allowed-v (e/watch !allowed)
-         default-v (e/watch !default) enabled-v (e/watch !enabled)
-         err (e/watch !err)
-         builtin? (and (= mode :edit) (not= :custom (:status row)))]
+         default-v (e/watch !default) enabled-v (e/watch !enabled) err (e/watch !err)
+         pick-skill (e/watch !pick-skill) pick-param (e/watch !pick-param)
+         pick-value (e/watch !pick-value)
+         builtin? (and (= mode :edit) (not= :custom (:status row)))
+         params-for (fn [sk] (or (some #(when (= sk (:skill %)) (:params %)) catalogue) []))]
      (dom/div
-      (dom/props {:style {:border "1px solid #d1d5db" :border-radius "8px"
-                          :padding "1rem" :margin-bottom "1rem" :background "#fff"}})
+      (dom/props {:style {:position "fixed" :top "0" :left "0" :right "0" :bottom "0"
+                          :background "rgba(0,0,0,0.5)" :display "flex"
+                          :align-items "flex-start" :justify-content "center"
+                          :overflow-y "auto" :padding "2rem 1rem" :z-index "1000"}})
       (dom/div
-       (dom/props {:style {:font-weight "600" :margin-bottom "0.75rem"}})
-       (dom/text (case mode :create "New agent"
-                            :duplicate (str "Duplicate " (:id stored))
-                            (str "Edit " (:id stored)))))
-      (when builtin?
+       (dom/props {:style {:background "#fff" :border-radius "8px" :padding "1.5rem"
+                           :width "min(640px, 100%)" :max-height "none"}})
+       (dom/div
+        (dom/props {:style {:font-weight "600" :margin-bottom "0.75rem"}})
+        (dom/text (case mode :create "New agent"
+                             :duplicate (str "Duplicate " (:id stored))
+                             (str "Edit " (:id stored)))))
+       (when builtin?
+         (dom/div
+          (dom/props {:style {:background "#fffbeb" :border "1px solid #fde68a" :color "#92400e"
+                              :padding "0.5rem 0.75rem" :border-radius "6px"
+                              :font-size "0.8125rem" :margin-bottom "0.75rem"}})
+          (dom/text (str "This agent is defined in code. Allowed graphs and the default are "
+                         "reconciled from code at every restart, so changes to those will not "
+                         "stick. Name, description and skill params persist. Duplicating gives "
+                         "you a copy nothing reconciles."))))
+       (Field "ID" id-v #(reset! !id %) {:disabled (= mode :edit)
+                                         :placeholder "tenant/agent-name"})
+       (Field "Name" name-v #(reset! !name %))
+       (Field "Description" desc-v #(reset! !desc %))
+       (Field "Instructions (optional)" instr-v #(reset! !instr %)
+              {:multiline true :placeholder "Stored for humans; the runtime does not read it."})
+       (dom/div
+        (dom/props {:style {:margin-bottom "0.75rem"}})
+        (dom/label
+         (dom/props {:style {:display "block" :font-size "0.8125rem" :font-weight "500"
+                             :margin-bottom "0.25rem" :color "#374151"}})
+         (dom/text "Allowed skill graphs"))
+        (e/for [g (e/diff-by identity graphs)]
+          (dom/label
+           (dom/props {:style {:display "flex" :align-items "center" :gap "0.5rem"
+                               :font-size "0.8125rem" :cursor "pointer"}})
+           (dom/input
+            (dom/props {:type "checkbox" :checked (contains? allowed-v g)})
+            (dom/On "change"
+                    (fn [_] (swap! !allowed #(if (contains? % g) (disj % g) (conj % g)))) nil))
+           (dom/text g))))
+       (Select "Default skill graph" default-v (vec (sort allowed-v)) #(reset! !default %))
+       (dom/div
+        (dom/props {:style {:border "1px solid #e5e7eb" :border-radius "6px"
+                            :padding "0.75rem" :margin-bottom "0.75rem"}})
         (dom/div
-         (dom/props {:style {:background "#fffbeb" :border "1px solid #fde68a" :color "#92400e"
-                             :padding "0.5rem 0.75rem" :border-radius "6px"
-                             :font-size "0.8125rem" :margin-bottom "0.75rem"}})
-         (dom/text (str "This agent is defined in code. Allowed graphs and the default are "
-                        "reconciled from code at every restart, so changes to those will not "
-                        "stick. Name, description and skill params persist. Duplicating gives "
-                        "you a copy nothing reconciles."))))
-      (Field "ID" id-v #(reset! !id %) {:disabled (= mode :edit)
-                                        :placeholder "tenant/agent-name"})
-      (Field "Name" name-v #(reset! !name %))
-      (Field "Description" desc-v #(reset! !desc %))
-      (Field "Instructions" instr-v #(reset! !instr %)
-             {:multiline true
-              :placeholder "Required. Stored and shown here; the runtime does not read it."})
-      (Field "Skill params (EDN)" params-v #(reset! !params %)
-             {:multiline true
-              :placeholder "{:builtin/retrieval {:retrieve-top-k 150} :builtin/rerank {:top-k 60}}"})
-      (dom/div
-       (dom/props {:style {:margin-bottom "0.75rem"}})
+         (dom/props {:style {:font-size "0.8125rem" :font-weight "500" :margin-bottom "0.5rem"
+                             :color "#374151"}})
+         (dom/text "Skill params"))
+        (Select "Skill" pick-skill (mapv :skill catalogue)
+                (fn [v] (reset! !pick-skill v) (reset! !pick-param "")))
+        (Select "Parameter" pick-param (params-for pick-skill) #(reset! !pick-param %))
+        (Field "Value" pick-value #(reset! !pick-value %) {:placeholder "e.g. 5, 0.7, \"phrase\""})
+        (ks/Button {:data-size "sm" :data-variant "tertiary"}
+                   (e/fn []
+                     (dom/text "Add parameter")
+                     (let [[tok _] (e/Token (dom/On "click" identity nil))]
+                       (when tok
+                         (case (let [res (e/server (merge-skill-param params-v pick-skill
+                                                                      pick-param pick-value))]
+                                 (if (:error res)
+                                   (reset! !err (:error res))
+                                   (do (reset! !params (:ok res)) (reset! !pick-value ""))))
+                           (tok))))))
+        (Field "EDN" params-v #(reset! !params %)
+               {:multiline true
+                :placeholder "{:builtin/retrieval {:retrieve-top-k 150}}"}))
        (dom/label
-        (dom/props {:style {:display "block" :font-size "0.8125rem" :font-weight "500"
-                            :margin-bottom "0.25rem" :color "#374151"}})
-        (dom/text "Allowed skill graphs"))
-       (e/for [g (e/diff-by identity graphs)]
-         (dom/label
-          (dom/props {:style {:display "flex" :align-items "center" :gap "0.5rem"
-                              :font-size "0.8125rem" :cursor "pointer"}})
-          (dom/input
-           (dom/props {:type "checkbox" :checked (contains? allowed-v g)})
-           (dom/On "change" (fn [_] (swap! !allowed #(if (contains? % g) (disj % g) (conj % g)))) nil))
-          (dom/text g))))
-      (Field "Default skill graph" default-v #(reset! !default %)
-             {:placeholder "must be one of the allowed graphs"})
-      (dom/label
-       (dom/props {:style {:display "flex" :align-items "center" :gap "0.5rem"
-                           :font-size "0.8125rem" :margin-bottom "0.75rem" :cursor "pointer"}})
-       (dom/input
-        (dom/props {:type "checkbox" :checked enabled-v})
-        (dom/On "change" (fn [_] (swap! !enabled not)) nil))
-       (dom/text "Enabled"))
-      (when err
-        (dom/div
-         (dom/props {:style {:color "#991b1b" :font-size "0.8125rem" :margin-bottom "0.75rem"}})
-         (dom/text err)))
-      (dom/div
-       (dom/props {:style {:display "flex" :gap "0.5rem"}})
-       (ks/Button {:data-size "sm" :data-variant "primary"}
-                  (e/fn []
-                    (dom/text "Save")
-                    (let [[tok _] (e/Token (dom/On "click" identity nil))]
-                      (when tok
-                        (case (let [res (e/server
-                                         (save-agent! user-id
-                                                      {:id id-v :name name-v :description desc-v
-                                                       :instructions instr-v
-                                                       :allowed-skill-graphs (vec allowed-v)
-                                                       :default-skill-graph default-v
-                                                       :enabled? enabled-v}
-                                                      params-v))]
-                                (if (:error res)
-                                  (reset! !err (:error res))
-                                  (reset! !editing nil)))
-                          (tok))))))
-       (ks/Button {:data-size "sm" :data-variant "tertiary"}
-                  (e/fn []
-                    (dom/text "Cancel")
-                    (let [[tok _] (e/Token (dom/On "click" identity nil))]
-                      (when tok
-                        (case (reset! !editing nil) (tok)))))))))))
+        (dom/props {:style {:display "flex" :align-items "center" :gap "0.5rem"
+                            :font-size "0.8125rem" :margin-bottom "0.75rem" :cursor "pointer"}})
+        (dom/input
+         (dom/props {:type "checkbox" :checked enabled-v})
+         (dom/On "change" (fn [_] (swap! !enabled not)) nil))
+        (dom/text "Enabled"))
+       (when err
+         (dom/div
+          (dom/props {:style {:color "#991b1b" :font-size "0.8125rem" :margin-bottom "0.75rem"}})
+          (dom/text err)))
+       (dom/div
+        (dom/props {:style {:display "flex" :gap "0.5rem"}})
+        (ks/Button {:data-size "sm" :data-variant "primary"}
+                   (e/fn []
+                     (dom/text "Save")
+                     (let [[tok _] (e/Token (dom/On "click" identity nil))]
+                       (when tok
+                         (case (let [res (e/server
+                                          (save-agent! user-id
+                                                       {:id id-v :name name-v :description desc-v
+                                                        :instructions instr-v
+                                                        :allowed-skill-graphs (vec allowed-v)
+                                                        :default-skill-graph default-v
+                                                        :enabled? enabled-v}
+                                                       params-v))]
+                                 (if (:error res)
+                                   (reset! !err (:error res))
+                                   (reset! !editing nil)))
+                           (tok))))))
+        (ks/Button {:data-size "sm" :data-variant "tertiary"}
+                   (e/fn []
+                     (dom/text "Cancel")
+                     (let [[tok _] (e/Token (dom/On "click" identity nil))]
+                       (when tok
+                         (case (reset! !editing nil) (tok))))))))))))
 
 (e/defn AgentsUI []
   (e/client
    (let [!editing (atom nil)
          editing (e/watch !editing)
          graphs (e/server (available-graphs))
+         catalogue (e/server (skill-param-catalogue))
          user-id (e/server (:user/id e/http-request))
          ;; e/watch, not deref: the table must redraw after a reseed writes.
          rows (e/server (if-let [conn (config-db/get-conn)]
@@ -355,7 +428,7 @@
                       " An agent can only run a skill graph listed on its row, "
                       "regardless of what the code declares or an API key grants.")))
       (e/for [f (e/diff-by :mode (if editing [editing] []))]
-        (AgentForm f is-admin user-id graphs !editing))
+        (AgentForm f is-admin user-id graphs catalogue !editing))
       (dom/div
        (dom/props {:style {:display "flex" :gap "0.5rem" :margin-bottom "1rem"}})
        (ks/Button (cond-> {:data-size "sm" :data-variant "primary"}

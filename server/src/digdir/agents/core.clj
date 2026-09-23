@@ -154,9 +154,6 @@
                   (str/blank? (:description agent))
                   (conj "Agent :description is required.")
 
-                  (str/blank? (:instructions agent))
-                  (conj "Agent :instructions is required.")
-
                   (str/blank? (:default-skill-graph agent))
                   (conj "Agent :default-skill-graph is required.")
 
