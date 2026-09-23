@@ -326,6 +326,29 @@
                                         (agents/builtin-agent-definitions)))]
       (seed-one-agent! conn agent-def available-skill-graphs))))
 
+(defn reconcile-skill-graphs!
+  "Bring each builtin's stored graph lists back in line with its definition,
+   leaving every other field alone. Returns the agents it changed."
+  [conn]
+  (skills-init/ensure-initialized!)
+  (let [available (agents/available-skill-graph-ids)]
+    (vec
+     (keep (fn [agent-def]
+             (let [filtered (filter-to-available-skill-graphs agent-def available)]
+               (when (seq (:allowed-skill-graphs filtered))
+                 (if-let [stored (get-agent @conn (:id agent-def))]
+                   (when (or (not= (set (:allowed-skill-graphs stored))
+                                   (set (:allowed-skill-graphs filtered)))
+                             (not= (:default-skill-graph stored)
+                                   (:default-skill-graph filtered)))
+                     (upsert-agent! conn
+                                    (assoc stored
+                                           :allowed-skill-graphs (:allowed-skill-graphs filtered)
+                                           :default-skill-graph (:default-skill-graph filtered))
+                                    {:available-skill-graphs available}))
+                   (upsert-agent! conn filtered {:available-skill-graphs available})))))
+           (agents/builtin-agent-definitions)))))
+
 (defn drift-report
   "What a reseed would do to every agent, stored or declared."
   [db]

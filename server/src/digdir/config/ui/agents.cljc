@@ -5,6 +5,7 @@
             [hyperfiddle.electric-dom3 :as dom]
             [com.itonomi.komponentkassen.shell :as ks]
             [clojure.string :as str]
+            #?(:clj [digdir.agents.core :as agents])
             #?(:clj [digdir.agents.db :as agents-db])
             #?(:clj [digdir.config.db :as config-db])
             #?(:clj [digdir.config.permissions :as perms])
@@ -18,6 +19,23 @@
        (common/ensure-config-ui-admin! @conn user-id)
        (agents-db/seed-agent! conn agent-id)
        true)))
+
+#?(:clj
+   (defn available-graphs
+     []
+     (vec (sort (map str (agents/available-skill-graph-ids))))))
+
+#?(:clj
+   (defn save-agent!
+     "Create or update an agent. Admin only. Returns {:ok id} or {:error msg}."
+     [user-id agent]
+     (let [conn (config-db/get-conn)]
+       (common/ensure-config-ui-admin! @conn user-id)
+       (try
+         (let [saved (agents-db/upsert-agent! conn agent)]
+           {:ok (:id saved)})
+         (catch Exception e
+           {:error (or (ex-message e) "Could not save the agent.")})))))
 
 #?(:clj
    (defn reseed-all-agents!
@@ -104,7 +122,7 @@
                                   (e/server (reseed-agent! user-id (:id row))))
                          (tok))))))))))
 
-(e/defn AgentRow [row is-admin user-id]
+(e/defn AgentRow [row is-admin user-id !editing]
   (e/client
    (let [stored (:stored row)
          declared (:declared row)
@@ -131,11 +149,151 @@
          (dom/div
           (dom/props {:style {:font-size "0.75rem" :color "#6b7280" :margin-top "0.25rem"}})
           (dom/text (get explanations status ""))))
-       (ReseedButton row is-admin user-id))))))
+       (ReseedButton row is-admin user-id)
+       (dom/div
+        (dom/props {:style {:display "flex" :gap "0.5rem" :margin-top "0.25rem"}})
+        (ks/Button (cond-> {:data-size "sm" :data-variant "tertiary"}
+                     (not is-admin) (assoc :disabled true :title "Requires the admin-full permission."))
+                   (e/fn []
+                     (dom/text "Duplicate")
+                     (let [[tok _] (e/Token (dom/On "click" identity nil))]
+                       (when tok
+                         (case (reset! !editing {:mode :duplicate :row row}) (tok))))))
+        (ks/Button (cond-> {:data-size "sm" :data-variant "tertiary"}
+                     (or (not is-admin) (nil? (:stored row)))
+                     (assoc :disabled true
+                            :title (if is-admin
+                                     "Nothing stored yet for this agent."
+                                     "Requires the admin-full permission.")))
+                   (e/fn []
+                     (dom/text "Edit")
+                     (let [[tok _] (e/Token (dom/On "click" identity nil))]
+                       (when tok
+                         (case (reset! !editing {:mode :edit :row row}) (tok))))))))))))
+
+(e/defn Field [label value on-input & [{:keys [disabled placeholder multiline]}]]
+  (e/client
+   (dom/div
+    (dom/props {:style {:margin-bottom "0.75rem"}})
+    (dom/label
+     (dom/props {:style {:display "block" :font-size "0.8125rem" :font-weight "500"
+                         :margin-bottom "0.25rem" :color "#374151"}})
+     (dom/text label))
+    (if multiline
+      (dom/textarea
+       (dom/props {:value value :rows 3 :placeholder (or placeholder "")
+                   :style {:width "100%" :padding "0.5rem" :border "1px solid #d1d5db"
+                           :border-radius "4px" :font-size "0.875rem"}})
+       (dom/On "input" #(on-input (.. % -target -value)) nil))
+      (dom/input
+       (dom/props (cond-> {:type "text" :value value :placeholder (or placeholder "")
+                           :style {:width "100%" :padding "0.5rem" :border "1px solid #d1d5db"
+                                   :border-radius "4px" :font-size "0.875rem"}}
+                    disabled (assoc :disabled true)))
+       (dom/On "input" #(on-input (.. % -target -value)) nil))))))
+
+(e/defn AgentForm [editing is-admin user-id graphs !editing]
+  (e/client
+   (let [row (:row editing)
+         mode (:mode editing)
+         stored (:stored row)
+         seed (case mode
+                :create {}
+                :duplicate (assoc stored :id "" :name (str (:name stored) " (copy)"))
+                (or stored {}))
+         !id (atom (or (:id seed) ""))
+         !name (atom (or (:name seed) ""))
+         !desc (atom (or (:description seed) ""))
+         !instr (atom (or (:instructions seed) ""))
+         !allowed (atom (set (:allowed-skill-graphs seed)))
+         !default (atom (or (:default-skill-graph seed) ""))
+         !enabled (atom (if (contains? seed :enabled?) (:enabled? seed) true))
+         !err (atom nil)
+         id-v (e/watch !id) name-v (e/watch !name) desc-v (e/watch !desc)
+         instr-v (e/watch !instr) allowed-v (e/watch !allowed)
+         default-v (e/watch !default) enabled-v (e/watch !enabled)
+         err (e/watch !err)
+         builtin? (and (= mode :edit) (not= :custom (:status row)))]
+     (dom/div
+      (dom/props {:style {:border "1px solid #d1d5db" :border-radius "8px"
+                          :padding "1rem" :margin-bottom "1rem" :background "#fff"}})
+      (dom/div
+       (dom/props {:style {:font-weight "600" :margin-bottom "0.75rem"}})
+       (dom/text (case mode :create "New agent"
+                            :duplicate (str "Duplicate " (:id stored))
+                            (str "Edit " (:id stored)))))
+      (when builtin?
+        (dom/div
+         (dom/props {:style {:background "#fffbeb" :border "1px solid #fde68a" :color "#92400e"
+                             :padding "0.5rem 0.75rem" :border-radius "6px"
+                             :font-size "0.8125rem" :margin-bottom "0.75rem"}})
+         (dom/text (str "This agent is defined in code. Allowed graphs and the default are "
+                        "reconciled from code at every restart, so changes to those will not "
+                        "stick. Other fields persist. Duplicating instead gives you a copy "
+                        "nothing reconciles."))))
+      (Field "ID" id-v #(reset! !id %) {:disabled (= mode :edit)
+                                        :placeholder "tenant/agent-name"})
+      (Field "Name" name-v #(reset! !name %))
+      (Field "Description" desc-v #(reset! !desc %))
+      (Field "Instructions" instr-v #(reset! !instr %) {:multiline true})
+      (dom/div
+       (dom/props {:style {:margin-bottom "0.75rem"}})
+       (dom/label
+        (dom/props {:style {:display "block" :font-size "0.8125rem" :font-weight "500"
+                            :margin-bottom "0.25rem" :color "#374151"}})
+        (dom/text "Allowed skill graphs"))
+       (e/for [g (e/diff-by identity graphs)]
+         (dom/label
+          (dom/props {:style {:display "flex" :align-items "center" :gap "0.5rem"
+                              :font-size "0.8125rem" :cursor "pointer"}})
+          (dom/input
+           (dom/props {:type "checkbox" :checked (contains? allowed-v g)})
+           (dom/On "change" (fn [_] (swap! !allowed #(if (contains? % g) (disj % g) (conj % g)))) nil))
+          (dom/text g))))
+      (Field "Default skill graph" default-v #(reset! !default %)
+             {:placeholder "must be one of the allowed graphs"})
+      (dom/label
+       (dom/props {:style {:display "flex" :align-items "center" :gap "0.5rem"
+                           :font-size "0.8125rem" :margin-bottom "0.75rem" :cursor "pointer"}})
+       (dom/input
+        (dom/props {:type "checkbox" :checked enabled-v})
+        (dom/On "change" (fn [_] (swap! !enabled not)) nil))
+       (dom/text "Enabled"))
+      (when err
+        (dom/div
+         (dom/props {:style {:color "#991b1b" :font-size "0.8125rem" :margin-bottom "0.75rem"}})
+         (dom/text err)))
+      (dom/div
+       (dom/props {:style {:display "flex" :gap "0.5rem"}})
+       (ks/Button {:data-size "sm" :data-variant "primary"}
+                  (e/fn []
+                    (dom/text "Save")
+                    (let [[tok _] (e/Token (dom/On "click" identity nil))]
+                      (when tok
+                        (case (let [res (e/server
+                                         (save-agent! user-id
+                                                      {:id id-v :name name-v :description desc-v
+                                                       :instructions instr-v
+                                                       :allowed-skill-graphs (vec allowed-v)
+                                                       :default-skill-graph default-v
+                                                       :enabled? enabled-v}))]
+                                (if (:error res)
+                                  (reset! !err (:error res))
+                                  (reset! !editing nil)))
+                          (tok))))))
+       (ks/Button {:data-size "sm" :data-variant "tertiary"}
+                  (e/fn []
+                    (dom/text "Cancel")
+                    (let [[tok _] (e/Token (dom/On "click" identity nil))]
+                      (when tok
+                        (case (reset! !editing nil) (tok)))))))))))
 
 (e/defn AgentsUI []
   (e/client
-   (let [user-id (e/server (:user/id e/http-request))
+   (let [!editing (atom nil)
+         editing (e/watch !editing)
+         graphs (e/server (available-graphs))
+         user-id (e/server (:user/id e/http-request))
          ;; e/watch, not deref: the table must redraw after a reseed writes.
          rows (e/server (if-let [conn (config-db/get-conn)]
                           (agents-db/drift-report (e/watch conn))
@@ -156,8 +314,17 @@
                         (str needing " differ from the code definitions."))
                       " An agent can only run a skill graph listed on its row, "
                       "regardless of what the code declares or an API key grants.")))
+      (e/for [f (e/diff-by :mode (if editing [editing] []))]
+        (AgentForm f is-admin user-id graphs !editing))
       (dom/div
-       (dom/props {:style {:margin-bottom "1rem"}})
+       (dom/props {:style {:display "flex" :gap "0.5rem" :margin-bottom "1rem"}})
+       (ks/Button (cond-> {:data-size "sm" :data-variant "primary"}
+                    (not is-admin) (assoc :disabled true :title "Requires the admin-full permission."))
+                  (e/fn []
+                    (dom/text "New agent")
+                    (let [[tok _] (e/Token (dom/On "click" identity nil))]
+                      (when tok
+                        (case (reset! !editing {:mode :create}) (tok))))))
        (ks/Button (cond-> {:data-size "sm" :data-variant "secondary"}
                     (or (not is-admin) (zero? needing))
                     (assoc :disabled true
@@ -191,4 +358,4 @@
            (dom/th (dom/props {:style header-style}) (dom/text "Allowed graphs"))))
          (dom/tbody
           (e/for [row (e/diff-by :id rows)]
-            (AgentRow row is-admin user-id)))))))))
+            (AgentRow row is-admin user-id !editing)))))))))

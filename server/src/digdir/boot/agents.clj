@@ -1,16 +1,16 @@
 (ns digdir.boot.agents
-  "Reconcile the stored agent rows with the code definitions at boot."
+  "Reconcile each builtin's stored skill graphs with its definition at boot."
   (:require [taoensso.telemere :as t]
             [digdir.agents.db :as agents-db]
             [digdir.config.db :as config-db]))
 
 (defn seed!
-  "Reseed the builtin agents. nil when there is no config DB."
+  "Reconcile the builtin agents' skill graphs. nil when there is no config DB."
   []
   (try
     (if-let [conn (config-db/get-conn)]
-      (let [seeded (agents-db/seed-builtin-agents! conn)]
-        (t/log! :info [::builtin-agents-seeded {:count (count seeded)
+      (let [seeded (agents-db/reconcile-skill-graphs! conn)]
+        (t/log! :info [::builtin-agents-reconciled {:count (count seeded)
                                                 :agent-ids (mapv :id seeded)}])
         (mapv :id seeded))
       (do (t/log! :warn [::no-config-db {:effect "builtin agents not reconciled"}])

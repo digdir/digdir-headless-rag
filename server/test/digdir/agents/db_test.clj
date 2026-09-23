@@ -332,3 +332,40 @@
         (config-db/ensure-schema! conn)
         (is (nil? (agents-db/seed-agent! conn "e2e/not-in-code")))
         (finally (delete-test-db conn))))))
+
+(deftest test-reconcile-skill-graphs
+  (testing "Restores a narrowed graph list without touching other fields"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/ensure-schema! conn)
+        (agents-db/seed-builtin-agents! conn)
+        (agents-db/upsert-agent!
+         conn (assoc (agents-db/get-agent @conn "builtin/agent-rag-agent")
+                     :allowed-skill-graphs ["builtin/agent-rag-graph-bundled"]
+                     :default-skill-graph "builtin/agent-rag-graph-bundled"
+                     :instructions "Operator tuned."
+                     :name "Operator named"))
+        (agents-db/reconcile-skill-graphs! conn)
+        (let [after (agents-db/get-agent @conn "builtin/agent-rag-agent")]
+          (is (= #{"builtin/agent-rag-graph-bundled" "builtin/agent-rag-graph-faithful"}
+                 (set (:allowed-skill-graphs after))))
+          (is (= "Operator tuned." (:instructions after)))
+          (is (= "Operator named" (:name after))))
+        (finally (delete-test-db conn)))))
+
+  (testing "Creates a builtin that has never been stored"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/ensure-schema! conn)
+        (is (nil? (agents-db/get-agent @conn "builtin/agent-rag-agent")))
+        (agents-db/reconcile-skill-graphs! conn)
+        (is (some? (agents-db/get-agent @conn "builtin/agent-rag-agent")))
+        (finally (delete-test-db conn)))))
+
+  (testing "Changes nothing when the graphs already agree"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/ensure-schema! conn)
+        (agents-db/seed-builtin-agents! conn)
+        (is (empty? (agents-db/reconcile-skill-graphs! conn)))
+        (finally (delete-test-db conn))))))
