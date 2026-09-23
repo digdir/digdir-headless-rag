@@ -12,7 +12,10 @@
             [digdir.config.ui :as ui]
             [digdir.config.ui.common :as common]
             [digdir.config.ui.inheritance :as inheritance]
-            [digdir.config.ui.api-keys :as api-keys]))
+            [digdir.config.ui.api-keys :as api-keys]
+            [digdir.config.ui.agents :as ui-agents]
+            [digdir.agents.db :as agents-db]
+            [digdir.skills.api :as skills-api]))
 
 (defn create-test-db
   []
@@ -1209,3 +1212,72 @@
            (api-keys/allowed-config-key-tag-label {:tenant "ka"
                                                    :root :runtime
                                                    :tenant-config-key "default"})))))
+
+(defn- with-agent-db
+  [f]
+  (skills-api/reset-skills!)
+  (skills-api/initialize!)
+  (let [conn (create-test-db)
+        previous-conn (config-db/get-conn)]
+    (try
+      (config-db/ensure-schema! conn)
+      (config-db/set-conn! conn)
+      (f conn)
+      (finally
+        (config-db/set-conn! previous-conn)
+        (skills-api/reset-skills!)
+        (delete-test-db conn)))))
+
+(def ^:private an-agent
+  {:id "t/saved"
+   :name "Saved"
+   :description "d"
+   :instructions "i"
+   :default-skill-graph "builtin/agent-rag-graph-bundled"
+   :allowed-skill-graphs ["builtin/agent-rag-graph-bundled"]
+   :enabled? true})
+
+(deftest test-save-agent
+  (testing "Refuses a caller who does not hold admin-full"
+    (with-agent-db
+      (fn [_]
+        (with-redefs [perms/is-admin? (fn [_ _] false)]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Permission denied"
+                                (ui-agents/save-agent! "user-1" an-agent "")))))))
+
+  (testing "Blank skill params store as an empty map"
+    (with-agent-db
+      (fn [conn]
+        (with-redefs [perms/is-admin? (fn [_ _] true)]
+          (is (= {:ok "t/saved"} (ui-agents/save-agent! "user-1" an-agent "")))
+          (is (= {} (:skill-params (agents-db/get-agent @conn "t/saved"))))))))
+
+  (testing "Unparseable skill params return an error rather than throwing"
+    (with-agent-db
+      (fn [conn]
+        (with-redefs [perms/is-admin? (fn [_ _] true)]
+          (let [res (ui-agents/save-agent! "user-1" an-agent "{:builtin/retrieval ")]
+            (is (contains? res :error)))
+          (is (nil? (agents-db/get-agent @conn "t/saved")))))))
+
+  (testing "Skill params that are not a map are refused"
+    (with-agent-db
+      (fn [_]
+        (with-redefs [perms/is-admin? (fn [_ _] true)]
+          (is (contains? (ui-agents/save-agent! "user-1" an-agent "[1 2 3]") :error))))))
+
+  (testing "Valid skill params are stored as read"
+    (with-agent-db
+      (fn [conn]
+        (with-redefs [perms/is-admin? (fn [_ _] true)]
+          (ui-agents/save-agent! "user-1" an-agent "{:builtin/retrieval {:retrieve-top-k 5}}")
+          (is (= {:builtin/retrieval {:retrieve-top-k 5}}
+                 (:skill-params (agents-db/get-agent @conn "t/saved"))))))))
+
+  (testing "An invalid agent surfaces the validation message"
+    (with-agent-db
+      (fn [_]
+        (with-redefs [perms/is-admin? (fn [_ _] true)]
+          (is (contains? (ui-agents/save-agent!
+                          "user-1" (assoc an-agent :allowed-skill-graphs ["nope/not-registered"]) "")
+                         :error)))))))

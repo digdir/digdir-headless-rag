@@ -4,6 +4,7 @@
   (:require [hyperfiddle.electric3 :as e]
             [hyperfiddle.electric-dom3 :as dom]
             [com.itonomi.komponentkassen.shell :as ks]
+            #?(:clj [clojure.edn :as edn])
             [clojure.string :as str]
             #?(:clj [digdir.agents.core :as agents])
             #?(:clj [digdir.agents.db :as agents-db])
@@ -27,13 +28,16 @@
 
 #?(:clj
    (defn save-agent!
-     "Create or update an agent. Admin only. Returns {:ok id} or {:error msg}."
-     [user-id agent]
+     "Create or update an agent. Admin only. Returns {:ok id} or {:error msg}.
+      skill-params arrives as EDN text, so parsing it is part of validation."
+     [user-id agent skill-params-edn]
      (let [conn (config-db/get-conn)]
        (common/ensure-config-ui-admin! @conn user-id)
        (try
-         (let [saved (agents-db/upsert-agent! conn agent)]
-           {:ok (:id saved)})
+         (let [params (if (str/blank? skill-params-edn) {} (edn/read-string skill-params-edn))]
+           (when-not (map? params)
+             (throw (ex-info "Skill params must be a map." {})))
+           {:ok (:id (agents-db/upsert-agent! conn (assoc agent :skill-params params)))})
          (catch Exception e
            {:error (or (ex-message e) "Could not save the agent.")})))))
 
@@ -205,12 +209,13 @@
          !name (atom (or (:name seed) ""))
          !desc (atom (or (:description seed) ""))
          !instr (atom (or (:instructions seed) ""))
+         !params (atom (if (seq (:skill-params seed)) (pr-str (:skill-params seed)) ""))
          !allowed (atom (set (:allowed-skill-graphs seed)))
          !default (atom (or (:default-skill-graph seed) ""))
          !enabled (atom (if (contains? seed :enabled?) (:enabled? seed) true))
          !err (atom nil)
          id-v (e/watch !id) name-v (e/watch !name) desc-v (e/watch !desc)
-         instr-v (e/watch !instr) allowed-v (e/watch !allowed)
+         instr-v (e/watch !instr) params-v (e/watch !params) allowed-v (e/watch !allowed)
          default-v (e/watch !default) enabled-v (e/watch !enabled)
          err (e/watch !err)
          builtin? (and (= mode :edit) (not= :custom (:status row)))]
@@ -229,13 +234,18 @@
                              :font-size "0.8125rem" :margin-bottom "0.75rem"}})
          (dom/text (str "This agent is defined in code. Allowed graphs and the default are "
                         "reconciled from code at every restart, so changes to those will not "
-                        "stick. Other fields persist. Duplicating instead gives you a copy "
-                        "nothing reconciles."))))
+                        "stick. Name, description and skill params persist. Duplicating gives "
+                        "you a copy nothing reconciles."))))
       (Field "ID" id-v #(reset! !id %) {:disabled (= mode :edit)
                                         :placeholder "tenant/agent-name"})
       (Field "Name" name-v #(reset! !name %))
       (Field "Description" desc-v #(reset! !desc %))
-      (Field "Instructions" instr-v #(reset! !instr %) {:multiline true})
+      (Field "Instructions" instr-v #(reset! !instr %)
+             {:multiline true
+              :placeholder "Required. Stored and shown here; the runtime does not read it."})
+      (Field "Skill params (EDN)" params-v #(reset! !params %)
+             {:multiline true
+              :placeholder "{:builtin/retrieval {:retrieve-top-k 150} :builtin/rerank {:top-k 60}}"})
       (dom/div
        (dom/props {:style {:margin-bottom "0.75rem"}})
        (dom/label
@@ -276,7 +286,8 @@
                                                        :instructions instr-v
                                                        :allowed-skill-graphs (vec allowed-v)
                                                        :default-skill-graph default-v
-                                                       :enabled? enabled-v}))]
+                                                       :enabled? enabled-v}
+                                                      params-v))]
                                 (if (:error res)
                                   (reset! !err (:error res))
                                   (reset! !editing nil)))
