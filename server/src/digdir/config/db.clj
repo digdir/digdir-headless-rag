@@ -2864,10 +2864,10 @@
               (throw e)))))))
   (when seed-agents?
     (require 'digdir.agents.db)
-    (when-let [seed-agents-fn (resolve 'digdir.agents.db/seed-builtin-agents!)]
+    (when-let [seed-agents-fn (resolve 'digdir.agents.db/reconcile-skill-graphs!)]
       (seed-agents-fn conn)))
   ;; Per-demo agents were retired in Phase 0; :builtin/docs-agent owns
-  ;; the docs/* skill graphs via seed-builtin-agents! above. Demo
+  ;; the docs/* skill graphs via reconcile-skill-graphs! above. Demo
   ;; namespaces still register their skills and skill graphs via
   ;; their own register! fns, called from skills-init/initialize!.
   ;; Sync admin permissions from ADMIN_USER_EMAILS env var

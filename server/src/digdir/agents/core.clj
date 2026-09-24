@@ -1,6 +1,7 @@
 (ns digdir.agents.core
   "Core agent model, validation, and builtin definitions."
-  (:require [clojure.string :as str]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
             [digdir.skills.api :as skills-api]))
 
 (declare builtin-agent-definitions)
@@ -116,6 +117,10 @@
      :created-at (or (:created-at agent) (:agent/created-at agent))
      :updated-at (or (:updated-at agent) (:agent/updated-at agent))}))
 
+(def ^:private agent-id-pattern
+  ;; No underscore, and no dot before the slash: both collide with the wire encoding.
+  #"[A-Za-z0-9][A-Za-z0-9-]*(/[A-Za-z0-9][A-Za-z0-9.-]*)?")
+
 (defn validate-agent
   "Validate an agent definition and return a structured result.
 
@@ -133,7 +138,11 @@
   ([agent]
    (validate-agent agent {}))
   ([agent {:keys [available-skill-graphs dataset-scope-checker]}]
-   (let [agent (normalize-agent agent)
+   (let [declared-allowed (->> (or (:allowed-skill-graphs agent) (:agent/allowed-skill-graphs agent))
+                               (map normalize-skill-graph-id)
+                               (remove str/blank?)
+                               set)
+         agent (normalize-agent agent)
          available-graphs (or available-skill-graphs
                               (available-skill-graph-ids))
          unresolved-scopes (when dataset-scope-checker
@@ -147,14 +156,17 @@
                   (str/blank? (:id agent))
                   (conj "Agent :id is required.")
 
+                  (and (not (str/blank? (:id agent)))
+                       (not (re-matches agent-id-pattern (:id agent))))
+                  (conj (str "Agent :id must be <name> or <namespace>/<name>, using letters, "
+                             "digits and hyphens (dots allowed after the slash); got "
+                             (pr-str (:id agent))))
+
                   (str/blank? (:name agent))
                   (conj "Agent :name is required.")
 
                   (str/blank? (:description agent))
                   (conj "Agent :description is required.")
-
-                  (str/blank? (:instructions agent))
-                  (conj "Agent :instructions is required.")
 
                   (str/blank? (:default-skill-graph agent))
                   (conj "Agent :default-skill-graph is required.")
@@ -197,8 +209,8 @@
                                   vec)))
 
                   (and (:default-skill-graph agent)
-                       (not (some #(= % (:default-skill-graph agent))
-                                  (:allowed-skill-graphs agent))))
+                       (seq declared-allowed)
+                       (not (contains? declared-allowed (:default-skill-graph agent))))
                   (conj "Agent :default-skill-graph must be included in :allowed-skill-graphs.")
 
                   (some (fn [{:keys [tenant dataset-config-key]}]
@@ -231,6 +243,61 @@
                        {:errors errors
                         :agent agent})))
      agent)))
+
+(def ^:private drift-compared-fields
+  "Fields a reseed overwrites from the code definition."
+  [:name :description :instructions :guardrails :enabled? :allowed-dataset-scopes :skill-params])
+
+(defn agent-drift
+  "What a reseed would do to one stored agent row, as data rather than by
+   doing it. Pure."
+  [{:keys [stored declared available-skill-graphs]}]
+  (let [available (into #{} (keep normalize-skill-graph-id) available-skill-graphs)
+        stored-agent (some-> stored normalize-agent)
+        declared-agent (some-> declared normalize-agent)]
+    (cond
+      (nil? declared-agent)
+      {:id (:id stored-agent)
+       :status :custom
+       :allowed-skill-graphs {:stored (:allowed-skill-graphs stored-agent)}
+       :differing-fields #{}}
+
+      (nil? stored-agent)
+      {:id (:id declared-agent)
+       :status :unseeded
+       :allowed-skill-graphs {:declared (:allowed-skill-graphs declared-agent)
+                              :unavailable (vec (remove available
+                                                        (:allowed-skill-graphs declared-agent)))}
+       :differing-fields #{}}
+
+      :else
+      (let [stored-graphs (:allowed-skill-graphs stored-agent)
+            declared-graphs (:allowed-skill-graphs declared-agent)
+            missing (set/difference (set declared-graphs) (set stored-graphs))
+            recoverable (vec (filter available missing))
+            unavailable (vec (remove available missing))
+            extra (vec (set/difference (set stored-graphs) (set declared-graphs)))
+            differing (into #{} (remove #(= (get stored-agent %) (get declared-agent %)))
+                            drift-compared-fields)
+            stored-default (:default-skill-graph stored-agent)
+            declared-default (:default-skill-graph declared-agent)]
+        {:id (:id declared-agent)
+         :status (cond
+                   (seq recoverable) :stale
+                   (seq unavailable) :narrowed
+                   (or (seq extra)
+                       (seq differing)
+                       (not= stored-default declared-default)) :diverged
+                   :else :matches-code)
+         :allowed-skill-graphs {:stored stored-graphs
+                                :declared declared-graphs
+                                :recoverable recoverable
+                                :unavailable unavailable
+                                :extra extra}
+         :default-skill-graph {:stored stored-default
+                               :declared declared-default
+                               :available? (contains? available declared-default)}
+         :differing-fields differing}))))
 
 (def ^:private production-agent-definitions
   "Agents that ship in every build. Every skill graph named here must be

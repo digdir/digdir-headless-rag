@@ -98,3 +98,14 @@
       (is (< 5 (count ids))
           (str "registry has " (count ids) " graphs — the builtin-only count is "
                "5, so the demo/promoted registrations are not running")))))
+
+(def ^:private builtin-agent-reconcilers
+  '#{digdir.boot.agents/seed! boot-agents/seed!})
+
+(deftest entrypoints-reconcile-builtin-agents
+  (doseq [path ["src-prod/prod.cljc" "src-dev/dev.cljc"]]
+    (testing (str path " reconciles the builtin agents at boot")
+      (let [f (io/file path)]
+        (is (.exists f) (str path " is missing"))
+        (is (some builtin-agent-reconcilers (called-symbols (read-all-forms f)))
+            (str "Expected a call to one of " (pr-str builtin-agent-reconcilers)))))))
