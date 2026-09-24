@@ -3,9 +3,16 @@
   (:require [clojure.string :as str]))
 
 (defn format-filter-value
-  "Format a filter value for Typesense. Integers don't need backticks, strings do."
+  "Format a filter value for Typesense. Integers don't need backticks, strings do.
+
+   `value-type` is compared by NAME, so `:integer` and `\"integer\"` mean the
+   same. A filter that arrives over MCP carries it as a string — the transport
+   keywordizes keys, not values — and comparing with `=` against the keyword
+   quoted the number. Typesense then refused the whole filter on a numeric
+   field («Numerical field has an invalid comparator» for concerned_years),
+   and the search quietly returned nothing."
   [value value-type]
-  (if (= value-type :integer)
+  (if (= "integer" (some-> value-type name))
     (str value)
     (str "`" value "`")))
 
