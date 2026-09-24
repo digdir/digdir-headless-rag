@@ -971,6 +971,20 @@
       (when (seq fields)
         {:fields fields}))))
 
+(defn combine-filter-by
+  "The caller's filter AND the model's, as one :filter-by — or nil when neither.
+
+   A caller-chosen filter (e.g. facet chips a reader ticked) arrives in the
+   retrieval skill-params. The model can also pass its own `filter_by` in a
+   search call. They used to be combined with `merge`, so the model's value —
+   usually nil — REPLACED the reader's, and a reader who picked one
+   organisation got another organisation's documents back. Concatenating the
+   field specs ANDs them, which is what `filter-map->typesense-filter` does with
+   several fields."
+  [caller-filter model-filter]
+  (let [fields (vec (concat (:fields caller-filter) (:fields model-filter)))]
+    (when (seq fields) {:fields fields})))
+
 (defn execute-tool-call*
   "Execute a single tool call and return formatted result.
 
@@ -995,7 +1009,11 @@
         (str "Search budget exhausted ("
              (:search-passes-used budget) "/" (:max-search-passes budget)
              "). Do not call search again; rerank or generate from current evidence.")
-        (let [filter-by (normalize-filter-by (or (:filter-by args) (:filter_by args)))
+        (let [;; The reader's filter is binding; the model's is a guess. See
+              ;; combine-filter-by for why these are no longer merged.
+              caller-filter (get-in opts [:skill-params :builtin/retrieval :filter-by])
+              model-filter (normalize-filter-by (or (:filter-by args) (:filter_by args)))
+              filter-by (combine-filter-by caller-filter model-filter)
               ;; Slice 23: pass the planner's last user-intent into retrieval
               ;; when the agent did a plan_queries call earlier this turn. When
               ;; the retrieval skill has :user-intent-union-enabled, it will run
@@ -1015,15 +1033,19 @@
                                 :rerank-with-colbert true})
               filtered-chunks (get-in filtered-result [:outputs :chunks] [])
               filtered-error (:error filtered-result)
+              ;; Relax only what the MODEL added. Retrying without the
+              ;; reader's own filter would answer a question they narrowed
+              ;; with documents they excluded — an empty result is the
+              ;; honest answer to that.
               needs-unfiltered-fallback? (and (nil? filtered-error)
-                                              (seq filter-by)
+                                              (seq model-filter)
                                               (empty? filtered-chunks))
               unfiltered-result (when needs-unfiltered-fallback?
                                   (execute-sub-skill
                                    :builtin/retrieval
                                    search-inputs
                                    opts
-                                   {:filter-by nil
+                                   {:filter-by caller-filter
                                     :metadata-only true
                                     :rerank-with-colbert true}))
               unfiltered-error (:error unfiltered-result)]
@@ -1049,7 +1071,7 @@
                                                           :attribution attribution
                                                           :fallback? false})
                   _ (workspace/record-search-error! !workspace {:queries (:queries args)
-                                                                :filter-by nil
+                                                                :filter-by caller-filter
                                                                 :error unfiltered-error
                                                                 :fallback? true})
                   search-pass (count (:search-history @!workspace))
