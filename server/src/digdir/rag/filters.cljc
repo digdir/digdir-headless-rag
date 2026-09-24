@@ -24,6 +24,28 @@
       s
       (str "`" s "`"))))
 
+(defn safe-filter-value?
+  "Whether `value` can be put into a Typesense filter without changing its meaning.
+
+   Values are spliced into the filter string, so a value is also syntax. An
+   integer is inserted unquoted, and `2024] || type:=[`Tildelingsbrev`` then
+   closes the list and ORs in a clause of its own — measured: a year filter of
+   1883 documents became 4706. A string is inserted inside backticks, so a
+   backtick in it ends the quoting the same way.
+
+   This matters since caller-chosen filters reach here over MCP. Unsafe values
+   are dropped rather than escaped: no organisation, type or year contains a
+   backtick or a non-digit year, so there is nothing legitimate to preserve.
+
+   Dropping narrows the filter less, which is right for a filter that NARROWS a
+   search. If :filter-by is ever used to RESTRICT what a caller may see, it must
+   fail closed instead."
+  [value value-type]
+  (let [s (str value)]
+    (if (= "integer" (some-> value-type name))
+      (boolean (re-matches #"-?\d+" s))
+      (not (str/includes? s "`")))))
+
 (defn- field-spec->typesense-clause
   "Convert a single filter field spec to a Typesense clause."
   [{:keys [type field selected-options value value-type]}]
@@ -31,6 +53,7 @@
         options (->> (or selected-options
                          (when (some? value) #{value}))
                      (remove nil?)
+                     (filter #(safe-filter-value? % value-type))
                      seq)]
     (cond
       (or (nil? field) (not (seq options)))

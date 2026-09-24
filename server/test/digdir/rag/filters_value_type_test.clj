@@ -27,3 +27,29 @@
                         :selected-options ["2024"]
                         :value-type "integer"}]}
              "docs")))))
+
+(deftest a-value-cannot-become-filter-syntax
+  (testing "an integer that is not a number is dropped, so it cannot close the list and add a clause"
+    (is (nil? (filters/filter-map->typesense-filter
+                {:fields [{:field "concerned_years"
+                           :selected-options ["2024] || type:=[`Tildelingsbrev`"]
+                           :value-type "integer"}]}
+                "docs"))))
+  (testing "a string with a backtick is dropped, so it cannot end its own quoting"
+    (is (nil? (filters/filter-map->typesense-filter
+                {:fields [{:field "type" :selected-options ["Årsrapport`] || orgs_long:=[`x"]}]}
+                "docs"))))
+  (testing "the safe values beside an unsafe one are kept"
+    (is (= "$docs(concerned_years:=[2023,2024])"
+           (filters/filter-map->typesense-filter
+             {:fields [{:field "concerned_years"
+                        :selected-options ["2023" "2024] || x:=[1" "2024"]
+                        :value-type "integer"}]}
+             "docs")))))
+
+(deftest ordinary-values-are-safe
+  (testing "the values a real filter carries are all accepted"
+    (is (filters/safe-filter-value? "2024" "integer"))
+    (is (filters/safe-filter-value? "-1" :integer))
+    (is (filters/safe-filter-value? "Direktoratet for forvaltning og økonomistyring" :string))
+    (is (filters/safe-filter-value? "Årsrapport" nil))))
