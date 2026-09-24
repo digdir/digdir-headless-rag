@@ -565,3 +565,49 @@
               description (get-in tool [:inputSchema "properties" "query" "description"])]
           (is (str/includes? description "user-query")
               "the accepted alias must be documented where the reader meets it"))))))
+
+(deftest invoke-tool-keywordizes-string-keyed-overrides
+  (testing "The MCP transport parses the JSON-RPC body with STRING keys, so
+            `overrides` arrives as {\"retrieve-top-k\" 7}. build-skill-params-from-params
+            looks every per-call key up as a keyword, so before this no MCP override
+            ever reached a skill. Keywordized deeply, so a filter's own keys match too."
+    (let [unscoped-agent (assoc rag-agent :allowed-dataset-scopes [])
+          captured-params (atom ::not-called)]
+      (with-stubs [unscoped-agent]
+        (fn []
+          (with-redefs [config-core/get-master-key (fn [] "k")
+                        config-db/get-dataset-by-ref
+                        (fn [_ _ _] {:docs-collection "d" :chunks-collection "c"
+                                     :phrases-collection "p"})
+                        api-util/build-rag-skill-params
+                        (fn [_config params _agent-skill-params]
+                          (reset! captured-params params)
+                          {})
+                        data-db/get-conn (fn [] (atom :fake))
+                        data-db/create-playground-conversation
+                        (fn [_ _ _] {:conversation-id "convo-1"})
+                        data-db/fetch-conversation-tree (fn [_ _] [])
+                        data-db/transact-playground-user-msg (fn [& _] nil)
+                        data-db/transact-assistant-msg (fn [& _] nil)
+                        invoke/invoke-rag
+                        (fn [_] {:status :complete :response "ok" :chunks []
+                                 :queries [] :search-attribution {}
+                                 :diagnostics {} :raw-result {} :error nil})]
+            (mcp-tools/invoke-tool
+              {:api-key/agent-refs ["builtin/rag-agent"]
+               :api-key/dataset-scopes [{:tenant "altinn-docs"
+                                         :dataset-config-key "dev"}]
+               :api-key/skill-graphs []
+               :api-key/client-id "x"}
+              "builtin.rag-agent__agent-rag-graph-bundled"
+              {"query" "Hello"
+               "overrides" {"retrieve-top-k" 7
+                            "retrieve-filter-by"
+                            {"fields" [{"field" "type"
+                                        "selected-options" ["Årsrapport"]}]}}}
+              nil)
+            (is (= 7 (:retrieve-top-k @captured-params))
+                "a scalar override must arrive under a keyword key")
+            (is (= {:fields [{:field "type" :selected-options ["Årsrapport"]}]}
+                   (:retrieve-filter-by @captured-params))
+                "a filter must arrive keywordized all the way down")))))))

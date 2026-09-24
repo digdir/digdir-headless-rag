@@ -7,6 +7,7 @@
    `digdir.skills.invoke/invoke-rag` and persists the resulting turn via
    the same Datahike store the API already uses."
   (:require [clojure.string :as str]
+            [clojure.walk :as walk]
             [digdir.agents.db :as agents-db]
             [digdir.api.routes.endpoints.debug :as debug]
             [digdir.api.util :as api-util]
@@ -802,9 +803,19 @@
                                                        @(config-db/get-conn)
                                                        agent-id))
                                                    {})
+                            ;; Keywordized because the MCP transport parses
+                            ;; the JSON-RPC body with STRING keys
+                            ;; (transport.clj, `json/parse-string` without
+                            ;; `true`), while `build-skill-params-from-params`
+                            ;; looks every per-call key up as a keyword. Without
+                            ;; this no MCP override ever reached a skill — not
+                            ;; :retrieve-top-k, not a rerank setting, not a
+                            ;; filter — and nothing said so. Deep, so a filter's
+                            ;; own :fields / :selected-options arrive as keys the
+                            ;; retrieval skill destructures.
                             skill-params (api-util/build-rag-skill-params
                                            dataset-config
-                                           (or overrides {})
+                                           (walk/keywordize-keys (or overrides {}))
                                            agent-skill-params)
                             _ (debug/record-last-invocation!
                                 agent-id
