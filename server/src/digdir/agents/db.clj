@@ -157,10 +157,8 @@
          db @conn
          now (System/currentTimeMillis)
          existing (get-agent db (:id agent))
-         ;; Input wins so dump-import overrides whatever init-time
-         ;; seed-builtin-agents! pre-stamped with `now`. Operator/UI flows
-         ;; pass no timestamps and fall through to the existing-or-now path.
-         updated-at (or input-updated-at (when existing (:updated-at existing)) now)
+         ;; Input wins so a dump import keeps its own timestamps.
+         updated-at (or input-updated-at now)
          created-at (or input-created-at (when existing (:created-at existing)) now)
          dataset-scope-tx (mapv (fn [{:keys [tenant dataset-config-key]}]
                                   (let [scope-id (str "agent-dataset-scope-" (nano-id))]
@@ -182,27 +180,27 @@
                                        :in $ ?e
                                        :where [?e :agent/allowed-skill-graphs ?graph-id]]
                                      db existing-eid)))
+         params-retract (when (and existing-eid
+                                   (empty? (:skill-params agent))
+                                   (seq (:skill-params existing)))
+                          [[:db/retract existing-eid :agent/skill-params
+                            (pr-str (:skill-params existing))]])
          tx-data (vec
                   (concat
                    retracts
                    graph-retracts
+                   params-retract
                    dataset-scope-tx
                    [(cond-> {:agent/id (:id agent)
                              :agent/name (:name agent)
                              :agent/description (:description agent)
-                             :agent/instructions (:instructions agent)
+                             :agent/instructions (or (:instructions agent) "")
                              :agent/default-skill-graph (:default-skill-graph agent)
                              :agent/allowed-skill-graphs (vec (:allowed-skill-graphs agent))
                              :agent/guardrails (pr-str (:guardrails agent))
                              :agent/enabled? (:enabled? agent)
                              :agent/created-at created-at
                              :agent/updated-at updated-at}
-                      ;; Only write :skill-params when the agent actually
-                      ;; carries overrides. An empty map writes an empty
-                      ;; "{}" string that round-trips fine, but the missing
-                      ;; attr case is the more common path (most agents have
-                      ;; no overrides) and skipping the assoc keeps the tx
-                      ;; minimal for those.
                       (seq (:skill-params agent))
                       (assoc :agent/skill-params (pr-str (:skill-params agent)))
                       (seq dataset-scope-ids) (assoc :agent/allowed-dataset-scopes dataset-scope-ids))]))]
@@ -299,6 +297,17 @@
                           :declared-skill-graphs (:allowed-skill-graphs agent-def)}])
           nil))))
 
+(defn- isolating-failure
+  "Run f for one agent; log and return nil if it throws, so the rest still run."
+  [agent-id f]
+  (try
+    (f)
+    (catch Exception e
+      (t/log! :error [::agent-seed-failed {:agent-id agent-id
+                                           :error (ex-message e)
+                                           :errors (:errors (ex-data e))}])
+      nil)))
+
 (defn seed-builtin-agents!
   "Seed builtin agent definitions for the current product surfaces.
    This is idempotent because agents are upserted by :agent/id.
@@ -314,7 +323,9 @@
   (skills-init/ensure-initialized!)
   (let [available-skill-graphs (agents/available-skill-graph-ids)]
     (vec
-     (keep #(seed-one-agent! conn % available-skill-graphs)
+     (keep (fn [agent-def]
+             (isolating-failure (:id agent-def)
+                                #(seed-one-agent! conn agent-def available-skill-graphs)))
            (agents/builtin-agent-definitions)))))
 
 (defn seed-agent!
@@ -334,19 +345,21 @@
   (let [available (agents/available-skill-graph-ids)]
     (vec
      (keep (fn [agent-def]
-             (let [filtered (filter-to-available-skill-graphs agent-def available)]
-               (when (seq (:allowed-skill-graphs filtered))
-                 (if-let [stored (get-agent @conn (:id agent-def))]
-                   (when (or (not= (set (:allowed-skill-graphs stored))
-                                   (set (:allowed-skill-graphs filtered)))
-                             (not= (:default-skill-graph stored)
-                                   (:default-skill-graph filtered)))
-                     (upsert-agent! conn
-                                    (assoc stored
-                                           :allowed-skill-graphs (:allowed-skill-graphs filtered)
-                                           :default-skill-graph (:default-skill-graph filtered))
-                                    {:available-skill-graphs available}))
-                   (upsert-agent! conn filtered {:available-skill-graphs available})))))
+             (isolating-failure
+              (:id agent-def)
+              #(let [filtered (filter-to-available-skill-graphs agent-def available)]
+                (when (seq (:allowed-skill-graphs filtered))
+                  (if-let [stored (get-agent @conn (:id agent-def))]
+                    (when (or (not= (set (:allowed-skill-graphs stored))
+                                    (set (:allowed-skill-graphs filtered)))
+                              (not= (:default-skill-graph stored)
+                                    (:default-skill-graph filtered)))
+                      (upsert-agent! conn
+                                     (assoc stored
+                                            :allowed-skill-graphs (:allowed-skill-graphs filtered)
+                                            :default-skill-graph (:default-skill-graph filtered))
+                                     {:available-skill-graphs available}))
+                    (upsert-agent! conn filtered {:available-skill-graphs available}))))))
            (agents/builtin-agent-definitions)))))
 
 (defn drift-report

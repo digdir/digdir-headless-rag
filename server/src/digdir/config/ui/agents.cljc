@@ -15,13 +15,23 @@
             #?(:clj [digdir.config.ui.common :as common])))
 
 #?(:clj
+   (defn- error-text
+     [e fallback]
+     (if-let [errors (seq (:errors (ex-data e)))]
+       (str/join " " errors)
+       (or (ex-message e) fallback))))
+
+#?(:clj
    (defn reseed-agent!
-     "Rewrite one agent from its code definition. Admin only."
+     "Rewrite one agent from its code definition. Admin only. Returns {:ok id} or {:error msg}."
      [user-id agent-id]
      (let [conn (config-db/get-conn)]
        (common/ensure-config-ui-admin! @conn user-id)
-       (agents-db/seed-agent! conn agent-id)
-       true)))
+       (try
+         (agents-db/seed-agent! conn agent-id)
+         {:ok agent-id}
+         (catch Exception e
+           {:error (error-text e "Could not reseed the agent.")})))))
 
 #?(:clj
    (defn available-graphs
@@ -29,19 +39,39 @@
      (vec (sort (map str (agents/available-skill-graph-ids))))))
 
 #?(:clj
+   (defn- declared-agent
+     [agent-id]
+     (some #(when (= agent-id (:id %)) %) (agents/builtin-agent-definitions))))
+
+#?(:clj
    (defn save-agent!
-     "Create or update an agent. Admin only. Returns {:ok id} or {:error msg}.
-      skill-params arrives as EDN text, so parsing it is part of validation."
-     [user-id agent skill-params-edn]
+     "Create, edit or duplicate an agent from the form's fields. Admin only.
+      Fields the form does not show are kept from the edited or source agent."
+     [user-id mode source-id agent skill-params-edn]
      (let [conn (config-db/get-conn)]
        (common/ensure-config-ui-admin! @conn user-id)
        (try
-         (let [params (if (str/blank? skill-params-edn) {} (edn/read-string skill-params-edn))]
+         (let [db @conn
+               params (if (str/blank? skill-params-edn) {} (edn/read-string skill-params-edn))
+               existing (agents-db/get-agent db (:id agent))
+               base (case mode
+                      :edit (or existing
+                                (throw (ex-info (str (:id agent) " no longer exists.") {})))
+                      :duplicate (or (agents-db/get-agent db source-id)
+                                     (declared-agent source-id)
+                                     (throw (ex-info (str source-id " no longer exists.") {})))
+                      :create {})]
            (when-not (map? params)
              (throw (ex-info "Skill params must be a map." {})))
-           {:ok (:id (agents-db/upsert-agent! conn (assoc agent :skill-params params)))})
+           (when (and existing (not= mode :edit))
+             (throw (ex-info (str "An agent with id " (:id agent) " already exists.") {})))
+           {:ok (:id (agents-db/upsert-agent!
+                      conn
+                      (merge (dissoc base :id :created-at :updated-at)
+                             agent
+                             {:skill-params params})))})
          (catch Exception e
-           {:error (or (ex-message e) "Could not save the agent.")})))))
+           {:error (error-text e "Could not save the agent.")})))))
 
 #?(:clj
    (defn skill-param-catalogue
@@ -62,8 +92,14 @@
      [edn-text skill param value]
      (try
        (let [m (if (str/blank? edn-text) {} (edn/read-string edn-text))
-             v (try (edn/read-string value) (catch Exception _ value))]
-         {:ok (pr-str (assoc-in m [(keyword (subs skill 1)) (keyword param)] v))})
+             forms (try (edn/read-string (str "[" value "]")) (catch Exception _ nil))
+             v (if (and (= 1 (count forms)) (not (symbol? (first forms))))
+                 (first forms)
+                 value)]
+         (cond
+           (some str/blank? [skill param value]) {:error "Pick a skill and a parameter, and give a value."}
+           (not (map? m)) {:error "The EDN below is not a map."}
+           :else {:ok (pr-str (assoc-in m [(keyword (subs skill 1)) (keyword param)] v))}))
        (catch Exception e
          {:error (str "Could not merge: " (ex-message e))}))))
 
@@ -84,7 +120,10 @@
      [user-id]
      (let [conn (config-db/get-conn)]
        (common/ensure-config-ui-admin! @conn user-id)
-       (count (agents-db/seed-builtin-agents! conn)))))
+       (try
+         {:ok (count (agents-db/seed-builtin-agents! conn))}
+         (catch Exception e
+           {:error (error-text e "Could not reseed the agents.")})))))
 
 (def ^:private status-styles
   {:matches-code {:bg "#f0fdf4" :fg "#166534" :border "#bbf7d0" :label "matches code"}
@@ -136,7 +175,7 @@
   "Statuses a reseed can change. Not :narrowed, whose graphs are unregistered."
   #{:stale :diverged :unseeded})
 
-(e/defn ReseedButton [row is-admin user-id]
+(e/defn ReseedButton [row is-admin user-id !row-err]
   (e/client
    (let [status (:status row)
          blocked (cond
@@ -159,8 +198,9 @@
                                    (js/confirm
                                     (str "Rewrite " (:id row) " from its code definition?\n\n"
                                          "This overwrites name, description, instructions, "
-                                         "guardrails, enabled and allowed graphs on this agent.")))
-                                  (e/server (reseed-agent! user-id (:id row))))
+                                         "guardrails, enabled, skill params, dataset scopes and "
+                                         "allowed graphs on this agent.")))
+                                  (reset! !row-err (:error (e/server (reseed-agent! user-id (:id row))))))
                          (tok))))))))))
 
 (e/defn AgentRow [row is-admin user-id !editing]
@@ -169,7 +209,9 @@
          declared (:declared row)
          status (:status row)
          graphs (:allowed-skill-graphs row)
-         differing (:differing-fields row)]
+         differing (:differing-fields row)
+         !row-err (atom nil)
+         row-err (e/watch !row-err)]
      (dom/tr
       (dom/td (dom/props {:style (merge cell-style mono)}) (dom/text (:id row)))
       (dom/td (dom/props {:style cell-style})
@@ -190,7 +232,11 @@
          (dom/div
           (dom/props {:style {:font-size "0.75rem" :color "#6b7280" :margin-top "0.25rem"}})
           (dom/text (get explanations status ""))))
-       (ReseedButton row is-admin user-id)
+       (when row-err
+         (dom/div
+          (dom/props {:style {:font-size "0.75rem" :color "#991b1b" :margin-top "0.25rem"}})
+          (dom/text row-err)))
+       (ReseedButton row is-admin user-id !row-err)
        (dom/div
         (dom/props {:style {:display "flex" :gap "0.5rem" :margin-top "0.25rem"}})
         (ks/Button (cond-> {:data-size "sm" :data-variant "tertiary"}
@@ -227,7 +273,7 @@
                                            "Conversations that used this agent keep its id and "
                                            "will no longer resolve to an agent. This cannot be "
                                            "undone.")))
-                                    (e/server (delete-agent! user-id (:id row))))
+                                    (reset! !row-err (:error (e/server (delete-agent! user-id (:id row))))))
                            (tok))))))))))))
 
 (e/defn Field [label value on-input & [{:keys [disabled placeholder multiline]}]]
@@ -278,7 +324,8 @@
          stored (:stored row)
          seed (case mode
                 :create {}
-                :duplicate (assoc stored :id "" :name (str (:name stored) " (copy)"))
+                :duplicate (let [src (or stored (:declared row))]
+                             (assoc src :id "" :name (str (:name src) " (copy)")))
                 (or stored {}))
          !id (atom (or (:id seed) ""))
          !name (atom (or (:name seed) ""))
@@ -308,7 +355,7 @@
        (dom/div
         (dom/props {:style {:font-weight "600" :margin-bottom "0.75rem"}})
         (dom/text (case mode :create "New agent"
-                             :duplicate (str "Duplicate " (:id stored))
+                             :duplicate (str "Duplicate " (:id row))
                              (str "Edit " (:id stored)))))
        (when builtin?
          (dom/div
@@ -338,7 +385,10 @@
            (dom/input
             (dom/props {:type "checkbox" :checked (contains? allowed-v g)})
             (dom/On "change"
-                    (fn [_] (swap! !allowed #(if (contains? % g) (disj % g) (conj % g)))) nil))
+                    (fn [_]
+                      (when (and (contains? @!allowed g) (= g @!default)) (reset! !default ""))
+                      (swap! !allowed #(if (contains? % g) (disj % g) (conj % g))))
+                    nil))
            (dom/text g))))
        (Select "Default skill graph" default-v (vec (sort allowed-v)) #(reset! !default %))
        (dom/div
@@ -385,7 +435,7 @@
                      (let [[tok _] (e/Token (dom/On "click" identity nil))]
                        (when tok
                          (case (let [res (e/server
-                                          (save-agent! user-id
+                                          (save-agent! user-id mode (:id row)
                                                        {:id id-v :name name-v :description desc-v
                                                         :instructions instr-v
                                                         :allowed-skill-graphs (vec allowed-v)
@@ -407,6 +457,8 @@
   (e/client
    (let [!editing (atom nil)
          editing (e/watch !editing)
+         !err (atom nil)
+         err (e/watch !err)
          graphs (e/server (available-graphs))
          catalogue (e/server (skill-param-catalogue))
          user-id (e/server (:user/id e/http-request))
@@ -456,10 +508,15 @@
                                     (js/confirm
                                      (str "Rewrite all builtin agents from their code definitions?\n\n"
                                           "This overwrites name, description, instructions, guardrails, "
-                                          "enabled and allowed graphs on every agent that has a code "
-                                          "definition, not only the ones listed as differing.")))
-                                   (e/server (reseed-all-agents! user-id)))
+                                          "enabled, skill params, dataset scopes and allowed graphs on "
+                                          "every agent that has a code definition, not only the ones "
+                                          "listed as differing.")))
+                                   (reset! !err (:error (e/server (reseed-all-agents! user-id)))))
                           (tok)))))))
+      (when err
+        (dom/div
+         (dom/props {:style {:color "#991b1b" :font-size "0.8125rem" :margin-bottom "1rem"}})
+         (dom/text err)))
       (if (empty? rows)
         (dom/div (dom/props {:style {:font-size "0.875rem" :color "#6b7280"}})
                  (dom/text "No agents stored or declared."))

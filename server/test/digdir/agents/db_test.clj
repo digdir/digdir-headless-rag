@@ -368,4 +368,48 @@
         (config-db/ensure-schema! conn)
         (agents-db/seed-builtin-agents! conn)
         (is (empty? (agents-db/reconcile-skill-graphs! conn)))
+        (finally (delete-test-db conn)))))
+
+  (testing "One agent that fails does not stop the others"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/ensure-schema! conn)
+        (let [real-upsert agents-db/upsert-agent!]
+          (with-redefs [agents-db/upsert-agent!
+                        (fn [c agent & more]
+                          (if (= "builtin/agent-rag-agent" (:id agent))
+                            (throw (ex-info "boom" {}))
+                            (apply real-upsert c agent more)))]
+            (agents-db/reconcile-skill-graphs! conn)))
+        (is (nil? (agents-db/get-agent @conn "builtin/agent-rag-agent")))
+        (is (some? (agents-db/get-agent @conn "builtin/fact-checker-agent")))
+        (finally (delete-test-db conn))))))
+
+(deftest test-init-config-db-keeps-operator-edits
+  (testing "Re-initialising the config DB, as an import does, leaves builtin edits alone"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/init-config-db! conn :sync-admins? false)
+        (agents-db/upsert-agent!
+         conn (assoc (agents-db/get-agent @conn "builtin/agent-rag-agent")
+                     :name "Operator named"
+                     :enabled? false
+                     :skill-params {:builtin/retrieval {:retrieve-top-k 7}}))
+        (config-db/init-config-db! conn :sync-admins? false)
+        (let [after (agents-db/get-agent @conn "builtin/agent-rag-agent")]
+          (is (= "Operator named" (:name after)))
+          (is (false? (:enabled? after)))
+          (is (= {:builtin/retrieval {:retrieve-top-k 7}} (:skill-params after))))
+        (finally (delete-test-db conn))))))
+
+(deftest test-upsert-without-instructions
+  (testing "An agent with no instructions is stored with blank ones"
+    (let [conn (create-test-db)]
+      (try
+        (config-db/ensure-schema! conn)
+        (agents-db/upsert-agent! conn {:id "t/no-instructions"
+                                       :name "N"
+                                       :description "d"
+                                       :default-skill-graph "builtin/agent-rag-graph-bundled"})
+        (is (= "" (:instructions (agents-db/get-agent @conn "t/no-instructions"))))
         (finally (delete-test-db conn))))))

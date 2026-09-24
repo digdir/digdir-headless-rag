@@ -119,7 +119,7 @@
 
 (def ^:private agent-id-pattern
   ;; No underscore, and no dot before the slash: both collide with the wire encoding.
-  #"[A-Za-z0-9][A-Za-z0-9-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)?")
+  #"[A-Za-z0-9][A-Za-z0-9-]*(/[A-Za-z0-9][A-Za-z0-9.-]*)?")
 
 (defn validate-agent
   "Validate an agent definition and return a structured result.
@@ -138,7 +138,11 @@
   ([agent]
    (validate-agent agent {}))
   ([agent {:keys [available-skill-graphs dataset-scope-checker]}]
-   (let [agent (normalize-agent agent)
+   (let [declared-allowed (->> (or (:allowed-skill-graphs agent) (:agent/allowed-skill-graphs agent))
+                               (map normalize-skill-graph-id)
+                               (remove str/blank?)
+                               set)
+         agent (normalize-agent agent)
          available-graphs (or available-skill-graphs
                               (available-skill-graph-ids))
          unresolved-scopes (when dataset-scope-checker
@@ -155,7 +159,8 @@
                   (and (not (str/blank? (:id agent)))
                        (not (re-matches agent-id-pattern (:id agent))))
                   (conj (str "Agent :id must be <name> or <namespace>/<name>, using letters, "
-                             "digits and hyphens; got " (pr-str (:id agent))))
+                             "digits and hyphens (dots allowed after the slash); got "
+                             (pr-str (:id agent))))
 
                   (str/blank? (:name agent))
                   (conj "Agent :name is required.")
@@ -204,8 +209,8 @@
                                   vec)))
 
                   (and (:default-skill-graph agent)
-                       (not (some #(= % (:default-skill-graph agent))
-                                  (:allowed-skill-graphs agent))))
+                       (seq declared-allowed)
+                       (not (contains? declared-allowed (:default-skill-graph agent))))
                   (conj "Agent :default-skill-graph must be included in :allowed-skill-graphs.")
 
                   (some (fn [{:keys [tenant dataset-config-key]}]
@@ -241,7 +246,7 @@
 
 (def ^:private drift-compared-fields
   "Fields a reseed overwrites from the code definition."
-  [:name :description :instructions :guardrails :enabled? :allowed-dataset-scopes])
+  [:name :description :instructions :guardrails :enabled? :allowed-dataset-scopes :skill-params])
 
 (defn agent-drift
   "What a reseed would do to one stored agent row, as data rather than by

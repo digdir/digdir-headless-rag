@@ -156,7 +156,26 @@
                   :declared declared-rag-agent
                   :available-skill-graphs both-graphs})]
       (is (= :stale (:status drift)))
-      (is (contains? (:differing-fields drift) :instructions)))))
+      (is (contains? (:differing-fields drift) :instructions))))
+
+  (testing "Edited skill params are diverged, since a reseed would revert them"
+    (let [drift (agents/agent-drift
+                 {:stored (assoc declared-rag-agent :skill-params {:builtin/retrieval {:retrieve-top-k 7}})
+                  :declared declared-rag-agent
+                  :available-skill-graphs both-graphs})]
+      (is (= :diverged (:status drift)))
+      (is (contains? (:differing-fields drift) :skill-params)))))
+
+(deftest test-default-must-be-an-allowed-graph
+  (let [opts {:available-skill-graphs (agents/available-skill-graph-ids)}
+        base {:id "t/a" :name "X" :description "d" :enabled? true
+              :default-skill-graph "builtin/agent-rag-graph-faithful"}]
+    (testing "A default missing from a non-empty allowed list is refused"
+      (is (not (:valid? (agents/validate-agent
+                         (assoc base :allowed-skill-graphs ["builtin/agent-rag-graph-bundled"])
+                         opts)))))
+    (testing "A default with no allowed list becomes the only allowed graph"
+      (is (:valid? (agents/validate-agent base opts))))))
 
 (deftest test-agent-id-validation
   (let [opts {:available-skill-graphs (agents/available-skill-graph-ids)}
@@ -172,8 +191,9 @@
                   "plain-language-qualtiy-check"]]
         (is (valid? id) id)))
 
-    (testing "An id carrying the wire separator is refused"
-      (is (not (valid? "evil__agent-rag-graph-bundled"))))
+    (testing "An id carrying the wire separator is refused, before or after the slash"
+      (is (not (valid? "evil__agent-rag-graph-bundled")))
+      (is (not (valid? "t/a__b"))))
 
     (testing "A dot before the first slash is refused, since it decodes to another agent"
       (is (not (valid? "builtin.agent-rag-agent"))))

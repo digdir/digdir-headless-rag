@@ -1,6 +1,7 @@
 (ns digdir.config.ui-test
   "Tests for config UI functions, specifically column key parsing."
-  (:require [clojure.string :as str]
+  (:require [clojure.edn :as edn]
+            [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]
             [datahike.api :as d]
             [digdir.config.core :as core]
@@ -1243,20 +1244,20 @@
       (fn [_]
         (with-redefs [perms/is-admin? (fn [_ _] false)]
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Permission denied"
-                                (ui-agents/save-agent! "user-1" an-agent "")))))))
+                                (ui-agents/save-agent! "user-1" :create nil an-agent "")))))))
 
   (testing "Blank skill params store as an empty map"
     (with-agent-db
       (fn [conn]
         (with-redefs [perms/is-admin? (fn [_ _] true)]
-          (is (= {:ok "t/saved"} (ui-agents/save-agent! "user-1" an-agent "")))
+          (is (= {:ok "t/saved"} (ui-agents/save-agent! "user-1" :create nil an-agent "")))
           (is (= {} (:skill-params (agents-db/get-agent @conn "t/saved"))))))))
 
   (testing "Unparseable skill params return an error rather than throwing"
     (with-agent-db
       (fn [conn]
         (with-redefs [perms/is-admin? (fn [_ _] true)]
-          (let [res (ui-agents/save-agent! "user-1" an-agent "{:builtin/retrieval ")]
+          (let [res (ui-agents/save-agent! "user-1" :create nil an-agent "{:builtin/retrieval ")]
             (is (contains? res :error)))
           (is (nil? (agents-db/get-agent @conn "t/saved")))))))
 
@@ -1264,13 +1265,13 @@
     (with-agent-db
       (fn [_]
         (with-redefs [perms/is-admin? (fn [_ _] true)]
-          (is (contains? (ui-agents/save-agent! "user-1" an-agent "[1 2 3]") :error))))))
+          (is (contains? (ui-agents/save-agent! "user-1" :create nil an-agent "[1 2 3]") :error))))))
 
   (testing "Valid skill params are stored as read"
     (with-agent-db
       (fn [conn]
         (with-redefs [perms/is-admin? (fn [_ _] true)]
-          (ui-agents/save-agent! "user-1" an-agent "{:builtin/retrieval {:retrieve-top-k 5}}")
+          (ui-agents/save-agent! "user-1" :create nil an-agent "{:builtin/retrieval {:retrieve-top-k 5}}")
           (is (= {:builtin/retrieval {:retrieve-top-k 5}}
                  (:skill-params (agents-db/get-agent @conn "t/saved"))))))))
 
@@ -1278,9 +1279,79 @@
     (with-agent-db
       (fn [_]
         (with-redefs [perms/is-admin? (fn [_ _] true)]
-          (is (contains? (ui-agents/save-agent!
-                          "user-1" (assoc an-agent :allowed-skill-graphs ["nope/not-registered"]) "")
-                         :error)))))))
+          (is (re-find #"Unknown allowed skill graphs"
+                       (:error (ui-agents/save-agent!
+                                "user-1" :create nil
+                                (assoc an-agent :allowed-skill-graphs ["nope/not-registered"]) ""))))))))
+
+  (testing "Clearing skill params on an existing agent removes them"
+    (with-agent-db
+      (fn [conn]
+        (with-redefs [perms/is-admin? (fn [_ _] true)]
+          (ui-agents/save-agent! "user-1" :create nil an-agent "{:builtin/retrieval {:retrieve-top-k 5}}")
+          (ui-agents/save-agent! "user-1" :edit nil an-agent "")
+          (is (= {} (:skill-params (agents-db/get-agent @conn "t/saved"))))))))
+
+  (testing "Editing keeps the fields the form does not show"
+    (with-agent-db
+      (fn [conn]
+        (with-redefs [perms/is-admin? (fn [_ _] true)]
+          (agents-db/upsert-agent! conn (assoc an-agent
+                                               :guardrails {:citations-required true}
+                                               :allowed-dataset-scopes [{:tenant "t" :dataset-config-key "k"}]))
+          (is (= {:ok "t/saved"}
+                 (ui-agents/save-agent! "user-1" :edit nil (assoc an-agent :name "Renamed") "")))
+          (let [saved (agents-db/get-agent @conn "t/saved")]
+            (is (= "Renamed" (:name saved)))
+            (is (= {:citations-required true} (:guardrails saved)))
+            (is (= [{:tenant "t" :dataset-config-key "k"}] (:allowed-dataset-scopes saved))))))))
+
+  (testing "Editing an agent that no longer exists does not recreate it"
+    (with-agent-db
+      (fn [conn]
+        (with-redefs [perms/is-admin? (fn [_ _] true)]
+          (is (contains? (ui-agents/save-agent! "user-1" :edit nil an-agent "") :error))
+          (is (nil? (agents-db/get-agent @conn "t/saved")))))))
+
+  (testing "Creating over an existing id is refused"
+    (with-agent-db
+      (fn [conn]
+        (with-redefs [perms/is-admin? (fn [_ _] true)]
+          (ui-agents/save-agent! "user-1" :create nil an-agent "")
+          (is (re-find #"already exists"
+                       (:error (ui-agents/save-agent! "user-1" :create nil
+                                                      (assoc an-agent :name "Other") ""))))
+          (is (= "Saved" (:name (agents-db/get-agent @conn "t/saved"))))))))
+
+  (testing "Duplicating copies the source's hidden fields under the new id"
+    (with-agent-db
+      (fn [conn]
+        (with-redefs [perms/is-admin? (fn [_ _] true)]
+          (agents-db/upsert-agent! conn (assoc an-agent
+                                               :guardrails {:citations-required true}
+                                               :allowed-dataset-scopes [{:tenant "t" :dataset-config-key "k"}]))
+          (is (= {:ok "t/copy"}
+                 (ui-agents/save-agent! "user-1" :duplicate "t/saved"
+                                        (assoc an-agent :id "t/copy" :name "Copy") "")))
+          (let [copy (agents-db/get-agent @conn "t/copy")]
+            (is (= {:citations-required true} (:guardrails copy)))
+            (is (= [{:tenant "t" :dataset-config-key "k"}] (:allowed-dataset-scopes copy))))
+          (is (contains? (ui-agents/save-agent! "user-1" :duplicate "t/saved" an-agent "") :error)))))))
+
+(deftest test-merge-skill-param
+  (let [merged (fn [value]
+                 (edn/read-string (:ok (ui-agents/merge-skill-param "" ":builtin/retrieval" "p" value))))]
+    (testing "A value that reads as one EDN form is stored as that form"
+      (is (= {:builtin/retrieval {:p 5}} (merged "5"))))
+
+    (testing "A value that is not a single EDN form is stored as the raw string"
+      (is (= {:builtin/retrieval {:p "hello world"}} (merged "hello world")))
+      (is (= {:builtin/retrieval {:p "hello"}} (merged "hello")))))
+
+  (testing "A blank skill, parameter or value is refused"
+    (is (contains? (ui-agents/merge-skill-param "" "" "retrieve-top-k" "5") :error))
+    (is (contains? (ui-agents/merge-skill-param "" ":builtin/retrieval" "" "5") :error))
+    (is (contains? (ui-agents/merge-skill-param "" ":builtin/retrieval" "retrieve-top-k" " ") :error))))
 
 (deftest test-delete-agent
   (testing "Refuses a caller who does not hold admin-full"
@@ -1302,7 +1373,7 @@
     (with-agent-db
       (fn [conn]
         (with-redefs [perms/is-admin? (fn [_ _] true)]
-          (ui-agents/save-agent! "user-1" an-agent "")
+          (ui-agents/save-agent! "user-1" :create nil an-agent "")
           (is (some? (agents-db/get-agent @conn "t/saved")))
           (is (= {:ok "t/saved"} (ui-agents/delete-agent! "user-1" "t/saved")))
           (is (nil? (agents-db/get-agent @conn "t/saved"))))))))
