@@ -311,6 +311,12 @@
                                         :title-fields (:retrieve-title-fields params)
                                         :doc-title-chunk-fanout (:retrieve-doc-title-chunk-fanout params)
                                         :auto-filter-rules (:retrieve-auto-filter-rules params)
+                                        ;; A caller-chosen filter, e.g. from facet chips in a
+                                        ;; UI. The retrieval skill has always accepted
+                                        ;; :filter-by (auto-filter feeds the same path), but
+                                        ;; nothing mapped a per-call value onto it, so MCP
+                                        ;; `overrides.retrieve-filter-by` was dropped silently.
+                                        :filter-by (:retrieve-filter-by params)
                                         :merge-mode (:retrieve-merge-mode params)
                                         :rrf-k (:retrieve-rrf-k params)
                                         ;; Slice 23: user-intent first-pass union (slice-21/22).
