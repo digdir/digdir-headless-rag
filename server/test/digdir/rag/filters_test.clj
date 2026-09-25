@@ -18,7 +18,9 @@
                  {:fields [{:field "type) || (x" :selected-options ["a"]}]}
                  {:fields [{:field "year" :value-type "integer" :selected-options ["1 || x:=1"]}]}
                  {:fields [{:field "type" :type "range" :selected-options ["a"]}]}
-                 {:fields [{:field "type" :selected-options [{:nested "map"}]}]}]]
+                 {:fields [{:field "type" :selected-options [{:nested "map"}]}]}
+                 {:fields [{:field "type" :selected-options ["a\\"]}]}
+                 {:fields [{:field "type" :selected-options ["a\nb"]}]}]]
       (is (seq (filters/filter-map-errors bad)) (pr-str bad))))
 
   (testing "Unbounded input is refused"
@@ -42,3 +44,22 @@
 (deftest integer-filters-accept-digit-strings
   (is (empty? (filters/filter-map-errors
                {:fields [{:field "year" :value-type :integer :selected-options #{"2022"}}]}))))
+
+(deftest a-filter-that-would-filter-nothing-is-refused
+  (doseq [bad [{:fields []}
+               {:fields [{:field "type" :selected-options []}]}
+               {:fields [{:field "type"}]}
+               {:fields [{:field "type" :selected_options ["Evaluering"]}]}]]
+    (is (seq (filters/filter-map-errors bad)) (pr-str bad))))
+
+(deftest a-filter-takes-at-most-twenty-fields
+  (is (seq (filters/filter-map-errors
+            {:fields (vec (repeat 21 {:field "type" :selected-options ["a"]}))}))))
+
+(deftest normalize-filter-map
+  (is (= {:fields [{:field "type" :type :contains :value-type :string :selected-options ["a"]}
+                   {:field "orgs_long" :selected-options ["b"]}]}
+         (filters/normalize-filter-map
+          {:fields [{:field "type" :type "contains" :value-type "string" :selected-options ["a"]}
+                    {:field "orgs_long" :selected-options ["b"]}]}))))
+

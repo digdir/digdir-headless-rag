@@ -32,6 +32,7 @@
      GET  /api/tools/openapi.json    — OpenAPI 3.1 doc, filtered per API key
      POST /api/tools/call/:tool-name — invoke one tool"
   (:require [clojure.string :as str]
+            [digdir.api.body :as request-body]
             [digdir.mcp.tools :as mcp-tools]
             [taoensso.telemere :as t]
             [cheshire.core :as json]
@@ -60,11 +61,7 @@
       which strips undeclared fields (#174). Tool arguments are per-tool and
       open-ended by definition, so there is no closed schema to declare."
   [request]
-  (let [body (:body request)
-        body-str (cond
-                   (nil? body) ""
-                   (string? body) body
-                   :else (slurp body))]
+  (let [body-str (request-body/read-body-string request)]
     (if (str/blank? body-str)
       {}
       (json/parse-string body-str))))
@@ -200,6 +197,7 @@
       (seq (sources content)) (assoc :sources (sources content))
       (seq (:chunks structured)) (assoc :chunks (:chunks structured))
       (seq (:queries structured)) (assoc :queries (:queries structured))
+      (seq (:filters_applied structured)) (assoc :filters_applied (:filters_applied structured))
       (:clarification structured) (assoc :clarification (:clarification structured)))))
 
 (defn tool-call-handler
@@ -237,8 +235,13 @@
           :else
           (json-response (tool-result->body result))))
       (catch Throwable e
-        (t/log! :error [:openapi-tools/call-failed {:tool tool-name
-                                                    :error (.getMessage e)}])
-        (json-response {:error {:code "internal_error" :message (.getMessage e)}
-                        :status "error"}
-                       500)))))
+        (if (request-body/body-too-large? e)
+          (json-response {:error {:code "body_too_large" :message (.getMessage e)}
+                          :status "error"}
+                         413)
+          (do
+            (t/log! :error [:openapi-tools/call-failed {:tool tool-name
+                                                        :error (.getMessage e)}])
+            (json-response {:error {:code "internal_error" :message (.getMessage e)}
+                            :status "error"}
+                           500)))))))

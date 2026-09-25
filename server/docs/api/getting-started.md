@@ -286,7 +286,7 @@ object inside a `200` response instead of an HTTP error status:
 | `tenant` | string | no | Scope override — required if the calling key/agent needs disambiguation. |
 | `dataset_config_key` | string | no | Scope override — required if the calling key/agent needs disambiguation. |
 | `conversation_id` | string | no | Reuse an existing conversation; omit to start a new one. |
-| `overrides` | object | no | Per-call skill-param overrides such as `retrieve-top-k` and `retrieve-filter-by`. See `endpoints/mcp.md`. |
+| `overrides` | object | no | `retrieve-filter-by`, `retrieve-auto-filter` and `retrieve-top-k`; any other key is refused. See `endpoints/mcp.md`. |
 
 See [endpoints/mcp.md](./endpoints/mcp.md#scope-resolution) for how `tenant` /
 `dataset_config_key` are resolved against the API key's dataset scopes when omitted.

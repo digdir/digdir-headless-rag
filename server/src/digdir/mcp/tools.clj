@@ -403,8 +403,8 @@
     "description" "Dataset configuration key to scope this call to. Optional, as for `tenant`."}
    "overrides"
    {"type" "object"
-    "description" (str "Per-call skill-parameter overrides, with kebab-case keys such as "
-                       "`retrieve-top-k` and `retrieve-filter-by`. Optional.")}})
+    "description" (str "Per-call overrides. Accepts `retrieve-filter-by`, `retrieve-auto-filter` "
+                       "and `retrieve-top-k` (1 to 200); any other key is refused. Optional.")}})
 
 (def ^:private conversation-description-suffix
   " Multi-turn: the response carries structuredContent.conversation_id; pass it back as the conversation_id argument to continue the same conversation, and earlier turns are supplied to the model automatically."
@@ -763,6 +763,49 @@
       (seq applied) (assoc :filters_applied applied)
       clarification (assoc :clarification clarification))))
 
+(def ^:private accepted-overrides
+  #{"retrieve-filter-by" "retrieve-auto-filter" "retrieve-top-k"})
+
+(def ^:private max-retrieve-top-k 200)
+
+(defn- truncated [s n]
+  (if (< n (count s)) (str (subs s 0 n) "…") s))
+
+(defn read-overrides
+  "The overrides a tool call may carry, keywordized: {:overrides map} or {:error message}."
+  [raw]
+  (cond
+    (nil? raw) {:overrides nil}
+    (not (map? raw)) {:error "`overrides` must be an object."}
+    :else
+    (let [raw (update-keys raw #(if (keyword? %) (name %) (str %)))
+          unknown (remove accepted-overrides (keys raw))
+          top-k (get raw "retrieve-top-k")
+          auto-filter (get raw "retrieve-auto-filter")
+          filter-map (some-> (get raw "retrieve-filter-by") walk/keywordize-keys)
+          filter-errors (filters/filter-map-errors filter-map)]
+      (cond
+        (seq unknown)
+        {:error (str "Unsupported override keys: "
+                     (truncated (pr-str (vec (take 5 unknown))) 200)
+                     ". Accepted: " (str/join ", " (sort accepted-overrides)) ".")}
+
+        (and (contains? raw "retrieve-auto-filter") (not (boolean? auto-filter)))
+        {:error "`retrieve-auto-filter` must be true or false."}
+
+        (and (contains? raw "retrieve-top-k")
+             (not (and (integer? top-k) (<= 1 top-k max-retrieve-top-k))))
+        {:error (str "`retrieve-top-k` must be an integer from 1 to " max-retrieve-top-k ".")}
+
+        (seq filter-errors)
+        {:error (str "Invalid `retrieve-filter-by`: " (str/join " " filter-errors))}
+
+        :else
+        {:overrides (cond-> {}
+                      filter-map (assoc :retrieve-filter-by (filters/normalize-filter-map filter-map))
+                      (contains? raw "retrieve-auto-filter") (assoc :retrieve-auto-filter auto-filter)
+                      (contains? raw "retrieve-top-k") (assoc :retrieve-top-k top-k))}))))
+
 (defn invoke-tool
   "Execute one MCP tool call.
 
@@ -794,18 +837,7 @@
                   (let [user-query (read-query-argument arguments)
                         raw-overrides (or (get arguments "overrides")
                                           (get arguments :overrides))
-                        overrides (when (map? raw-overrides)
-                                    (walk/keywordize-keys raw-overrides))
-                        overrides-error (cond
-                                          (nil? raw-overrides) nil
-                                          (nil? overrides) "`overrides` must be an object."
-                                          (and (contains? overrides :retrieve-auto-filter)
-                                               (not (boolean? (:retrieve-auto-filter overrides))))
-                                          "`retrieve-auto-filter` must be true or false."
-                                          :else (when-let [errs (seq (filters/filter-map-errors
-                                                                      (:retrieve-filter-by overrides)))]
-                                                  (str "Invalid `retrieve-filter-by`: "
-                                                       (str/join " " errs))))]
+                        {overrides :overrides overrides-error :error} (read-overrides raw-overrides)]
                     (cond
                       (str/blank? user-query)
                       {:error {:code "missing_query"

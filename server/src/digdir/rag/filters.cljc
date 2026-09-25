@@ -57,6 +57,8 @@
 (def ^:private field-types #{"multiselect" "contains" "not-in-set"})
 (def ^:private max-options 100)
 (def ^:private max-value-length 256)
+(def ^:private max-fields 20)
+(def ^:private field-spec-keys #{:field :type :value-type :selected-options :value})
 
 (defn- named [x]
   (when (or (string? x) (keyword? x)) (name x)))
@@ -70,10 +72,16 @@
                     (or (sequential? selected-options) (set? selected-options)) selected-options
                     (some? selected-options) nil
                     (some? value) [value]
-                    :else [])]
+                    :else [])
+          unknown (remove field-spec-keys (keys spec))]
       (cond-> []
+        (seq unknown)
+        (conj (let [listed (pr-str (vec (take 5 unknown)))]
+                (str "Unknown filter field keys: " (subs listed 0 (min 200 (count listed))) ".")))
+
         (not (and (string? field) (re-matches field-name-pattern field)))
-        (conj (str "Filter field must be a plain field name; got " (pr-str field) "."))
+        (conj (let [shown (pr-str field)]
+                (str "Filter field must be a plain field name; got " (subs shown 0 (min 80 (count shown))) ".")))
 
         (and (some? type) (not (field-types (named type))))
         (conj (str "Filter type must be one of " (sort field-types) "; got " (pr-str type) "."))
@@ -84,14 +92,17 @@
         (nil? options)
         (conj "Filter selected-options must be a list.")
 
+        (and (some? options) (empty? options))
+        (conj "A filter field needs at least one option.")
+
         (< max-options (count options))
         (conj (str "A filter field takes at most " max-options " options."))
 
         (some #(not (or (string? %) (integer? %))) options)
         (conj "Filter options must be strings or integers.")
 
-        (some #(and (string? %) (str/includes? % "`")) options)
-        (conj "Filter options cannot contain a backtick.")
+        (some #(and (string? %) (re-find #"[`\\\x00-\x1f\x7f]" %)) options)
+        (conj "Filter options cannot contain a backtick, a backslash or a control character.")
 
         (some #(and (string? %) (< max-value-length (count %))) options)
         (conj (str "Filter options are at most " max-value-length " characters."))
@@ -107,7 +118,18 @@
     (nil? filter-map) []
     (not (map? filter-map)) ["Filter must be an object with a fields list."]
     (not (sequential? (:fields filter-map))) ["Filter fields must be a list."]
+    (empty? (:fields filter-map)) ["Filter fields must not be empty."]
+    (< max-fields (count (:fields filter-map))) [(str "A filter takes at most " max-fields " fields.")]
     :else (vec (mapcat field-spec-errors (:fields filter-map)))))
+
+(defn normalize-filter-map
+  "Keywordize each field's :type and :value-type, as retrieval's own filters carry them."
+  [filter-map]
+  (when filter-map
+    (update filter-map :fields
+            (partial mapv #(cond-> %
+                             (:type %) (update :type (comp keyword named))
+                             (:value-type %) (update :value-type (comp keyword named)))))))
 
 (defn merge-filter-maps
   "Fields of `primary`, plus those of `secondary` on fields `primary` does not name."

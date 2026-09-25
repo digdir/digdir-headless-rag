@@ -617,12 +617,30 @@
            "an auto-filter switch that is not a boolean" {"retrieve-auto-filter" "false"}
            "an integer filter carrying text" {"retrieve-filter-by"
                                               {"fields" [{"field" "year" "value-type" "integer"
-                                                          "selected-options" ["2020] || type:=[x"]}]}}}]
+                                                          "selected-options" ["2020] || type:=[x"]}]}}
+           "a filter value ending in a backslash" {"retrieve-filter-by"
+                                                   {"fields" [{"field" "type" "selected-options" ["Evaluering\\"]}]}}
+           "a snake_case key that would otherwise filter nothing" {"retrieve-filter-by"
+                                                                   {"fields" [{"field" "type" "selected_options" ["Evaluering"]}]}}
+           "a filter with no fields" {"retrieve-filter-by" {"fields" []}}
+           "an override outside the accepted three" {"model" "gpt-4o"}
+           "a key that would not survive as EDN" {"a b" 1}
+           "a top-k given as text" {"retrieve-top-k" "10"}
+           "a top-k above the cap" {"retrieve-top-k" 10000}}]
     (testing label
       (let [{:keys [error invoked?]} (invoke-with-arguments {"overrides" overrides})]
         (is (= "invalid_overrides" (:code error)))
         (is (= :invalid-params (mcp-tools/error-channel error)))
         (is (false? invoked?))))))
+
+(deftest a-caller-filter-type-matches-the-shape-retrieval-uses
+  (testing "type and value-type from JSON arrive as keywords, so they merge with auto-detected fields"
+    (is (= {:retrieve-filter-by {:fields [{:field "concerned_years" :type :multiselect
+                                           :value-type :integer :selected-options [2023]}]}}
+           (:params (invoke-with-arguments
+                     {"overrides" {"retrieve-filter-by"
+                                   {"fields" [{"field" "concerned_years" "type" "multiselect"
+                                               "value-type" "integer" "selected-options" [2023]}]}}}))))))
 
 (deftest structured-content-reports-the-filters-retrieval-applied
   (let [caller {:fields [{:field "type" :selected-options ["Evaluering"]}]}
