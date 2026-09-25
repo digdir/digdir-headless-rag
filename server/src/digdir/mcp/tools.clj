@@ -7,12 +7,14 @@
    `digdir.skills.invoke/invoke-rag` and persists the resulting turn via
    the same Datahike store the API already uses."
   (:require [clojure.string :as str]
+            [clojure.walk :as walk]
             [digdir.agents.db :as agents-db]
             [digdir.api.routes.endpoints.debug :as debug]
             [digdir.api.util :as api-util]
             [digdir.config.core :as config-core]
             [digdir.config.db :as config-db]
             [digdir.data.db :as data-db]
+            [digdir.rag.filters :as filters]
             [digdir.skills.api :as skills-api]
             [digdir.skills.invoke :as invoke]
             [nano-id.core :refer [nano-id]]
@@ -270,6 +272,12 @@
                "items" {"type" "string"}}
     "search_attribution" {"type" "object"
                           "description" "Which retrieval strategy contributed each hit."}
+    "filters_applied" {"type" "array"
+                       "description" (str "Each distinct filter retrieval ran with. `source` is explicit "
+                                          "(caller or model), auto (detected from the query) or merged. "
+                                          "`auto_detected` is the detected part; `auto_detected_dropped` "
+                                          "means it found nothing and the search ran without it.")
+                       "items" {"type" "object"}}
     "clarification" {"type" "object"
                      "description" "Present when the agent needs a clarifying answer before proceeding."}}
    "required" ["conversation_id"]})
@@ -395,7 +403,8 @@
     "description" "Dataset configuration key to scope this call to. Optional, as for `tenant`."}
    "overrides"
    {"type" "object"
-    "description" "Per-call skill-parameter overrides. Optional."}})
+    "description" (str "Per-call skill-parameter overrides, with kebab-case keys such as "
+                       "`retrieve-top-k` and `retrieve-filter-by`. Optional.")}})
 
 (def ^:private conversation-description-suffix
   " Multi-turn: the response carries structuredContent.conversation_id; pass it back as the conversation_id argument to continue the same conversation, and earlier turns are supplied to the model automatically."
@@ -696,15 +705,15 @@
 ;; =============================================================================
 
 (def ^:private invalid-params-codes
-  "Codes where the caller named something that does not exist. JSON-RPC has a
-   dedicated code for that and a client can act on it without a round trip
-   through the model.
+  "Codes where the caller sent a malformed request or named something that
+   does not exist. JSON-RPC has a dedicated code for that and a client can act
+   on it without a round trip through the model.
 
    `mode_not_allowed` belongs here rather than with the authorization
    codes: the tool name encodes agent__graph, so a graph outside the agent's
    allowed set is a tool that does not exist, not a permission the caller might
    otherwise have had."
-  #{"invalid_tool_name" "agent_not_found" "mode_not_allowed"})
+  #{"invalid_tool_name" "agent_not_found" "mode_not_allowed" "invalid_overrides"})
 
 (defn error-channel
   "Which MCP error channel `error` belongs on: :invalid-params or :tool-error."
@@ -721,6 +730,20 @@
    :isError true
    :_meta {:code (:code error)}})
 
+(defn- filters-applied
+  "Each distinct filter retrieval ran with during the call, and where it came from."
+  [invoke-result]
+  (->> (cons (:search-attribution invoke-result)
+             (get-in invoke-result [:diagnostics :search-attributions]))
+       (keep (fn [{:keys [filter-applied filter-source auto-filter-applied auto-filter-fallback]}]
+               (when filter-applied
+                 (cond-> {:filter filter-applied
+                          :source (some-> filter-source name)}
+                   auto-filter-applied (assoc :auto_detected auto-filter-applied)
+                   auto-filter-fallback (assoc :auto_detected_dropped true)))))
+       distinct
+       vec))
+
 (defn- ->structured-content
   "Structured payload for the tools/call result.
 
@@ -728,7 +751,8 @@
    not a channel a model reads — the handle has to be in the body for a
    multi-turn client to find it (#116)."
   [invoke-result conversation-id]
-  (let [{:keys [chunks queries search-attribution clarification]} invoke-result]
+  (let [{:keys [chunks queries search-attribution clarification]} invoke-result
+        applied (filters-applied invoke-result)]
     (cond-> {:conversation_id conversation-id}
       (seq chunks) (assoc :chunks (mapv #(select-keys % [:chunk_id :doc_num :chunk_index
                                                           :content_length :total_chunks
@@ -736,6 +760,7 @@
                                         (take 20 chunks)))
       (seq queries) (assoc :queries queries)
       (seq search-attribution) (assoc :search_attribution search-attribution)
+      (seq applied) (assoc :filters_applied applied)
       clarification (assoc :clarification clarification))))
 
 (defn invoke-tool
@@ -766,10 +791,30 @@
                     (pick-dataset-scope agent principal arguments)]
                 (if scope-err
                   {:error scope-err}
-                  (let [user-query (read-query-argument arguments)]
-                    (if (str/blank? user-query)
+                  (let [user-query (read-query-argument arguments)
+                        raw-overrides (or (get arguments "overrides")
+                                          (get arguments :overrides))
+                        overrides (when (map? raw-overrides)
+                                    (walk/keywordize-keys raw-overrides))
+                        overrides-error (cond
+                                          (nil? raw-overrides) nil
+                                          (nil? overrides) "`overrides` must be an object."
+                                          (and (contains? overrides :retrieve-auto-filter)
+                                               (not (boolean? (:retrieve-auto-filter overrides))))
+                                          "`retrieve-auto-filter` must be true or false."
+                                          :else (when-let [errs (seq (filters/filter-map-errors
+                                                                      (:retrieve-filter-by overrides)))]
+                                                  (str "Invalid `retrieve-filter-by`: "
+                                                       (str/join " " errs))))]
+                    (cond
+                      (str/blank? user-query)
                       {:error {:code "missing_query"
                                :message "Tool call requires a non-empty `query` argument."}}
+
+                      overrides-error
+                      {:error {:code "invalid_overrides" :message overrides-error}}
+
+                      :else
                       (let [conversation-id (or (get arguments "conversation_id")
                                                 (get arguments :conversation_id))
                             dataset-config (load-dataset-config scope)
@@ -777,8 +822,6 @@
                                 (throw (ex-info "Dataset not found"
                                                 {:scope scope})))
                             model (or (get arguments "model") (get arguments :model))
-                            overrides (or (get arguments "overrides")
-                                          (get arguments :overrides))
                             actual-convo-id (ensure-conversation! conversation-id
                                                                    agent-id
                                                                    scope

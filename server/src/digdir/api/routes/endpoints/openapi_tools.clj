@@ -165,6 +165,7 @@
   {"invalid_tool_name" 404
    "agent_not_found" 404
    "mode_not_allowed" 404
+   "invalid_overrides" 400
    "agent_disabled" 403
    "agent_not_authorized" 403
    "mode_not_authorized" 403})

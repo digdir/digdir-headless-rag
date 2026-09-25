@@ -188,11 +188,13 @@
             "mode_not_authorized" :tool-error
             "no_dataset_scope"           :tool-error
             "dataset_not_authorized"     :tool-error
-            "missing_query"              :tool-error}
+            "missing_query"              :tool-error
+            "invalid_overrides"          :invalid-params}
            (into {} (map (fn [c] [c (mcp-tools/error-channel {:code c})]))
                  ["invalid_tool_name" "agent_not_found" "mode_not_allowed"
                   "agent_disabled" "agent_not_authorized" "mode_not_authorized"
-                  "no_dataset_scope" "dataset_not_authorized" "missing_query"])))))
+                  "no_dataset_scope" "dataset_not_authorized" "missing_query"
+                  "invalid_overrides"])))))
 
 (deftest invoke-tool-falls-back-when-agent-has-empty-scopes
   (testing "Built-in agents seeded with empty :allowed-dataset-scopes are
@@ -565,3 +567,85 @@
               description (get-in tool [:inputSchema "properties" "query" "description"])]
           (is (str/includes? description "user-query")
               "the accepted alias must be documented where the reader meets it"))))))
+
+(defn- invoke-with-arguments
+  "Run invoke-tool against docs-agent with persistence stubbed; report what reached the params builder."
+  [arguments & [rag-result]]
+  (let [params-seen (atom ::not-called)
+        invoked? (atom false)]
+    (with-stubs [docs-agent]
+      (fn []
+        (with-redefs [config-core/get-master-key (fn [] "master-key")
+                      config-db/get-dataset-by-ref (fn [_ _ _] {:docs-collection "docs"})
+                      api-util/build-rag-skill-params (fn [_ params _] (reset! params-seen params) {})
+                      data-db/get-conn (fn [] (atom :fake-data-conn))
+                      data-db/create-playground-conversation (fn [_ _ _] {:conversation-id "c"})
+                      data-db/fetch-conversation-tree (fn [_ _] [])
+                      data-db/transact-playground-user-msg (fn [& _] nil)
+                      data-db/transact-assistant-msg (fn [& _] nil)
+                      invoke/invoke-rag (fn [_]
+                                          (reset! invoked? true)
+                                          (merge {:status :complete :response "ok" :chunks []}
+                                                 rag-result))]
+          (assoc (mcp-tools/invoke-tool
+                  {:api-key/agent-refs ["builtin/docs-agent"]
+                   :api-key/dataset-scopes [{:tenant "altinn-docs" :dataset-config-key "dev"}]}
+                  "builtin.docs-agent__self-improve-graph"
+                  (merge {"query" "q"} arguments)
+                  nil)
+                 :params @params-seen
+                 :invoked? @invoked?))))))
+
+(deftest overrides-arrive-with-keyword-keys
+  (testing "JSON overrides reach the params builder in the keyword shape it reads"
+    (is (= {:retrieve-top-k 7
+            :retrieve-filter-by {:fields [{:field "type" :selected-options ["Evaluering"]}]}}
+           (:params (invoke-with-arguments
+                     {"overrides" {"retrieve-top-k" 7
+                                   "retrieve-filter-by" {"fields" [{"field" "type"
+                                                                    "selected-options" ["Evaluering"]}]}}}))))))
+
+(deftest invalid-overrides-are-refused-before-anything-runs
+  (doseq [[label overrides]
+          {"overrides that are not an object" "retrieve-top-k=7"
+           "a filter value that breaks out of its quoting" {"retrieve-filter-by"
+                                                           {"fields" [{"field" "type"
+                                                                       "selected-options" ["x`] || type:=[`y"]}]}}
+           "a field name that is not an identifier" {"retrieve-filter-by"
+                                                     {"fields" [{"field" "type:=[`x`] || title"
+                                                                 "selected-options" ["y"]}]}}
+           "an auto-filter switch that is not a boolean" {"retrieve-auto-filter" "false"}
+           "an integer filter carrying text" {"retrieve-filter-by"
+                                              {"fields" [{"field" "year" "value-type" "integer"
+                                                          "selected-options" ["2020] || type:=[x"]}]}}}]
+    (testing label
+      (let [{:keys [error invoked?]} (invoke-with-arguments {"overrides" overrides})]
+        (is (= "invalid_overrides" (:code error)))
+        (is (= :invalid-params (mcp-tools/error-channel error)))
+        (is (false? invoked?))))))
+
+(deftest structured-content-reports-the-filters-retrieval-applied
+  (let [caller {:fields [{:field "type" :selected-options ["Evaluering"]}]}
+        detected {:fields [{:field "orgs_long" :selected-options ["Digitaliseringsdirektoratet"]}]}
+        merged {:fields (into (:fields caller) (:fields detected))}
+        applied (fn [rag-result]
+                  (get-in (invoke-with-arguments {} rag-result) [:result :structuredContent :filters_applied]))]
+    (testing "Each search's filter is listed once, with its source and the detected part"
+      (is (= [{:filter merged :source "merged" :auto_detected detected}
+              {:filter caller :source "explicit"}]
+             (applied {:search-attribution {:filter-applied merged :filter-source :merged
+                                            :auto-filter-applied detected}
+                       :diagnostics {:search-attributions
+                                     [{:filter-applied merged :filter-source :merged
+                                       :auto-filter-applied detected}
+                                      {:filter-applied caller :filter-source :explicit}]}}))))
+
+    (testing "A detected filter that found nothing is marked as dropped"
+      (is (true? (:auto_detected_dropped
+                  (first (applied {:search-attribution {:filter-applied merged :filter-source :merged
+                                                        :auto-filter-applied detected
+                                                        :auto-filter-fallback true}}))))))
+
+    (testing "An unfiltered call reports no filters"
+      (is (nil? (applied {:search-attribution {:phrase 3}}))))))
+

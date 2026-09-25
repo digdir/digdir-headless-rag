@@ -5,7 +5,7 @@
 (defn format-filter-value
   "Format a filter value for Typesense. Integers don't need backticks, strings do."
   [value value-type]
-  (if (= value-type :integer)
+  (if (= "integer" (some-> value-type name))
     (str value)
     (str "`" value "`")))
 
@@ -52,6 +52,71 @@
            (str/join ","
                      (map #(format-filter-value % value-type) options))
            "]"))))
+
+(def ^:private field-name-pattern #"[A-Za-z_][A-Za-z0-9_.]*")
+(def ^:private field-types #{"multiselect" "contains" "not-in-set"})
+(def ^:private max-options 100)
+(def ^:private max-value-length 256)
+
+(defn- named [x]
+  (when (or (string? x) (keyword? x)) (name x)))
+
+(defn- field-spec-errors
+  [spec]
+  (if-not (map? spec)
+    ["Each filter field must be an object."]
+    (let [{:keys [field type value-type selected-options value]} spec
+          options (cond
+                    (or (sequential? selected-options) (set? selected-options)) selected-options
+                    (some? selected-options) nil
+                    (some? value) [value]
+                    :else [])]
+      (cond-> []
+        (not (and (string? field) (re-matches field-name-pattern field)))
+        (conj (str "Filter field must be a plain field name; got " (pr-str field) "."))
+
+        (and (some? type) (not (field-types (named type))))
+        (conj (str "Filter type must be one of " (sort field-types) "; got " (pr-str type) "."))
+
+        (and (some? value-type) (not (#{"integer" "string"} (named value-type))))
+        (conj (str "Filter value-type must be integer or string; got " (pr-str value-type) "."))
+
+        (nil? options)
+        (conj "Filter selected-options must be a list.")
+
+        (< max-options (count options))
+        (conj (str "A filter field takes at most " max-options " options."))
+
+        (some #(not (or (string? %) (integer? %))) options)
+        (conj "Filter options must be strings or integers.")
+
+        (some #(and (string? %) (str/includes? % "`")) options)
+        (conj "Filter options cannot contain a backtick.")
+
+        (some #(and (string? %) (< max-value-length (count %))) options)
+        (conj (str "Filter options are at most " max-value-length " characters."))
+
+        (and (= "integer" (named value-type))
+             (some #(not (re-matches #"-?\d+" (str %))) options))
+        (conj "An integer filter takes only integer options.")))))
+
+(defn filter-map-errors
+  "Why a caller-supplied filter map cannot be serialised safely. Empty when it can."
+  [filter-map]
+  (cond
+    (nil? filter-map) []
+    (not (map? filter-map)) ["Filter must be an object with a fields list."]
+    (not (sequential? (:fields filter-map))) ["Filter fields must be a list."]
+    :else (vec (mapcat field-spec-errors (:fields filter-map)))))
+
+(defn merge-filter-maps
+  "Fields of `primary`, plus those of `secondary` on fields `primary` does not name."
+  [primary secondary]
+  (let [named-fields (set (map :field (:fields primary)))
+        fields (vec (concat (:fields primary)
+                            (remove #(contains? named-fields (:field %)) (:fields secondary))))]
+    (when (seq fields)
+      {:fields fields})))
 
 (defn filter-map->typesense-filter
   "Converts a filter map to a Typesense filter_by string for use when

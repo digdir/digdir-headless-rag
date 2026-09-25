@@ -281,7 +281,7 @@ All preserved skill graphs share a single input schema (Malli source in
 | `tenant`                 | string   | no       | Scope override (see below).                                                |
 | `dataset_config_key`     | string   | no       | Scope override (see below).                                                |
 | `conversation_id`        | string   | no       | Reuse an existing conversation; omit to start a new one.                   |
-| `overrides`              | object   | no       | Per-call skill-param overrides (top-k, prompts, ...).                      |
+| `overrides`              | object   | no       | Per-call skill-param overrides. See [Per-call overrides](#per-call-overrides). |
 
 ### Scope resolution
 
@@ -297,6 +297,48 @@ dataset and resolve the skill graph. Resolution order:
 
 If no scope can be resolved, the call fails with an actionable error
 naming the three knobs.
+
+### Per-call overrides
+
+`overrides` takes the same kebab-case keys as the per-call layer of
+`digdir.api.util/build-skill-params-from-params`, for example
+`retrieve-top-k`, `retrieve-strategy-weights` or `rerank-top-k`. Keys that
+layer does not read are ignored. They win over the agent's `:skill-params`
+and the dataset config.
+
+`retrieve-filter-by` restricts retrieval to documents matching a filter:
+
+```json
+"overrides": {
+  "retrieve-filter-by": {
+    "fields": [
+      {"field": "type", "selected-options": ["Evaluering"]},
+      {"field": "concerned_years", "value-type": "integer", "selected-options": [2022, 2023]}
+    ]
+  }
+}
+```
+
+Each field takes a plain field name, an optional `type` (`multiselect`, the
+default, `contains` or `not-in-set`), an optional `value-type` (`string` or
+`integer`), and up to 100 `selected-options` of at most 256 characters. A
+filter that breaks these rules, or `overrides` that is not an object, fails
+with `-32602` and code `invalid_overrides` before anything runs. Over
+`POST /api/tools/call` it is HTTP 400.
+
+The caller's filter is a hard constraint. On the agentic skill graphs the
+model also writes search filters: on a field both name the caller's wins, and
+a search the model narrowed that finds nothing is retried with the caller's
+filter alone, never without it. A filter the model writes is checked by the
+same rules.
+
+Retrieval also merges in a filter it detects from the query itself
+(organisation and year names), and the caller's filter wins on the same field
+there too. `"retrieve-auto-filter": false` turns that detection off for one
+call, and the config key `skills.retrieval.auto-filter` turns it off for a
+dataset. It is on by default. `structuredContent.filters_applied` shows what
+retrieval actually filtered on, so a client can tell the user when a detected
+filter narrowed their results.
 
 ## What a `tools/call` result contains
 
@@ -322,6 +364,7 @@ it is building a UI rather than rendering prose:
 | `chunks` | array | Retrieved source chunks the answer drew on — each with `chunk_id`, `doc_num`, `chunk_index`, `content_length`, `total_chunks`, `title`, `url`, `metadata` |
 | `queries` | array<string> | The search queries that were actually run |
 | `search_attribution` | object | Which retrieval strategy contributed each hit |
+| `filters_applied` | array | Each distinct filter retrieval ran with: `filter`, `source` (`explicit`, `auto` or `merged`), `auto_detected` for the part detected from the query, and `auto_detected_dropped` when that part found nothing and the search ran without it. Absent when nothing was filtered. |
 | `clarification` | object | Present when the agent needs a clarifying answer before it can proceed |
 
 Read the schema from `tools/list` rather than from this table if the two ever
@@ -346,7 +389,7 @@ counting successes, would have read as a good answer.
 
 | Channel | Means | Example |
 |---|---|---|
-| JSON-RPC `error` + non-2xx | The request never became a tool call: malformed, unauthorized, or naming something that does not exist. | `-32601` unknown method, `-32020` header/body mismatch, `-32022` unsupported version, `-32602` unknown tool or agent |
+| JSON-RPC `error` + non-2xx | The request never became a tool call: malformed, unauthorized, or naming something that does not exist. | `-32601` unknown method, `-32020` header/body mismatch, `-32022` unsupported version, `-32602` unknown tool or agent, or invalid `overrides` |
 | Result with `isError: true` | The call dispatched and the **tool** failed. The message is in `content` so it reaches the model, which can act on it (#117). | The agent could not reach its LLM; the dataset scope resolved but the graph failed |
 | Result with `isError: false` | The tool ran **and produced an answer** — including an answer that says the evidence was insufficient. | A normal response; a `needs-clarification` result |
 

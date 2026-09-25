@@ -1109,6 +1109,58 @@
           (is (= 0 (count (:chunks @!ws))))
           (is (= 1 (count (:seen-search-chunk-ids @!ws)))))))))
 
+(def ^:private caller-type-filter
+  {:fields [{:field "type" :selected-options ["Evaluering"]}]})
+
+(defn- search-with
+  "Run the agent's search tool with a caller filter; return the filters retrieval saw and the summary."
+  [model-args hits?]
+  (let [calls (atom [])
+        summary (with-redefs [tools/execute-sub-skill
+                              (fn [_skill-id _inputs _opts & [params]]
+                                (swap! calls conj (:filter-by params))
+                                {:outputs {:chunks (if (hits? (:filter-by params))
+                                                     [{:chunk_id "c1" :content_markdown "hit"}]
+                                                     [])}})]
+                  (tools/execute-tool-call
+                   "search"
+                   (merge {:queries ["q"]} model-args)
+                   (workspace/create-workspace)
+                   {:docs-collection "docs"
+                    :chunks-collection "chunks"
+                    :phrases-collection "phrases"
+                    :conversation-history []
+                    :opts {:skill-params {:builtin/retrieval {:filter-by caller-type-filter}}}}))]
+    {:filters @calls :summary summary}))
+
+(deftest test-search-honours-the-callers-filter
+  (testing "A search the model runs unfiltered still carries the caller's filter"
+    (is (= [caller-type-filter] (:filters (search-with {} (constantly true))))))
+
+  (testing "The caller's filter wins on its field; the model can narrow on others"
+    (let [{:keys [filters]} (search-with {:filter_by {:fields [{:field "type" :selected_options ["Årsrapport"]}
+                                                               {:field "orgs_short" :selected_options ["Digdir"]}]}}
+                                         (constantly true))]
+      (is (= 1 (count filters)))
+      (is (= [{:field "type" :selected-options ["Evaluering"]}
+              {:field "orgs_short" :type :multiselect :value-type :string :selected-options #{"Digdir"}}]
+             (:fields (first filters))))))
+
+  (testing "An empty narrowed search falls back to the caller's filter, never to none"
+    (let [{:keys [filters summary]} (search-with {:filter_by {:fields [{:field "orgs_short" :selected_options ["Digdir"]}]}}
+                                                 #(= caller-type-filter %))]
+      (is (= caller-type-filter (second filters)))
+      (is (re-find #"retried with only the caller's required filter" summary))))
+
+  (testing "An empty search on the caller's filter alone is not retried without it"
+    (is (= [caller-type-filter] (:filters (search-with {} (constantly false))))))
+
+  (testing "A filter the model writes is checked like a caller's, and a bad one is not run"
+    (let [{:keys [filters summary]} (search-with {:filter_by {:fields [{:field "type" :selected_options ["x`y"]}]}}
+                                                 (constantly true))]
+      (is (empty? filters))
+      (is (re-find #"Invalid filter_by" summary)))))
+
 (deftest test-execute-sub-skill-explicit-params-override-config
   (testing "execute-sub-skill merges per-skill config params and lets explicit params win"
     (let [captured-ctx (atom nil)]
