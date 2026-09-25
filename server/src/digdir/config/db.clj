@@ -2260,6 +2260,7 @@
    :retrieval-strategy-contribution-caps     "skills.retrieval.strategy-contribution-caps"
    :retrieval-title-fields                   "skills.retrieval.title-fields"
    :retrieval-doc-title-chunk-fanout         "skills.retrieval.doc-title-chunk-fanout"
+   :retrieval-auto-filter                    "skills.retrieval.auto-filter"
    :retrieval-auto-filter-rules              "skills.retrieval.auto-filter-rules"
    :retrieval-enrichment-types               "skills.retrieval.enrichment-types"
    :retrieval-merge-mode                     "skills.retrieval.merge-mode"

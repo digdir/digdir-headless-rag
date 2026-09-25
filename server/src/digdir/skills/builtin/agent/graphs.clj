@@ -147,7 +147,7 @@
    :inputs [:iterations :exhausted? :ambient-ctx :messages-init
             :workspace-init :model :temperature]
    :outputs [:response :clarification-request :terminal-state :trace
-             :chunks :workspace-final :exhausted?]
+             :chunks :search-attributions :workspace-final :exhausted?]
    :parameters {}
    :version "1.0.0"
    :tags #{:agent :orchestration :graph-cutover}})
@@ -268,6 +268,7 @@
           (cond-> {:terminal-state terminal-state
                    :trace (:iteration-history workspace)
                    :chunks (workspace/chunks-for-output workspace)
+                   :search-attributions (:search-attributions workspace)
                    :workspace-final workspace
                    :exhausted? true}
             response (assoc :response response)
@@ -293,6 +294,7 @@
               (cond-> {:terminal-state (or terminal-state :finalize)
                        :trace (:iteration-history workspace)
                        :chunks (workspace/chunks-for-output workspace)
+                       :search-attributions (:search-attributions workspace)
                        :workspace-final workspace
                        :exhausted? false
                        ;; provenance: this run finalized empty and was recovered,
@@ -308,6 +310,7 @@
              :terminal-state (:terminal-state last-iter)
              :trace (:iteration-history workspace-after-loop)
              :chunks (workspace/chunks-for-output workspace-after-loop)
+             :search-attributions (:search-attributions workspace-after-loop)
              :workspace-final workspace-after-loop
              :exhausted? false}
             {}))))))
@@ -337,7 +340,7 @@
             :phrases-collection :system-prompt :budget-limits
             :ambient-ctx-opts :model :temperature :max-iterations]
    :outputs [:response :clarification-request :terminal-state :trace
-             :chunks :workspace-final :exhausted?]
+             :chunks :search-attributions :workspace-final :exhausted?]
    :steps
    [{:id :setup
      :skill :builtin/agent-setup

@@ -162,3 +162,20 @@
              (:strategy-contribution-caps retr)))
       (is (= 100 (:retrieve-top-k retr)))
       (is (= 20 (:top-k rrank))))))
+
+(deftest test-filter-by-is-a-per-call-param
+  (testing "A caller filter reaches the retrieval skill's :filter-by"
+    (let [filter-map {:fields [{:field "type" :selected-options ["Evaluering"]}]}
+          out (u/build-rag-skill-params {} {:retrieve-filter-by filter-map} {})]
+      (is (= filter-map (get-in out [:builtin/retrieval :filter-by]))))))
+
+(deftest test-auto-filter-can-be-switched-off
+  (testing "Per call"
+    (is (false? (get-in (u/build-rag-skill-params {} {:retrieve-auto-filter false} {})
+                        [:builtin/retrieval :auto-filter]))))
+  (testing "In config"
+    (is (false? (get-in (u/build-rag-skill-params {:retrieval-auto-filter false} {} {})
+                        [:builtin/retrieval :auto-filter]))))
+  (testing "Unset leaves retrieval's own default in place"
+    (is (not (contains? (:builtin/retrieval (u/build-rag-skill-params {} {} {})) :auto-filter)))))
+

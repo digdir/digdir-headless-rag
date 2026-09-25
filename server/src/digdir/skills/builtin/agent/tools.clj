@@ -5,6 +5,7 @@
             [digdir.rag.skills.core :as skills]
             [digdir.skills.context :as ctx]
             [digdir.rag.core :as rag]
+            [digdir.rag.filters :as filters]
             [digdir.rag.typesense :as ts-utils]
             [typesense.client :as ts-client]
             [clojure.data.json :as json]
@@ -971,6 +972,16 @@
       (when (seq fields)
         {:fields fields}))))
 
+(defn- search-filters
+  "What a search filters on: the caller's filter wins over the model's on each field,
+   and a search that finds nothing falls back to the caller's filter alone."
+  [args opts]
+  (let [caller (get-in opts [:skill-params :builtin/retrieval :filter-by])
+        model (normalize-filter-by (or (:filter-by args) (:filter_by args)))]
+    {:model model
+     :caller caller
+     :filter-by (filters/merge-filter-maps caller model)}))
+
 (defn execute-tool-call*
   "Execute a single tool call and return formatted result.
 
@@ -995,7 +1006,8 @@
         (str "Search budget exhausted ("
              (:search-passes-used budget) "/" (:max-search-passes budget)
              "). Do not call search again; rerank or generate from current evidence.")
-        (let [filter-by (normalize-filter-by (or (:filter-by args) (:filter_by args)))
+        (let [{model-filter :model caller-filter :caller filter-by :filter-by} (search-filters args opts)
+              filter-errors (filters/filter-map-errors model-filter)
               ;; Slice 23: pass the planner's last user-intent into retrieval
               ;; when the agent did a plan_queries call earlier this turn. When
               ;; the retrieval skill has :user-intent-union-enabled, it will run
@@ -1006,28 +1018,36 @@
                                      :chunks-collection chunks-collection
                                      :phrases-collection phrases-collection}
                               last-user-intent (assoc :user-intent last-user-intent))
-              filtered-result (execute-sub-skill
-                               :builtin/retrieval
-                               search-inputs
-                               opts
-                               {:filter-by filter-by
-                                :metadata-only true
-                                :rerank-with-colbert true})
+              filtered-result (when (empty? filter-errors)
+                                (execute-sub-skill
+                                 :builtin/retrieval
+                                 search-inputs
+                                 opts
+                                 {:filter-by filter-by
+                                  :metadata-only true
+                                  :rerank-with-colbert true}))
               filtered-chunks (get-in filtered-result [:outputs :chunks] [])
               filtered-error (:error filtered-result)
-              needs-unfiltered-fallback? (and (nil? filtered-error)
-                                              (seq filter-by)
+              needs-unfiltered-fallback? (and filtered-result
+                                              (nil? filtered-error)
+                                              (not= (:fields filter-by) (:fields caller-filter))
                                               (empty? filtered-chunks))
               unfiltered-result (when needs-unfiltered-fallback?
                                   (execute-sub-skill
                                    :builtin/retrieval
                                    search-inputs
                                    opts
-                                   {:filter-by nil
+                                   {:filter-by caller-filter
                                     :metadata-only true
                                     :rerank-with-colbert true}))
-              unfiltered-error (:error unfiltered-result)]
+              unfiltered-error (:error unfiltered-result)
+              retry-label (if caller-filter
+                            "retried with only the caller's required filter"
+                            "retried without filters")]
           (cond
+            (seq filter-errors)
+            (str "Invalid filter_by, search not run: " (str/join " " filter-errors))
+
             filtered-error
             (do
               (workspace/record-search-error! !workspace {:queries (:queries args)
@@ -1049,7 +1069,7 @@
                                                           :attribution attribution
                                                           :fallback? false})
                   _ (workspace/record-search-error! !workspace {:queries (:queries args)
-                                                                :filter-by nil
+                                                                :filter-by caller-filter
                                                                 :error unfiltered-error
                                                                 :fallback? true})
                   search-pass (count (:search-history @!workspace))
@@ -1057,7 +1077,10 @@
                   display-limit (agent-search-display-limit ambient-ctx)
                   base-summary (format-search-metadata-results filtered-chunks new-count total-seen search-pass attribution display-limit (agent-show-snippets? ambient-ctx))]
               (str base-summary
-                   " Filtered retrieval returned 0 chunks; retry without filters failed: "
+                   " Filtered retrieval returned 0 chunks; "
+                   (if caller-filter
+                     "retry with only the caller's required filter failed: "
+                     "retry without filters failed: ")
                    (:error-message unfiltered-error)))
 
             :else
@@ -1108,7 +1131,7 @@
                                         (str/join ", " auto-read-ids)
                                         ". Do NOT re-read these via read_chunks."))]
               (str (if needs-unfiltered-fallback?
-                     (str "Filtered retrieval returned 0 chunks; retried without filters. " base-summary)
+                     (str "Filtered retrieval returned 0 chunks; " retry-label ". " base-summary)
                      base-summary)
                    auto-read-note)))))
 
@@ -1481,16 +1504,16 @@
         {:keys [opts]} ambient-ctx]
     (cond
       (#{"search" "search_documents"} tool-name)
-      (let [filter-by (normalize-filter-by (or (:filter-by args) (:filter_by args)))
+      (let [{caller-filter :caller filter-by :filter-by} (search-filters args opts)
             primary (merged-sub-skill-parameters :builtin/retrieval opts {:filter-by filter-by
                                                                           :metadata-only true})]
         (cond-> {:sub-skill :builtin/retrieval
                  :primary primary}
           dataset-ref
           (assoc :dataset-ref dataset-ref)
-          (seq filter-by)
+          (not= (:fields filter-by) (:fields caller-filter))
           (assoc :fallback-when-empty
-                 (merged-sub-skill-parameters :builtin/retrieval opts {:filter-by nil}))))
+                 (merged-sub-skill-parameters :builtin/retrieval opts {:filter-by caller-filter}))))
 
       (= "read_chunks" tool-name)
       {:sub-skill :builtin/read-chunks

@@ -258,6 +258,7 @@
                                       :strategy-contribution-caps (:retrieval-strategy-contribution-caps config)
                                       :title-fields (:retrieval-title-fields config)
                                       :doc-title-chunk-fanout (:retrieval-doc-title-chunk-fanout config)
+                                      :auto-filter (:retrieval-auto-filter config)
                                       :auto-filter-rules (:retrieval-auto-filter-rules config)
                                       ;; Enrichment lever: which enrichment collections to
                                       ;; search as sibling strategies. Parsed comma-separated
@@ -311,6 +312,8 @@
                                         :title-fields (:retrieve-title-fields params)
                                         :doc-title-chunk-fanout (:retrieve-doc-title-chunk-fanout params)
                                         :auto-filter-rules (:retrieve-auto-filter-rules params)
+                                        :filter-by (:retrieve-filter-by params)
+                                        :auto-filter (:retrieve-auto-filter params)
                                         :merge-mode (:retrieve-merge-mode params)
                                         :rrf-k (:retrieve-rrf-k params)
                                         ;; Slice 23: user-intent first-pass union (slice-21/22).
