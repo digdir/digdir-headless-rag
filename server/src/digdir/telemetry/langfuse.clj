@@ -147,6 +147,21 @@
 (defn- json-attr [k v]
   (attr k (json/generate-string v)))
 
+(defn- label
+  "A keyword as a WIRE value: no leading colon, namespace kept.
+
+   `str` on a keyword keeps the colon, so `:agent-llm` went out as the span
+   name `\":agent-llm\"` — measured, that is what Langfuse stored. Span names
+   are what you group and filter on there, so every one was off by a character
+   from the value the docs quote.
+
+   `name` is the wrong fix: it DROPS the namespace, turning
+   `:builtin/agent-rag-graph-bundled` into `agent-rag-graph-bundled` and
+   throwing away the half that says which graph family it is. Strings pass
+   through untouched, because `:stage` falls back to a plain string."
+  [x]
+  (if (keyword? x) (subs (str x) 1) (str x)))
+
 (defn- now-nanos [] (* (System/currentTimeMillis) 1000000))
 
 (defn- resolved-model
@@ -203,12 +218,17 @@
                               (attr :digdir.status (name (or (:status result) :unknown)))
                               (attr :digdir.chunks (count (:chunks result)))]
                        (:skill-graph-id ctx)
-                       (conj (attr :digdir.skill-graph (str (:skill-graph-id ctx))))
+                       (conj (attr :digdir.skill-graph (label (:skill-graph-id ctx))))
                        ;; A failed run is worth MORE in a trace than a
                        ;; successful one, so the error rides along rather than
                        ;; being filtered out by the caller.
                        (:error result)
-                       (conj (json-attr :langfuse.observation.level "ERROR")
+                       ;; `attr`, NOT `json-attr`: Langfuse matches this against
+                       ;; its DEBUG/DEFAULT/WARNING/ERROR enum, so a
+                       ;; JSON-encoded "\"ERROR\"" — quotes included — misses
+                       ;; and the observation silently stays at DEFAULT. Only
+                       ;; input/output and usage_details are JSON-valued.
+                       (conj (attr :langfuse.observation.level "ERROR")
                              (attr :digdir.error (str (get-in result [:error :error-message]))))))})
 
 (defn- generation-span
@@ -216,28 +236,45 @@
 
    `langfuse.observation.type` is set explicitly because explicit type
    declarations take precedence over convention-based inference — which means
-   this does not depend on Langfuse guessing right from the other attributes."
-  [{:keys [trace-id parent-id start-ns end-ns ctx model]} timing]
+   this does not depend on Langfuse guessing right from the other attributes.
+
+   `span-start-ns` is supplied by the caller, which walks the timings in order
+   accumulating `:duration-ms` — see `payload`. It is NOT the run's start: an
+   earlier version stamped every generation with that, so a run with three
+   sequential LLM calls rendered as three CONCURRENT ones and the waterfall
+   said nothing about ordering."
+  [{:keys [parent-id trace-id end-ns ctx model span-start-ns]} timing]
   (when-let [u (usage/call-usage timing)]
     (let [dur (or (:duration-ms timing) 0)
-          end (min end-ns (+ start-ns (* dur 1000000)))]
+          end (min end-ns (+ span-start-ns (* dur 1000000)))]
       {:traceId trace-id
        :spanId (hex 8)
        :parentSpanId parent-id
-       :name (str (or (:stage timing) "llm-call"))
+       :name (label (or (:stage timing) "llm-call"))
        :kind 1
-       :startTimeUnixNano (str start-ns)
-       :endTimeUnixNano (str (max end start-ns))
-       :attributes (let [;; PER-CALL first: `:llm-model` is what the provider
-                         ;; echoed back for THIS call, so it survives a
-                         ;; per-skill model override that the run-level
-                         ;; fallback would paper over. nil is legitimate — the
-                         ;; writers only set it when the response carried one.
-                         m (or (usage/timing-model timing) model)]
+       :startTimeUnixNano (str span-start-ns)
+       :endTimeUnixNano (str (max end span-start-ns))
+       ;; TWO KEYS, BECAUSE THERE ARE TWO DIFFERENT FACTS.
+       ;;
+       ;; `:llm-model` is what the provider ECHOED BACK for this call — the
+       ;; served model. `resolved-model` is what config ASKED for. OTel keeps
+       ;; those apart as `gen_ai.response.model` and `gen_ai.request.model`,
+       ;; and Langfuse reads either for the model name, so emitting the served
+       ;; value under the request key (as an earlier version did) reports a
+       ;; deployment name as though it were the request — measured on this
+       ;; stack: requested `sigma2:Borealis-27B`, served `Borealis-27B`.
+       ;;
+       ;; The served value wins when present, for the same reason it always
+       ;; did: it survives a per-skill override the run-level value cannot see.
+       :attributes (let [served (usage/timing-model timing)]
                      (into (trace-attrs ctx)
                            (cond-> [(attr :langfuse.observation.type "generation")
                                     (json-attr :langfuse.observation.usage_details u)]
-                             m (conj (attr :gen_ai.request.model m)))))})))
+                             served
+                             (conj (attr :gen_ai.response.model served))
+
+                             (and (nil? served) model)
+                             (conj (attr :gen_ai.request.model model)))))})))
 
 (defn- payload
   [{:keys [user-query result ctx start-ns end-ns]}]
@@ -249,11 +286,33 @@
         root (root-span {:trace-id trace-id :span-id root-id
                          :start-ns start-ns :end-ns end-ns
                          :user-query user-query :result result :ctx ctx})
-        gens (keep #(generation-span {:trace-id trace-id :parent-id root-id
-                                      :start-ns start-ns :end-ns end-ns
-                                      :ctx ctx :model model}
-                                     %)
-                   (usage/stage-timings result))]
+        ;; LAID OUT IN ORDER, not stacked at the run start.
+        ;;
+        ;; The cursor advances by EVERY timing's `:duration-ms`, including the
+        ;; ones that produce no span — retrieval, rerank, tool dispatch. That
+        ;; is what makes the positions approximately real rather than merely
+        ;; ordered: the gaps between LLM calls ARE those stages, so walking
+        ;; them puts each generation near where it actually ran.
+        ;;
+        ;; ⚠️ STILL DERIVED, NOT MEASURED. A stage timing carries a duration
+        ;; and no timestamp (`normalize-stage-timing-entry` in
+        ;; `digdir.skills.builtin.agent.workspace` is an allowlist and has
+        ;; none), so anything unaccounted for — JVM pauses, time between
+        ;; stages nothing recorded — accumulates as drift, and the last span
+        ;; ends at or before the true run end. Ordering and durations are
+        ;; sound; treat absolute positions as approximate. The real fix is a
+        ;; per-call timestamp on the timing, which is a change in the agent's
+        ;; workspace rather than here.
+        gens (:spans
+              (reduce (fn [{:keys [cursor spans]} timing]
+                        (let [span (generation-span {:trace-id trace-id :parent-id root-id
+                                                     :end-ns end-ns :ctx ctx :model model
+                                                     :span-start-ns cursor}
+                                                    timing)]
+                          {:cursor (+ cursor (* (or (:duration-ms timing) 0) 1000000))
+                           :spans (cond-> spans span (conj span))}))
+                      {:cursor start-ns :spans []}
+                      (usage/stage-timings result)))]
     {:trace-id trace-id
      :body {:resourceSpans
             [{:resource {:attributes [(attr :service.name "digdir-rag")]}
@@ -281,36 +340,69 @@
    No-op when `enabled?` is false, so an instance without Langfuse configured
    pays one map lookup per query and nothing else."
   [{:keys [user-query result ctx start-ns end-ns]}]
-  (when (enabled?)
-    (if (and (client-task-prompt? user-query)
-             (not (trace-client-tasks?)))
-      ;; Logged rather than dropped in silence: a trace that never arrives is
-      ;; otherwise indistinguishable from tracing being broken, and this is
-      ;; the one code path that deliberately produces nothing.
-      (t/log! :debug [:langfuse/skipped-client-task
-                      {:reason :client-housekeeping-prompt
-                       :override "LANGFUSE_TRACE_CLIENT_TASKS=true"}])
-      (future
-      (try
-        (let [{:keys [trace-id body]} (payload {:user-query user-query :result result
-                                                :ctx ctx :start-ns start-ns :end-ns end-ns})
-              {:keys [status]} (post! body)]
-          (if (<= 200 status 299)
-            (t/log! :debug [:langfuse/emitted {:trace-id trace-id :status status}])
-            (t/log! :warn [:langfuse/rejected {:trace-id trace-id :status status}])))
-        (catch Exception e
-          ;; Swallowed on purpose — see the failure policy in the ns docstring.
-          (t/log! :warn [:langfuse/emit-failed {:error (.getMessage e)}]))))))
+  ;; ⚠️ THE GUARD IS OUT HERE, NOT ONLY INSIDE THE FUTURE.
+  ;;
+  ;; It used to sit only inside, which left everything on the CALLER'S thread
+  ;; unprotected: `enabled?` (two env reads), the client-task predicate, the
+  ;; `t/log!` on the skip path, and — the one that actually bites — the
+  ;; `(future ...)` submission itself. `clojure.core/future` hands work to
+  ;; `Agent/soloExecutor`, which throws RejectedExecutionException once
+  ;; `shutdown-agents` has run (JVM teardown, some test harnesses) and
+  ;; OutOfMemoryError when threads cannot be created. Either escaped
+  ;; `wrap-invocation` — the OUTERMOST expression of `invoke-rag`, outside its
+  ;; own catch — and a RAG answer that had already been computed successfully
+  ;; was discarded as an error.
+  ;;
+  ;; `Throwable`, not `Exception`, on purpose: OOM and friends are Errors, and
+  ;; they are exactly the case this promise exists for. Swallowing an Error is
+  ;; normally wrong, but the contract here is explicit and narrow — an observer
+  ;; must not destroy the thing it observes.
+  (try
+    (when (enabled?)
+      (if (and (client-task-prompt? user-query)
+               (not (trace-client-tasks?)))
+        ;; Logged rather than dropped in silence: a trace that never arrives is
+        ;; otherwise indistinguishable from tracing being broken, and this is
+        ;; the one code path that deliberately produces nothing.
+        (t/log! :debug [:langfuse/skipped-client-task
+                        {:reason :client-housekeeping-prompt
+                         :override "LANGFUSE_TRACE_CLIENT_TASKS=true"}])
+        (future
+          (try
+            (let [{:keys [trace-id body]} (payload {:user-query user-query :result result
+                                                    :ctx ctx :start-ns start-ns :end-ns end-ns})
+                  {:keys [status]} (post! body)]
+              (if (<= 200 status 299)
+                (t/log! :debug [:langfuse/emitted {:trace-id trace-id :status status}])
+                (t/log! :warn [:langfuse/rejected {:trace-id trace-id :status status}])))
+            (catch Throwable t
+              ;; Swallowed on purpose — see the failure policy in the ns docstring.
+              (t/log! :warn [:langfuse/emit-failed {:error (.getMessage t)}]))))))
+    (catch Throwable t
+      ;; The logger is the last thing that can fail here, so even it is guarded:
+      ;; a broken telemere handler must not be the reason a query 500s.
+      (try (t/log! :warn [:langfuse/dispatch-failed {:error (.getMessage t)}])
+           (catch Throwable _ nil))))
   nil)
 
 (defn wrap-invocation
   "Time `f`, emit the result to Langfuse, return the result untouched.
 
    Shaped as a wrapper so the call site reads as one expression and there is
-   no way to return early past the emit."
+   no way to return early past the emit.
+
+   `result` is computed BEFORE anything tracing-related runs, and the emit is
+   guarded again here. `emit-invocation!` already catches Throwable, so this
+   is redundant today — deliberately. This is the boundary `invoke.clj`'s
+   \"never throws\" comment points at, and a guarantee that depends on a
+   callee keeping its promise is one edit away from being false."
   [{:keys [user-query ctx]} f]
   (let [start (now-nanos)
         result (f)]
-    (emit-invocation! {:user-query user-query :result result :ctx ctx
-                       :start-ns start :end-ns (now-nanos)})
+    (try
+      (emit-invocation! {:user-query user-query :result result :ctx ctx
+                         :start-ns start :end-ns (now-nanos)})
+      (catch Throwable t
+        (try (t/log! :warn [:langfuse/wrap-failed {:error (.getMessage t)}])
+             (catch Throwable _ nil))))
     result))
