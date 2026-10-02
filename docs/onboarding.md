@@ -280,8 +280,8 @@ weren't previously written down together.
    (`digdir.e2e.seed/seed-azure-config-from-env!`) writes them onto that
    tenant's platform node, supplying the value the snapshot no longer carries,
    exactly as the `api-key-admin` line in §3 does. **Without them, [§4a](#4a-run-with-a-local-model--no-cloud-credentials-at-all)
-   is the other way past, and it needs no cloud account at all:** point the same
-   config family at an OpenAI-compatible server on your own machine. Verified
+   is the other way past, and it needs no cloud account at all:** point the
+   tenant's LLM settings at an OpenAI-compatible server on your own machine. Verified
    end to end against LM Studio; §4a step 0 says what that does and does not
    license you to assume about Ollama, vLLM and llama.cpp.
 
@@ -443,36 +443,83 @@ step 0 says what that does and does not license you to assume about the others.
 
 ### The naming trap, first, because nothing else here makes sense without it
 
-There is **one** family of LLM settings, `services.azure-openai.*`, and it
-drives **both** providers. `services.azure-openai.use-azure-openai-api` is the
-switch that decides which client the family configures:
+The provider is one per-tenant setting, `services.llm.provider`: `:azure` or
+`:openai-compatible`. The older boolean
+`services.azure-openai.use-azure-openai-api` is still honoured as its fallback
+when the new key is unset, and **unset everywhere means NOT Azure**. The model
+works the same way since Phase 4 of the provider-resolver change: `services.llm.model` is the model, and
+`services.azure-openai.model-name` is its legacy spelling and its FALLBACK,
+read only when the new key is unset. Azure's model is its deployment name,
+which is genuinely Azure-only:
 
-| Switch | Client | Endpoint from | Key from | Model from |
+| `services.llm.provider` | Client | Endpoint from | Key from | Model from |
 | --- | --- | --- | --- | --- |
-| `true` (must be set explicitly — unset is NOT this row) | wkok's Azure client (`:impl :azure`) | `services.azure-openai.api-endpoint` | `services.azure-openai.api-key` | `services.azure-openai.deployment-name` |
-| `false` | `digdir.llm.client` — a plain OpenAI-compatible POST | **`OPENAI_API_ENDPOINT`** (environment) | **`OPENAI_API_KEY`** (environment) | `services.azure-openai.model-name` |
+| `:azure` (must be set explicitly — unset is NOT this row) | wkok's Azure client (`:impl :azure`) | `services.azure-openai.api-endpoint` | `services.azure-openai.api-key` | `services.azure-openai.deployment-name` |
+| `:openai-compatible` | `digdir.llm.client` — a plain OpenAI-compatible POST | `services.llm.api-endpoint` | `services.llm.api-key` | `services.llm.model`, falling back to `services.azure-openai.model-name` |
 
-Nothing renames when you flip the switch. A config family named after Azure is
-what points this system at LM Studio. Nobody guesses that, which is why it is
-here and not in a reference page. The branch is
-`digdir.skills.builtin.agent.loop/llm-opts` and `call-llm` in the same
-namespace; read those two functions if you want to see the table above as
-code.
+An Azure-named config key used to supply the model that points this system at
+LM Studio. Phase 4 of the provider-resolver change moved it to `services.llm.model` and kept the old key
+as a fallback, so an existing install keeps working until its value is
+migrated — and you can migrate in any order, with nothing broken in between.
+`digdir.llm.provider/resolve` is the table
+above as code: the agent loop (`digdir.skills.builtin.agent.loop`) and the
+other LLM call sites ask it for the whole call spec.
 
-Note the asymmetry in the second row. **On the local path the endpoint and the
-key come from the environment, not from the config DB**
-(`digdir.llm.client/openai-compat-completion`), so `bb config-set` cannot set
-them and `services.azure-openai.api-endpoint` is read only by the Azure branch —
-setting it changes nothing here.
+**Settings that used to choose a provider, and are gone.** Since Phase 3 of the provider-resolver change,
+search-phrases, the document loader and question enrichment follow
+`services.llm.provider` like every other LLM call, so these were **read by
+nothing**, and Phase 4 of the provider-resolver change removed their definitions:
+- `services.search-phrases.provider` and `services.self-improvement.provider`;
+- `services.lmstudio.api-key`, `services.lmstudio.api-endpoint` and
+  `services.lmstudio.model`, together with the `LMSTUDIO_*` variables that
+  seeded them;
+- `services.openrouter.model` and `services.openrouter.api-key`, together with
+  the `OPENROUTER_API_KEY` variable that seeded the key. OpenRouter is now just
+  an OpenAI-compatible endpoint: point `services.llm.*` at
+  `https://openrouter.ai/api/v1`. The document loader's fallback model goes to
+  that same provider under its own name, so on Azure it must be a deployment.
 
-That asymmetry decides which mistakes you get told about, and it is worth being
-exact about where the telling stops. The two config values are both on
-`digdir.config.verify/runtime-required-service-paths` — a five-entry list, the
-other three being the Typesense trio from §3 — so a tenant missing either is
-reported at import and at boot. The two environment variables are checked too:
-since #327 `bb setup`'s first screen lists them in its own group, under
-`AZURE_OPENAI_USE_AZURE=false`, so an **absent** one is named before you run
-anything.
+**On a fresh install they do not exist**: `bb config-set` of one fails with
+`Config definition not found`, and the variables seed nothing.
+
+**An install that predates the removal still has them.** Nothing retracts a
+definition or its value, so both stay, and nothing reads either. There,
+setting one still succeeds and changes nothing. The old definitions'
+descriptions say they are retired, **but `bb config-set` does not show
+descriptions, and neither does the admin UI**. That is why they are listed
+here.
+`services.self-improvement.model` and `.reasoning-effort` are NOT retired: they
+still override enrichment's model and reasoning effort.
+
+**Every value in the table is per-tenant config, and none of it is read from
+the environment.** `OPENAI_API_ENDPOINT` and `OPENAI_API_KEY` still exist, but
+only as seeding inputs: `bb migration-import`, `bb demo-tenant` and the E2E
+boot seed (step 3) copy them into `services.llm.*`. A missing value refuses at
+the first call, naming its path. There is no fallback to the process
+environment, or to the public OpenAI API.
+
+That decides which mistakes you get told about, and it is worth being exact
+about where the telling stops:
+- The model is reported by `digdir.config.verify/unresolved-model`, through the
+  ONE read that the runtime routes by, so a tenant that has migrated to
+  `services.llm.model` is not reported as missing it. A tenant with NEITHER key
+  set is reported at import and at boot, naming `services.llm.model` — the path
+  to set now. (Before Phase 4 of the provider-resolver change the legacy path sat on
+  `runtime-required-service-paths`, which under a two-path read would report a
+  migrated tenant unconfigured while the runtime routes it fine.)
+- The endpoint and key are on this provider's first-query checklist
+  (`digdir.config.verify/unsupplied-first-query-config`).
+- Since the provider-grouped setup screen, `bb setup`'s first screen lists the two variables that seed the
+  endpoint and key, in their own group under `AZURE_OPENAI_USE_AZURE=false`. So
+  an **absent** one is named before you run anything.
+- A variable can be set while the config value it seeds is not; an install
+  upgraded from before the provider-resolver change is in that state. For a tenant configured for LLM
+  use, the server then refuses to boot, names both the path and the
+  variable, and prints the command that seeds each from its variable. Run them
+  with the server stopped and its environment loaded, quoted exactly as printed:
+  `bb config-set services.azure-openai.api-key "\"$AZURE_OPENAI_API_KEY\"" <tenant> platform default`.
+  Unquoted, `bb config-set` reads the value as EDN, fails, and prints the value.
+  `DIGDIR_ALLOW_UNSEEDED_LLM_CREDENTIALS=true` boots anyway.
 
 **What nothing checks is whether they are right.** Every check in the path is a
 presence check: blank or not blank. An endpoint with a typo, an endpoint
@@ -511,10 +558,11 @@ curl -sS http://localhost:1234/v1/models | jq '.data[].id'
 
 ### Step 1 — the guided way: `bb setup`
 
-`bb setup` has an **LLM Provider** section. It probes the endpoint you give it,
-lists the models the server actually reports, writes the two config values onto
-each tenant you choose, and prints the two environment variables it cannot
-write for you:
+`bb setup` has an **LLM Provider** section. It probes the endpoint you give it
+and lists the models the server actually reports. It then writes the provider,
+that endpoint and the model name onto each tenant you choose. The key is the
+one value it does not prompt for: it prints the `bb config-set` line for it
+instead.
 
 ```sh
 bb setup
@@ -536,97 +584,95 @@ there would report success and change nothing for the tenants the snapshot
 already brought in. The section seeds it too, as a separate line in its output,
 so a tenant you create later inherits the choice instead of reverting to Azure.
 
-### Step 2 — or the explicit way: two config writes and two variables
+### Step 2 — or the explicit way: four config writes
 
-Same four settings, no wizard. The two config values, per tenant (use `digdir`,
-for the reason given in §3):
-
-```sh
-bb config-set services.azure-openai.use-azure-openai-api false        digdir platform default
-bb config-set services.azure-openai.model-name '"qwen/qwen3-8b"'      digdir platform default
-```
-
-The two environment variables, in `mise.local.toml` or your shell profile —
-then restart `bb dev`, because these are read from the process environment:
+Same four settings, no wizard, all per tenant (use `digdir`, for the reason
+given in §3):
 
 ```sh
-OPENAI_API_ENDPOINT=http://localhost:1234/v1
-OPENAI_API_KEY=local
+bb config-set services.llm.provider :openai-compatible                 digdir platform default
+bb config-set services.llm.model '"qwen/qwen3-8b"'                     digdir platform default
+bb config-set services.llm.api-endpoint '"http://localhost:1234/v1"'   digdir platform default
+bb config-set services.llm.api-key '"local"'                           digdir platform default
 ```
 
-**`OPENAI_API_KEY` must be non-empty even though a local server ignores it.**
-`digdir.secrets/get!` throws on an absent secret rather than sending a keyless
-request (#22), so an unset variable stops the call before it leaves the
-process. Any placeholder works; it is not a credential.
+**`services.llm.api-key` must be non-empty even though a local server ignores
+it.** The resolver refuses a missing or blank key rather than sending a keyless
+request, and it no longer borrows `OPENAI_API_KEY` from the environment. So an
+unset key stops the call before it leaves the process. Any placeholder works;
+it is not a credential.
 
 ### Step 3 — or all four from the environment, if you already set `E2E_API_KEY`
 
 If you took §4 step 3's `E2E_API_KEY` auto-seed, you already have a hook that
-writes config from the environment on every boot, and it covers both of the
-config values above. Set these five and start `bb dev` — no `bb config-set` at
-all:
+writes config from the environment on every boot, and it covers all four
+settings above. Set these six and start `bb dev` — no `bb config-set` at all:
 
 ```sh
 E2E_API_KEY=<your key>          # already set, from §4 step 3
 TENANT=digdir                   # which tenant the seed writes to
-AZURE_OPENAI_USE_AZURE=false    # → services.azure-openai.use-azure-openai-api
-AZURE_OPENAI_MODEL_NAME=qwen/qwen3-8b   # → services.azure-openai.model-name
-OPENAI_API_ENDPOINT=http://localhost:1234/v1
-OPENAI_API_KEY=local
+AZURE_OPENAI_USE_AZURE=false    # → services.llm.provider :openai-compatible (legacy spelling)
+AZURE_OPENAI_MODEL_NAME=qwen/qwen3-8b   # → services.llm.model (legacy variable name)
+OPENAI_API_ENDPOINT=http://localhost:1234/v1   # → services.llm.api-endpoint
+OPENAI_API_KEY=local                           # → services.llm.api-key
 ```
 
 `digdir.e2e.seed/seed-azure-config-from-env!` maps every `AZURE_OPENAI_*`
-variable onto its config path and writes it to `TENANT`'s platform `default`
-node — including the two that have nothing to do with Azure. It is gated on
-`E2E_API_KEY` and armed only from `server/src-dev/dev.cljc`, so it is a **dev
-convenience, not a deployment mechanism**; `bb dev` reports what it wrote:
+variable, and the `OPENAI_API_*` pair, onto its config path. It writes them to
+`TENANT`'s platform `default` node, including the ones that have nothing to do
+with Azure. It is gated on `E2E_API_KEY`, and both server entrypoints arm it
+at boot (`server/src-dev/dev.cljc` and `server/src-prod/prod.cljc`). So it also
+runs in the newcomer Docker stack, whose compose file defaults `E2E_API_KEY`.
+It is still a **dev and E2E convenience, not a deployment mechanism**. `bb dev`
+reports what it wrote:
 
 ```
 digdir.e2e.seed :e2e/seeded {... :azure-paths-written
-  ["services.azure-openai.model-name" "services.azure-openai.use-azure-openai-api"] ...}
+  ["services.llm.model" "services.llm.provider"
+   "services.llm.api-endpoint" "services.llm.api-key"] ...}
 ```
 
 **If you are running §4 step 2's import anyway, you do not need this step for
-these two values.** The env-var → config-path mapping now lives in
-`digdir.config.env-bridge` and `bb migration-import` applies it to every
-imported tenant — ungated, and for every service rather than only
-`AZURE_OPENAI_*`. So `AZURE_OPENAI_USE_AZURE` and `AZURE_OPENAI_MODEL_NAME`
-set before the import land without `E2E_API_KEY` or `TENANT`, and the import
-tells you what is still missing by variable name.
+these values.** The env-var → config-path mapping now lives in
+`digdir.config.env-bridge`, and `bb migration-import` applies it to every
+imported tenant: ungated, and for every service rather than only
+`AZURE_OPENAI_*`. So all four variables, if set before the import, land without
+`E2E_API_KEY` or `TENANT`, and the import tells you what is still missing by
+variable name.
 
 What this step still gives you that the import does not: it re-applies on
 **every boot**, so you can change a variable and restart instead of
-re-importing. `OPENAI_API_ENDPOINT` and `OPENAI_API_KEY` are unaffected either
-way: as the table above marks them, both are read from the environment per
-call and cannot be set through config at all.
+re-importing.
 
 ### What each failure looks like
 
-Getting one of the four wrong fails differently, and only one of the four names
-itself. Every line below was observed on a fresh clone with no cloud
-credentials, calling `tools/call` on `builtin.agent-rag-agent__agent-rag-graph-bundled`:
+Since the provider-resolver change, a missing setting names itself. The call refuses before anything
+leaves the process, naming the config path and the command that sets it.
+
+**Where these lines come from.** They were observed by running the same agent
+graph (`builtin/agent-rag-graph-bundled`) in-process, through the provider-resolver change's capture
+harness, with `<tenant>` standing for the tenant id. They were not re-observed
+over `tools/call` on a fresh clone, which is how the table before the provider-resolver change was
+taken:
 
 | What is wrong | What you see |
 | --- | --- |
-| Nothing changed yet — switch UNSET, which since #500 means the OpenAI-compatible path, not Azure | `LLM request failed at iteration 0: Missing secret :openai-api-key: set OPENAI_API_KEY. Tried [:env].` |
-| Switch explicitly `true`, no Azure key (what "nothing changed yet" used to mean, when a value was still shipped) | `LLM request failed at iteration 0 (status 401): Interceptor Exception: status: 401` |
-| Switch flipped, **neither** variable set | `LLM request failed at iteration 0: Missing secret :openai-api-key: set OPENAI_API_KEY. Tried [:env].` |
-| `OPENAI_API_KEY` set, **`OPENAI_API_ENDPOINT` missing** | `LLM request failed at iteration 0 (status 401): clj-http: status 401` |
+| Nothing chosen yet — no `services.llm.provider` and no legacy switch, which means the OpenAI-compatible path, not Azure | ``LLM request failed at iteration 0: services.llm.api-key is unset for tenant "<tenant>", so its LLM calls cannot be made. Set it with `bb config-set services.llm.api-key '"<value>"' <tenant> platform default`, the value inside the quotes: it is read as an EDN string.`` |
+| `:azure`, no Azure key (before the provider-resolver change, a bare `status 401`) | ``LLM request failed at iteration 0: services.azure-openai.api-key is unset for tenant "<tenant>", so its LLM calls cannot be made. Set it with `bb config-set services.azure-openai.api-key '"<value>"' <tenant> platform default`, the value inside the quotes: it is read as an EDN string.`` |
+| `:openai-compatible`, **neither** `services.llm` value set | the `services.llm.api-key` line above. The key is checked first. |
+| key set, **`services.llm.api-endpoint` missing** | ``LLM request failed at iteration 0: services.llm.api-endpoint is unset for tenant "<tenant>", so its LLM calls cannot be made. Set it with `bb config-set services.llm.api-endpoint '"<value>"' <tenant> platform default`, the value inside the quotes: it is read as an EDN string.`` |
 | Everything set correctly | a real answer |
 
-The third row is the one that costs time. With no endpoint the client falls
-back to `https://api.openai.com/v1` (`digdir.llm.client/default-openai-endpoint`),
-so your placeholder key is sent to the **public OpenAI API**, which rejects it —
-a 401 that says nothing about the setting you actually forgot. If you are
-staring at a 401 while a local server is running, check `OPENAI_API_ENDPOINT`
-first. `bb dev`'s log gives it away: an `Invalid cookie header` warning naming
-`Domain=api.openai.com` means the request never went near your machine.
+The fourth row used to be the one that cost time. With no endpoint, the client
+fell back to the public OpenAI API, which rejected the placeholder key with a
+401 that said nothing about the setting that was actually missing. That fallback
+is gone: an unset endpoint now refuses by name.
 
-**A wrong `model-name` may not fail at all, and that is a trap.** Measured on
+**A wrong model may not fail at all, and that is a trap.** Measured on
 LM Studio 0.4.21: a `/chat/completions` request naming
 `definitely-not-a-real-model-xyz` was answered normally, with `"model":
 "qwen/qwen3-8b"` in the response — the id the server actually used. So a
-`model-name` left over from the snapshot can appear to work here. Whether some
+model left over from the snapshot can appear to work here. Whether some
 other server would reject it was **not** tested — only LM Studio's laxity was —
 so the useful conclusion is narrow: on LM Studio this field is not a check, and
 you cannot rely on it telling you that you got the model wrong. Set it to an id
@@ -665,31 +711,21 @@ cp .env.example .env
 ./scripts/setup-env.sh          # generates the three local secrets
 
 # setup-env.sh generates CONFIG_MASTER_KEY, JWT_SECRET and
-# TYPESENSE_API_KEY_ADMIN, and skips the Azure prompts when nothing is
-# attached to a terminal. It does NOT invent an Azure key, so ONE placeholder
-# remains — and the boot check counts it. Measured: without the line below the
-# server refuses to start with
-# "1 secret(s) still hold their .env.example placeholder — AZURE_OPENAI_API_KEY".
+# TYPESENSE_API_KEY_ADMIN. Answered with nothing but Enter - or with nothing
+# attached to a terminal - it leaves the provider unset, which means NOT Azure,
+# so it clears the Azure key's `.env.example` placeholder and no
+# placeholder remains for the boot check to refuse.
 #
-# For THIS walkthrough that placeholder is the point: §4b stops at dataset
-# resolution, before any LLM call, so a real Azure key would change nothing you
-# are about to see.
-echo 'DIGDIR_ALLOW_PLACEHOLDER_SECRETS=true' >> .env
+# For THIS walkthrough no LLM credential is needed: §4b stops at dataset
+# resolution, before any LLM call.
 
 docker compose -f docker-compose.newcomer.yml up --build
 ```
 
-> ⚠️ **Run the script; do not skip it and set the flag alone.** Both boot, and
-> they are not equivalent: the flag on its own ships a stack whose master key,
-> JWT secret and Typesense admin key are the strings in `.env.example`, which
-> anyone with a clone can read. The script means the override covers exactly one
-> value that is not a credential to anything you are running.
->
-> **And the flag is for a loopback-only stack you are about to throw away.**
-> Before this port is reachable from anywhere else, supply a real
-> `AZURE_OPENAI_API_KEY` and drop the flag. Without it the boot refuses and
-> names exactly which secrets are still placeholders, which is the behaviour you
-> want everywhere except here.
+> ⚠️ **Run the script; do not skip it and set `DIGDIR_ALLOW_PLACEHOLDER_SECRETS`
+> instead.** Both boot, and they are not equivalent: the flag on its own ships a
+> stack whose master key, JWT secret and Typesense admin key are the strings in
+> `.env.example`, which anyone with a clone can read.
 
 | Service | Where | What it is |
 | --- | --- | --- |

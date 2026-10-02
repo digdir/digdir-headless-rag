@@ -1,30 +1,28 @@
 (ns digdir.setup.llm
   "The `bb setup` section that picks which LLM provider a tenant talks to.
 
-   ## The config family is called `azure-openai` and that name is a trap
+   ## What the choice is, and where it lives
 
-   There is one family of settings — `services.azure-openai.*` — and it drives
-   BOTH providers. `services.azure-openai.use-azure-openai-api` is the switch:
+   The provider is `services.llm.provider` - `:azure` or `:openai-compatible` -
+   read by `digdir.llm.provider` (with the legacy
+   `services.azure-openai.use-azure-openai-api` boolean as its fallback, which
+   this wizard no longer writes):
 
-     true  → `digdir.llm.provider/resolve` builds an Azure call spec
-             (`:impl :azure`) and the call is delegated to wkok's Azure client,
-             reading `services.azure-openai.{api-key,api-endpoint,deployment-name}`.
-     false → the spec carries no credentials, and `digdir.llm.client` POSTs to a
-             plain OpenAI-compatible `/chat/completions`, taking the model from
-             `services.azure-openai.model-name` and the endpoint and key from
-             the `OPENAI_API_ENDPOINT` / `OPENAI_API_KEY` environment variables.
+     :azure             → an Azure call spec (`:impl :azure`), reading
+                          `services.azure-openai.{api-key,api-endpoint,deployment-name}`.
+     :openai-compatible → a plain OpenAI-compatible `/chat/completions`, with the
+                          model from `services.azure-openai.model-name` (a family
+                          named after Azure - the trap this section exists to
+                          defuse, until Phase 4 of the provider-resolver change moves it) and the endpoint
+                          and key from the tenant's own `services.llm.*`.
 
-   So with the switch off, a family named after Azure is what points the system
-   at LM Studio, Ollama, vLLM or llama.cpp. Nobody guesses that, which is the
-   reason this section exists rather than a line in a reference page.
+   ## The key is printed, not prompted
 
-   ## Two of the four settings are not ours to write
-
-   The endpoint and the key are read from the environment at call time
-   (`digdir.llm.client/openai-compat-completion`), not from the config DB, so
-   this wizard can only PRINT them. `OPENAI_API_KEY` must be non-empty even
-   when the local server ignores it: `digdir.secrets/get!` throws on an absent
-   secret rather than sending a keyless request (#22).
+   The wizard writes the endpoint it just probed. It does not prompt for the
+   key, like the Azure branch does not: it prints the `bb config-set` line. The
+   key must be non-empty even when the local server ignores it - the resolver
+   refuses a missing key rather than sending a keyless request, and no longer
+   borrows OPENAI_API_KEY from the environment.
 
    ## Why the write is per-tenant and not `set-global-config!`
 
@@ -63,8 +61,13 @@
    http://localhost:11434/v1; llama.cpp and vLLM vary by launch flag."
   "http://localhost:1234/v1")
 
-(def ^:private use-azure-path "services.azure-openai.use-azure-openai-api")
-(def ^:private model-name-path "services.azure-openai.model-name")
+(def ^:private provider-path "services.llm.provider")
+(def ^:private endpoint-path "services.llm.api-endpoint")
+(def ^:private model-path
+  ;; the wizard writes services.llm.model. The legacy
+  ;; services.azure-openai.model-name is still READ as the fallback, so an
+  ;; existing install keeps working until its value is migrated.
+  "services.llm.model")
 
 (defn embedding-model?
   "Whether a model id from `/v1/models` looks like an embedding model.
@@ -131,26 +134,26 @@
   [tenants]
   (vec (remove #{config-core/global-tenant setup-common/platform-defaults-tenant} tenants)))
 
-(defn- print-env-instructions
-  "The half of the configuration a config write cannot reach."
-  [endpoint]
+(defn wizard-values
+  "The config values a provider choice writes, per tenant. Pure, so the choice
+   is testable without the prompts. Writes the NEW key, never the
+   legacy boolean."
+  [choice {:keys [endpoint model]}]
+  (case choice
+    :openai-compatible (cond-> {provider-path :openai-compatible}
+                         (not (str/blank? endpoint)) (assoc endpoint-path endpoint)
+                         (not (str/blank? model)) (assoc model-path model))
+    :azure {provider-path :azure}))
+
+(defn- print-key-instructions
+  "The one openai-compatible setting the wizard does not write: the key."
+  []
   (println "")
-  (println "Two of the four settings live in the ENVIRONMENT, not in the config DB,")
-  (println "because digdir.llm.client reads them per call. Put them in")
-  (println "mise.local.toml (or your shell profile) and restart `bb dev`:")
-  (println "")
-  (println (str "  OPENAI_API_ENDPOINT=" endpoint))
-  (println "  OPENAI_API_KEY=local")
-  (println "")
-  (println "OPENAI_API_KEY must be NON-EMPTY even though a local server ignores it:")
-  (println "digdir.secrets/get! throws on an absent secret instead of sending a")
-  (println "keyless request. Any placeholder works.")
-  (if (str/blank? (System/getenv "OPENAI_API_ENDPOINT"))
-    (println "  OPENAI_API_ENDPOINT is currently MISSING in this shell.")
-    (println "  OPENAI_API_ENDPOINT is currently set in this shell."))
-  (if (str/blank? (System/getenv "OPENAI_API_KEY"))
-    (println "  OPENAI_API_KEY      is currently MISSING in this shell.")
-    (println "  OPENAI_API_KEY      is currently set in this shell.")))
+  (println "The key is set per tenant, not prompted for here:")
+  (println "  bb config-set services.llm.api-key '\"local\"' <tenant> platform default")
+  (println "It must be NON-EMPTY even though a local server ignores it - any placeholder")
+  (println "works. (OPENAI_API_KEY in the environment reaches config only by seeding - the")
+  (println "demo tenant's `bb demo-tenant`, an import, or the E2E boot seed; LLM calls no longer read the environment.)"))
 
 (defn- choose-tenants
   "Which tenants to write to. Defaults to all of them, because the snapshot
@@ -240,10 +243,11 @@
   (println "  2) Azure OpenAI — the cloud path; needs an Azure endpoint and key.")
   (println "  3) Leave unchanged.")
   (println "")
-  (println "Both run through the SAME `services.azure-openai.*` settings. That family")
-  (println "is named after Azure for historical reasons; with")
-  (println "`use-azure-openai-api` false it is the generic OpenAI-compatible path.")
+  (println "The choice is stored per tenant as services.llm.provider. The model name")
+  (println "still lives in `services.azure-openai.model-name` for both paths - a family")
+  (println "named after Azure for historical reasons.")
   (setup-config/ensure-azure-openai-config-definitions!)
+  (setup-config/ensure-llm-config-definitions!)
   (let [choice (setup-common/prompt-with-default "Choose" "3")
         conn (config-db/get-conn)
         tenants (when conn (real-tenants (config-db/list-tenants @conn)))]
@@ -255,18 +259,17 @@
       (println "  No tenants exist yet — import a config snapshot or create a tenant first.")
 
       (= "1" choice)
-      (let [{:keys [endpoint model]} (choose-local-model)
+      (let [local (choose-local-model)
             targets (choose-tenants tenants)
-            values (cond-> {use-azure-path false}
-                     (not (str/blank? model)) (assoc model-name-path model))]
+            values (wizard-values :openai-compatible local)]
         (println "")
         (apply-to-tenants! conn targets values)
         (seed-platform-defaults! conn values)
-        (print-env-instructions endpoint))
+        (print-key-instructions))
 
       (= "2" choice)
       (let [targets (choose-tenants tenants)
-            values {use-azure-path true}]
+            values (wizard-values :azure {})]
         (println "")
         (apply-to-tenants! conn targets values)
         (seed-platform-defaults! conn values)

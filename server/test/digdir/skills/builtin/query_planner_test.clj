@@ -25,7 +25,15 @@
             [digdir.skills.builtin.query-planner :as query-planner]
             [digdir.llm.client :as client]))
 
-(defn- stub-config [_ & _] nil)
+(defn- stub-config
+  "Every config read answers nil, EXCEPT the openai-compatible credentials:
+   since the provider-resolver change the resolver refuses a nil key or endpoint instead of
+   leaving it to the transport's env fallback."
+  [_ & ks]
+  (case (vec ks)
+    [:services :llm :api-key] "stub-key"
+    [:services :llm :api-endpoint] "http://planner-stub.invalid"
+    nil))
 
 (defn- mock-chat-completion
   "Build a stub `client/create-chat-completion` returning a single tool-call

@@ -18,6 +18,7 @@
             [duratom.core :refer [duratom]]
             [clojure.java.shell :refer [sh]]
             [digdir.llm.client :as openai]
+            [digdir.llm.provider :as provider]
             [taoensso.telemere :as t]
             [valuehash.api]
             [digdir.util.core :refer :all]
@@ -29,8 +30,8 @@
             [medley.core :as y]
             [clojure.set :as set]
             [lambdaisland.deep-diff2 :as ddiff]
-            [digdir.config.accessor :as cfg]
-            [digdir.docs.pipeline.core :as pcore]))
+            [digdir.docs.pipeline.core :as pcore]
+            [digdir.docs.pipeline.search-phrases :as sp]))
 
 (sh "mkdir" "-p" "state")
 
@@ -638,56 +639,74 @@
 ;; big processes, for small single-threaded side effects there's not
 ;; that much to gain, so don't put in energy and lines to using
 ;; Missionary in leafs where it doesn't actually matter.
-(defn openai-implementation
-  [tenant impl]
-  (case impl
-    :lm-studio {:api-endpoint "http://localhost:1234/v1"
-                :request {:timeout 300000}}
-    #_#_:runpod {:api-endpoint "https://fboqsdcxlh2yxt-8000.proxy.runpod.net/v1"
-                 :request {:timeout 30000}}
-    :azure-openai {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-                   :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-                   :impl :azure
-                   :request {:timeout 30000}
-                   ;;  :trace (fn [request response]
-                   ;;           #_(println "Request:" request)
-                   ;;           (println "Response:" response))
-                   }
-    ;; a nil key here is not a failure but a disclosure - the client
-    ;; fills a nil `:api-key` from the OPENAI_API_KEY secret, which sent the
-    ;; process-global OpenAI-compatible key to openrouter.ai whenever the
-    ;; `:search-phrases/fallback-model` arm ran with this path unset. Refuse,
-    ;; naming the path; never pass nil on.
-    :openrouter {:api-key (let [k (cfg/get {:tenant tenant} :services :openrouter :api-key)]
-                            (if (str/blank? (some-> k str))
-                              (throw (ex-info (str "services.openrouter.api-key is unset for tenant "
-                                                   (pr-str tenant) ", so the loader cannot call OpenRouter."
-                                                   " Set it with `bb config-set services.openrouter.api-key"
-                                                   " <value> " tenant " platform default`.")
-                                              {:path "services.openrouter.api-key" :tenant tenant}))
-                              k))
-                 :api-endpoint "https://openrouter.ai/api/v1"
-                 :request {:timeout 30000}}
-    (throw (ex-info "Unknown OpenAI implementation" {:impl impl}))))
-;; azure-openai
+(defn- call-spec
+  "`provider/resolve`'s call spec for `tenant`: the tenant's
+   provider decision - the loader used to send every call to Azure whatever it
+   said - and its own credentials. `opts` is `provider/resolve`'s: `{:model m}`
+   names the model, otherwise it is the provider's default. The Azure branch
+   keeps the 30s timeout the loader always gave it; the OpenAI-compatible
+   branch of `digdir.llm.client` does not read `:request`."
+  [tenant opts]
+  (let [spec (provider/resolve tenant opts)]
+    (cond-> spec
+      (= :azure (:provider spec)) (assoc :request {:timeout 30000}))))
 
-(defn create-chat-completion [tenant conversation]
-  ;; Idea is to dispatch to the right provider based on the model name
-  (if (#{:google/gemma-3-27b-it :google/gemma-3-12b-it :dphn/Dolphin-Mistral-24B-Venice-Edition} (:model conversation))
-    (openai/create-chat-completion conversation
-                                   (openai-implementation tenant :openrouter))
-    (openai/create-chat-completion
-     (assoc conversation
-            :model (cfg/get {:tenant tenant} :services :azure-openai :deployment-name))
-     (openai-implementation tenant :azure-openai))))
+(defn create-chat-completion
+  "One chat completion for search-phrase distillation, on `tenant`'s resolved
+   provider. The caller's `:model` is overwritten with the provider's default
+   model, as it always was - unless `opts` names one (`{:model m}`), which is
+   sent as it is, to the same provider.
+
+   The fallback model is named that way. It used to go to OpenRouter
+   whatever the provider decision said, for three model names; OpenRouter is
+   now reached by pointing `services.llm.*` at it. On Azure the name is taken
+   as the deployment, so a tenant with no deployment by that name fails there."
+  ([tenant conversation] (create-chat-completion tenant conversation {}))
+  ([tenant conversation opts]
+   (let [spec (call-spec tenant opts)]
+     (openai/create-chat-completion (assoc conversation :model (:model spec)) spec))))
+
+(defn- answered-in-full?
+  "Did `response` carry a whole answer: a first choice that ran to completion
+   (`finish_reason` \"stop\") with non-blank content? Only then can an empty
+   parse be a fact about the chunk. No content is what an output-side content
+   filter returns, or a reasoning model that spent its budget before the
+   visible answer; any other finish reason is a reply cut short."
+  [response]
+  (let [{:keys [finish_reason message]} (-> response :choices first)
+        content (:content message)]
+    (and (= "stop" finish_reason)
+         (string? content)
+         (not (str/blank? content)))))
 
 (defn mk-distill-search-phrases-t [{:search-phrases/keys [model fallback-model prompt] :as kview} chunk]
   (m/via m/blk
          ;; Keyed on content, not chunk_id: the phrases depend only on the
          ;; chunk text, and document-scoped ids (#72) would otherwise cost one
-         ;; LLM call per copy of every duplicated chunk. Mirrors
-         ;; digdir.docs.pipeline.search-phrases/cache-key.
-         (let [cache-key (str (sha256-short-hash (:content_markdown chunk)) "-" (sha256-short-hash model) "-" (sha256-short-hash prompt))
+         ;; LLM call per copy of every duplicated chunk.
+         ;;
+         ;; The key AND the parser are the canonical ones from
+         ;; digdir.docs.pipeline.search-phrases, and they travel together.
+         ;; The key ends in `parser-version`, which names the parser
+         ;; that produced an entry. This path used to key without it and to
+         ;; parse with the old last-line parser — the one `parse-phrases-
+         ;; response` replaced because it "captured LLM meta-commentary
+         ;; instead of phrases for 99.9% of cached responses". Adopting the
+         ;; key without the parser would have stamped v1 output as v2.
+         (let [;; The identity that answers the PRIMARY call: the provider
+               ;; decision and the model actually sent. `create-chat-completion`
+               ;; overwrites the caller's `:model` with the provider's own, so
+               ;; the configured `model` was never on the wire. Both
+               ;; reads are credential-free, so a cache HIT still works where a
+               ;; credential is missing.
+               ;;
+               ;; ⚠️ The FALLBACK names its own model, so a
+               ;; fallback-produced entry is stored under the primary's
+               ;; identity. That is the one claim this key cannot yet make
+               ;; honestly; it is a policy question, not an oversight.
+               call-identity {:provider (provider/selected-provider (:tenant kview))
+                              :model (provider/model-for (:tenant kview))}
+               cache-key (sp/cache-key chunk call-identity prompt)
                cache-dir "cache/search-phrases/"
                cache-path (str cache-dir cache-key ".edn")
                file (jio/file cache-path)]
@@ -706,33 +725,47 @@
               (t/event! :document-loading/search-phrases-distillation-cache-miss
                          #_{:data {:chunk chunk}})
                (let [tenant (:tenant kview)
-                     generate-with-model (fn [model]
-                                           (->
-                                            (let [convo {:model model
-                                                         :messages [{:role "user"
-                                                                     :content (str/replace prompt "REPLACE_ME" (:content_markdown chunk))}]}]
-                                              #_(t/log! ["Generating search phrases with model" model])
-                                              (create-chat-completion tenant convo))
-                                            :choices
-                                            first
-                                            :message
-                                            :content
-                                            str/split-lines
-                                            last
-                                            (str/split #",")
-                                            ((partial mapv str/trim))))
-                     search-phrases
-                     (try (generate-with-model model)
+                     ;; `parse-phrases-response` THROWS on a response with no
+                     ;; :choices (a provider rejecting the request), which the
+                     ;; catch below turns into a fallback-model call — as the
+                     ;; old parser did, by accident, through a
+                     ;; NullPointerException. A reply that has :choices but no
+                     ;; usable phrase list parses to [] instead: no fallback.
+                     generate-with-model (fn [model opts]
+                                           (let [convo {:model model
+                                                        :messages [{:role "user"
+                                                                    :content (str/replace prompt "REPLACE_ME" (:content_markdown chunk))}]}
+                                                 response (create-chat-completion tenant convo opts)]
+                                             #_(t/log! ["Generating search phrases with model" model])
+                                             {:phrases (sp/parse-phrases-response response)
+                                              :answered-in-full? (answered-in-full? response)}))
+                     {search-phrases :phrases, settled? :answered-in-full?}
+                     (try (generate-with-model model {})
                           (catch Exception e
                             (t/error! {:id :document-loading/search-phrases-distillation-error
                                        :msg ["Generating search phrases with :search-phrases/model" model "failed"]} e)
                             (t/log! {:id :document-loading/search-phrases-distillation-with-fallback-model}
                                     ["Generating search phrases with :search-phrases/fallback-model" fallback-model])
-                            (generate-with-model fallback-model)))
+                            ;; Whatever the fallback answers, it is asked only
+                            ;; because the primary failed at this moment. It
+                            ;; names its model to the same provider.
+                            (assoc (generate-with-model fallback-model {:model fallback-model})
+                                   :answered-in-full? false)))
                      result-chunk (assoc chunk :search-phrases search-phrases)]
 
-           ;; Cache the result
-                 (spit file (pr-str search-phrases))
+                 ;; Cache a result that is a fact about the CHUNK: its
+                 ;; phrases, or — when the primary answered in full and the
+                 ;; parser found no phrase list — a negative entry, `[]`. That
+                 ;; entry sits under the same key as any other, so it names the
+                 ;; parser that judged it and a new `parser-version` asks
+                 ;; again; and the read above already takes `[]` as no phrases.
+                 ;; An empty result that a FAILURE produced (the primary threw
+                 ;; or returned no :choices, returned no content, or was cut
+                 ;; short) is a fact about the moment — a rate limit, a network
+                 ;; blip, a content filter that may be reconfigured — so it is
+                 ;; never cached, and the next run asks again.
+                 (when (or (seq search-phrases) settled?)
+                   (spit file (pr-str search-phrases)))
 
                  (t/event! :document-loading/distill-chunk-search-phrases #_{:data result-chunk})
                  result-chunk))))))

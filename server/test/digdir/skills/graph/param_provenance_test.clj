@@ -234,12 +234,16 @@
 
 (defn- without-timings
   "A run result with its wall-clock numbers removed, so two runs compare equal
-   exactly when they did the same thing."
+   exactly when they did the same thing. That includes each step result's
+   `:metadata :duration-ms`: leaving it in made the pin below fail whenever
+   its cold first run crossed a millisecond (it could only ever fail, never
+   pass wrongly - see `without-timings-erases-every-wall-clock-number-…`)."
   [result]
   (-> result
       (update :execution-metadata dissoc :total-duration-ms)
       (update-in [:execution-metadata :step-timings] update-vals #(dissoc % :duration-ms))
-      (update-in [:execution-metadata :stage-timings] #(mapv (fn [t] (dissoc t :duration-ms)) %))))
+      (update-in [:execution-metadata :stage-timings] #(mapv (fn [t] (dissoc t :duration-ms)) %))
+      (update :step-results update-vals #(update % :metadata dissoc :duration-ms))))
 
 (deftest a-bound-sink-changes-nothing-about-the-run
   ;; The pin: production output is identical whether or not anyone is
@@ -252,6 +256,38 @@
         captured (:result (provenance/capture #(runner/run-graph graph {} opts)))]
     (is (seq (get-in bare [:execution-metadata :step-timings])) "absolute: there is something to compare")
     (is (= (without-timings bare) (without-timings captured)))))
+
+(deftest without-timings-erases-every-wall-clock-number-and-nothing-else
+  ;; The instrument the pin above stands on, on results whose answer is known.
+  ;; The pin compares a COLD run with a warm one, so a wall-clock number left in
+  ;; is a coin toss that can only land red, and a real field stripped is a
+  ;; difference the pin can no longer see.
+  (let [r (runner/run-graph {:inputs [] :outputs [:out]
+                             :steps [{:id :a :skill :test/llm :inputs {} :parameters {:model "m"}}
+                                     {:id :b :skill :test/quiet :inputs {}}]}
+                            {} (merge no-trace {:tenant "t"}))
+        later (fnil + 0)
+        retimed (-> r
+                    (update-in [:execution-metadata :total-duration-ms] later 7)
+                    (update-in [:execution-metadata :step-timings] update-vals #(update % :duration-ms later 7))
+                    (update-in [:execution-metadata :stage-timings] #(mapv (fn [t] (update t :duration-ms later 7)) %))
+                    (update :step-results update-vals #(update-in % [:metadata :duration-ms] later 7)))]
+    (testing "every wall-clock number differs between the two, and none survives the normaliser"
+      (is (seq (:step-results r)) "precondition: there are step results to retime")
+      (is (= (without-timings r) (without-timings retimed))))
+    (testing "and a real difference still shows - including a non-timing field
+              in EACH container the normaliser reaches into. Every place
+              that drops only :duration-ms today has a tidier-looking whole-
+              container form (each step's :metadata holds nothing else
+              today); that form would blind the pin to the container, and
+              only a probe there sees it."
+      (doseq [[label change] [["the output" #(assoc-in % [:outputs :out] "changed")]
+                              ["a step's output" #(assoc-in % [:step-results :b :outputs :out] "changed")]
+                              ["the step count" #(update-in % [:execution-metadata :steps-executed] inc)]
+                              ["a step's metadata" #(assoc-in % [:step-results :b :metadata :sink-seen] true)]
+                              ["a step timing's status" #(assoc-in % [:execution-metadata :step-timings :b :status] :error)]
+                              ["a stage timing's status" #(assoc-in % [:execution-metadata :stage-timings 0 :status] :error)]]]
+        (is (not= (without-timings r) (without-timings (change retimed))) label)))))
 
 (deftest a-step-with-no-llm-call-still-records-its-parameters
   (let [run (run-captured {:inputs [] :outputs [:out]

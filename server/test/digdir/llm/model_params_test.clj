@@ -124,7 +124,11 @@
   {"services.azure-openai.api-key" "az-key"
    "services.azure-openai.api-endpoint" "https://azure.model-params.invalid"
    "services.azure-openai.deployment-name" "gpt-5.5"
-   "services.azure-openai.model-name" "gpt-5.5"})
+   "services.azure-openai.model-name" "gpt-5.5"
+   ;; the openai-compatible branch reads its own credentials now;
+   ;; without them `resolve` refuses instead of leaving them to the env.
+   "services.llm.api-key" "llm-key"
+   "services.llm.api-endpoint" "https://llm.model-params.invalid"})
 
 (defn- spec-for
   "`provider/resolve`'s spec for a tenant whose switch is `switch`."

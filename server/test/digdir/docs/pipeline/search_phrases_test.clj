@@ -18,7 +18,8 @@
             ;; intercepting anything and the tests made REAL HTTP calls —
             ;; failing at `Net.java:-2`, a connection error three layers from
             ;; the cause. Stub the seam the code under test actually calls.
-            [digdir.llm.client]))
+            [digdir.llm.client]
+            [missionary.core :as m]))
 
 ;; ============================================================================
 ;; Test Fixtures
@@ -26,20 +27,24 @@
 
 (def test-cache-dir "cache/test-search-phrases/")
 
-(defn cleanup-test-cache [f]
-  ;; Clean up before
-  (let [dir (io/file test-cache-dir)]
-    (when (.exists dir)
-      (doseq [file (.listFiles dir)]
-        (.delete file))
-      (.delete dir)))
-  (f)
-  ;; Clean up after
-  (let [dir (io/file test-cache-dir)]
+;; DERIVED, not a literal: the provider-aware phrase-cache key guard below asserts this directory stays
+;; empty, and a literal would keep that green if tier 2 moved back into the
+;; local directory - it would be watching a directory nothing uses.
+(def test-declared-dir (sp/declared-cache-dir "test"))
+
+(defn- clear-dir! [path]
+  (let [dir (io/file path)]
     (when (.exists dir)
       (doseq [file (.listFiles dir)]
         (.delete file))
       (.delete dir))))
+
+(defn cleanup-test-cache [f]
+  (clear-dir! test-cache-dir)
+  (clear-dir! test-declared-dir)
+  (f)
+  (clear-dir! test-cache-dir)
+  (clear-dir! test-declared-dir))
 
 (use-fixtures :each cleanup-test-cache)
 
@@ -198,13 +203,14 @@
 ;; cache-key Tests
 ;; ============================================================================
 
+(def ^:private azure-identity {:provider :azure :model "dep-1"})
+
 (deftest cache-key-deterministic
   (testing "Same inputs produce same key"
     (let [chunk {:chunk_id "test-chunk" :content_markdown "text"}
-          model "gpt-4"
           prompt "test prompt"
-          key1 (sp/cache-key chunk model prompt)
-          key2 (sp/cache-key chunk model prompt)]
+          key1 (sp/cache-key chunk azure-identity prompt)
+          key2 (sp/cache-key chunk azure-identity prompt)]
       (is (= key1 key2)))))
 
 (deftest cache-key-is-derived-from-content-not-chunk-id
@@ -213,42 +219,86 @@
     ;; Document-scoped ids (#72) would have made every copy of a duplicated
     ;; chunk miss the cache and pay its own LLM call.
     (let [chunk {:chunk_id "my-chunk-123" :content_markdown "some text"}
-          key (sp/cache-key chunk "model" "prompt")]
+          key (sp/cache-key chunk azure-identity "prompt")]
       (is (str/starts-with? key (str (core/sha256-short-hash "some text") "-")))
       (is (not (str/includes? key "my-chunk-123")))))
 
   (testing "Same text under different ids shares one entry"
     (let [a {:chunk_id "id-a" :content_markdown "identical text"}
           b {:chunk_id "id-b" :content_markdown "identical text"}]
-      (is (= (sp/cache-key a "model" "prompt")
-             (sp/cache-key b "model" "prompt")))))
+      (is (= (sp/cache-key a azure-identity "prompt")
+             (sp/cache-key b azure-identity "prompt")))))
 
   (testing "Different text under the same id does not"
     (let [a {:chunk_id "same-id" :content_markdown "text one"}
           b {:chunk_id "same-id" :content_markdown "text two"}]
-      (is (not= (sp/cache-key a "model" "prompt")
-                (sp/cache-key b "model" "prompt"))))))
-
-(deftest cache-key-different-models
-  (testing "Different models produce different keys"
-    (let [chunk {:chunk_id "test" :content_markdown "text"}
-          key1 (sp/cache-key chunk "gpt-4" "prompt")
-          key2 (sp/cache-key chunk "gpt-3.5" "prompt")]
-      (is (not= key1 key2)))))
+      (is (not= (sp/cache-key a azure-identity "prompt")
+                (sp/cache-key b azure-identity "prompt"))))))
 
 (deftest cache-key-different-prompts
   (testing "Different prompts produce different keys"
     (let [chunk {:chunk_id "test" :content_markdown "text"}
-          key1 (sp/cache-key chunk "model" "prompt 1")
-          key2 (sp/cache-key chunk "model" "prompt 2")]
+          key1 (sp/cache-key chunk azure-identity "prompt 1")
+          key2 (sp/cache-key chunk azure-identity "prompt 2")]
       (is (not= key1 key2)))))
 
 (deftest cache-key-includes-parser-version-suffix
   (testing "cache-key includes the parser-version so old cache entries are invalidated"
     (let [chunk {:chunk_id "test-chunk" :content_markdown "text"}
-          key (sp/cache-key chunk "model" "prompt")]
+          key (sp/cache-key chunk azure-identity "prompt")]
       (is (str/ends-with? key (str "-" sp/parser-version))
           "cache-key must end with the parser-version suffix"))))
+
+;; ---------------------------------------------------------------------------
+;; the key names WHAT PRODUCED THE ENTRY
+;; ---------------------------------------------------------------------------
+
+(deftest cache-key-names-the-model-that-is-actually-sent
+  ;; the key used to hash the pipeline's CONFIGURED `:search-phrases/model`,
+  ;; which `complete` overwrites before the call — a model that was never sent.
+  ;; Two different models must not share an entry, whatever the config called them.
+  (let [chunk {:chunk_id "c" :content_markdown "text"}]
+    (is (= (sp/cache-key chunk azure-identity "prompt")
+           (sp/cache-key chunk azure-identity "prompt"))
+        "POSITIVE CONTROL: one identity, one key")
+    (is (not= (sp/cache-key chunk azure-identity "prompt")
+              (sp/cache-key chunk (assoc azure-identity :model "dep-2") "prompt"))
+        "a different model sent is a different entry")))
+
+(deftest cache-key-names-the-provider-that-answers
+  ;; The provider was absent from the key, so the same model
+  ;; name on two providers shared one entry - and the provider changes the
+  ;; prompt bytes (response_format, and the JSON mention Azure requires).
+  (let [chunk {:chunk_id "c" :content_markdown "text"}]
+    (is (not= (sp/cache-key chunk {:provider :azure :model "m"} "prompt")
+              (sp/cache-key chunk {:provider :openai-compatible :model "m"} "prompt"))
+        "same model name, different provider, different entry")))
+
+(deftest cache-key-refuses-an-identity-that-is-not-one
+  ;; The arity did not change when the second argument became a map, so a
+  ;; caller left on the old `model` string would destructure to nils and key
+  ;; every chunk under ONE degenerate identity - silently. It must refuse.
+  (let [chunk {:chunk_id "c" :content_markdown "text"}]
+    (is (thrown? clojure.lang.ExceptionInfo (sp/cache-key chunk "gpt-4o" "prompt"))
+        "a bare model string is refused")
+    (is (thrown? clojure.lang.ExceptionInfo (sp/cache-key chunk {:model "m"} "prompt"))
+        "an identity with no provider is refused")
+    (is (thrown? clojure.lang.ExceptionInfo (sp/cache-key chunk {:provider :azure} "prompt"))
+        "an identity with no model is refused")
+    (is (string? (sp/cache-key chunk azure-identity "prompt"))
+        "POSITIVE CONTROL: a whole identity is accepted")))
+
+(deftest cache-key-grammar-is-content-provider-model-prompt-version
+  ;; Pinned because a later tier (the phrase negative-cache issue option e) builds a key under a DECLARED
+  ;; identity with the LOCAL prompt: that is only sound while the grammar holds.
+  (let [chunk {:chunk_id "c" :content_markdown "text"}
+        segments (str/split (sp/cache-key chunk azure-identity "prompt") #"-")]
+    (is (= 5 (count segments)) (str "five segments, got " (pr-str segments)))
+    (is (= (core/sha256-short-hash "text") (nth segments 0)))
+    (is (= (core/sha256-short-hash "azure") (nth segments 1)))
+    (is (= (core/sha256-short-hash "dep-1") (nth segments 2)))
+    (is (= (core/sha256-short-hash "prompt") (nth segments 3)))
+    (is (= sp/parser-version (nth segments 4)))))
 
 ;; ============================================================================
 ;; ensure-cache-dir! Tests
@@ -302,77 +352,56 @@
     (is (str/includes? sp/default-search-phrases-prompt "REPLACE_ME"))))
 
 ;; ============================================================================
-;; openai-implementation Tests
+;; The call spec - `provider/resolve`'s, since Phase 3 of the provider-resolver change
 ;; ============================================================================
 
-(deftest azure-openai-config
-  (testing "Azure OpenAI has required config"
-    (with-redefs [digdir.config.accessor/get (fn [_opts & ks]
-                                               (cond
-                                                 (= ks '(:services :azure-openai :api-key)) "key-1"
-                                                 (= ks '(:services :azure-openai :api-endpoint)) "https://example.azure.com"
-                                                 :else nil))]
-      (let [azure (sp/openai-implementation "ka" :azure-openai)]
-        (is (contains? azure :api-key))
-        (is (contains? azure :api-endpoint))
-        (is (= :azure (:impl azure)))))))
+(defn- stub-install
+  "An accessor stub for one tenant: `provider` as `services.llm.provider`, and
+   both branches fully credentialed, so the decision is the only variable."
+  [provider & {:keys [llm-endpoint] :or {llm-endpoint "http://localhost:1234"}}]
+  (fn [_opts & ks]
+    (case (vec ks)
+      [:services :llm :provider] provider
+      [:services :azure-openai :api-key] "key-1"
+      [:services :azure-openai :api-endpoint] "https://example.azure.com"
+      [:services :azure-openai :deployment-name] "dep-1"
+      [:services :azure-openai :model-name] "local-model"
+      [:services :llm :api-key] "llm-key"
+      [:services :llm :api-endpoint] llm-endpoint
+      nil)))
 
-(deftest openrouter-config
-  (testing "OpenRouter has required config"
-    (with-redefs [digdir.config.accessor/get (fn [_opts & ks]
-                                               (when (= ks '(:services :openrouter :api-key))
-                                                 "or-key"))]
-      (let [or (sp/openai-implementation "ka" :openrouter)]
-        (is (contains? or :api-key))
-        (is (= "https://openrouter.ai/api/v1" (:api-endpoint or)))))))
+(defn- seen-by-client
+  "Run `f` with `digdir.llm.client/create-chat-completion` stubbed; answers the
+   {:conversation :opts} it was called with."
+  [accessor f]
+  (let [seen (atom nil)]
+    (with-redefs [digdir.config.accessor/get accessor
+                  digdir.llm.client/create-chat-completion (fn [conversation opts]
+                                                             (reset! seen {:conversation conversation :opts opts})
+                                                             {:choices [{:message {:content "{\"phrases\": []}"}}]})]
+      (f))
+    @seen))
 
-(deftest create-chat-completion-resolves-config-on-demand
-  (testing "Reads Azure endpoint and deployment from config at call time (default provider)"
-    (let [calls (atom [])
-          opts-seen (atom nil)
-          convo {:model "ignored" :messages [{:role "user" :content "hi"}]}]
-      (with-redefs [digdir.config.accessor/get (fn [_opts & ks]
-                                                 (swap! calls conj ks)
-                                                 (cond
-                                                   ;; No :provider set → defaults to :azure-openai
-                                                   (= ks '(:services :search-phrases :provider)) nil
-                                                   (= ks '(:services :azure-openai :api-key)) "key-1"
-                                                   (= ks '(:services :azure-openai :api-endpoint)) "https://example.azure.com"
-                                                   (= ks '(:services :azure-openai :deployment-name)) "dep-1"
-                                                   (= ks '(:services :openrouter :api-key)) "or-key"
-                                                   :else nil))
-                    digdir.llm.client/create-chat-completion (fn [conversation opts]
-                                                                     (reset! opts-seen {:conversation conversation
-                                                                                        :opts opts})
-                                                                     {:choices [{:message {:content "x"}}]})]
-        (sp/create-chat-completion "ka" convo)
-        (is (= "dep-1" (get-in @opts-seen [:conversation :model]))
-            "model is the Azure deployment name when provider defaults to :azure-openai")
-        (is (= "https://example.azure.com" (get-in @opts-seen [:opts :api-endpoint])))
-        (is (= :azure (get-in @opts-seen [:opts :impl]))
-            ":impl :azure makes wkok use Azure URL shape")))))
+(deftest create-chat-completion-on-azure
+  (testing "Azure: the deployment name overwrites the caller's model, and the spec keeps the
+            30s timeout search-phrases always gave Azure"
+    (let [{:keys [conversation opts]} (seen-by-client (stub-install :azure)
+                                                      #(sp/create-chat-completion "ka" {:model "ignored" :messages [{:role "user" :content "hi"}]}))]
+      (is (= "dep-1" (:model conversation)))
+      (is (= "https://example.azure.com" (:api-endpoint opts)))
+      (is (= :azure (:impl opts)) ":impl :azure makes wkok use the Azure URL shape")
+      (is (= {:timeout 30000} (:request opts))))))
 
-(deftest create-chat-completion-routes-to-lmstudio-when-configured
-  (testing "When :services.search-phrases.provider is :lmstudio, uses LM Studio endpoint with OpenAI URL shape"
-    (let [opts-seen (atom nil)
-          convo {:messages [{:role "user" :content "hi"}]}]
-      (with-redefs [digdir.config.accessor/get (fn [_opts & ks]
-                                                 (case (vec ks)
-                                                   [:services :search-phrases :provider] :lmstudio
-                                                   [:services :lmstudio :api-key] "lmstudio"
-                                                   [:services :lmstudio :api-endpoint] "http://localhost:1234"
-                                                   [:services :lmstudio :model] "local-model"
-                                                   nil))
-                    digdir.llm.client/create-chat-completion (fn [conversation opts]
-                                                                     (reset! opts-seen {:conversation conversation
-                                                                                        :opts opts})
-                                                                     {:choices [{:message {:content "{}"}}]})]
-        (sp/create-chat-completion "ka" convo)
-        (is (= "local-model" (get-in @opts-seen [:conversation :model])))
-        (is (= "http://localhost:1234" (get-in @opts-seen [:opts :api-endpoint])))
-        (is (= "lmstudio" (get-in @opts-seen [:opts :api-key])))
-        (is (nil? (get-in @opts-seen [:opts :impl]))
-            ":impl must NOT be :azure for the LM Studio path — uses default OpenAI URL shape")))))
+(deftest create-chat-completion-on-the-openai-compatible-branch
+  (testing "OpenAI-compatible: model-name overwrites the caller's model, and the endpoint and key
+            are the tenant's own services.llm.* (Phase 3 of the provider-resolver change folded the :lmstudio and
+            :openrouter arms, and services.lmstudio.*, into this)"
+    (let [{:keys [conversation opts]} (seen-by-client (stub-install :openai-compatible)
+                                                      #(sp/create-chat-completion "ka" {:model "ignored" :messages [{:role "user" :content "hi"}]}))]
+      (is (= "local-model" (:model conversation)))
+      (is (= "http://localhost:1234" (:api-endpoint opts)))
+      (is (= "llm-key" (:api-key opts)))
+      (is (= :openai (:impl opts)) "not :azure - the client's direct OpenAI-compatible POST"))))
 
 ;; ============================================================================
 ;; response_format dispatch tests — different providers accept different
@@ -382,33 +411,17 @@
 ;; ============================================================================
 
 (defn- captured-convo
-  "Run generate-phrases-with-model under a redef that captures the
-   conversation passed to wkok. Returns the conversation map."
-  [provider]
-  (let [seen (atom nil)]
-    (with-redefs [digdir.config.accessor/get
-                  (fn [_opts & ks]
-                    (case (vec ks)
-                      [:services :search-phrases :provider] provider
-                      [:services :azure-openai :api-key] "k"
-                      [:services :azure-openai :api-endpoint] "https://az"
-                      [:services :azure-openai :deployment-name] "m"
-                      [:services :openrouter :api-key] "k"
-                      [:services :openrouter :model] "m"
-                      [:services :lmstudio :api-key] "k"
-                      [:services :lmstudio :api-endpoint] "http://localhost:1234"
-                      [:services :lmstudio :model] "m"
-                      nil))
-                  digdir.llm.client/create-chat-completion
-                  (fn [conversation _opts]
-                    (reset! seen conversation)
-                    {:choices [{:message {:content "{\"phrases\": []}"}}]})]
-      (sp/generate-phrases-with-model "ka" "m" "prompt: REPLACE_ME" "chunk text"))
-    @seen))
+  "Run generate-phrases-with-model with the client stubbed, and return the
+   conversation it sent."
+  ([provider] (captured-convo provider {}))
+  ([provider install-opts]
+   (:conversation (seen-by-client (apply stub-install provider (mapcat identity install-opts))
+                                  #(sp/generate-phrases-with-model "ka" "m" "prompt: REPLACE_ME" "chunk text")))))
 
-(deftest response-format-lmstudio-is-json-schema
-  (testing ":lmstudio gets response_format json_schema (the only structured mode LM Studio accepts)"
-    (let [c (captured-convo :lmstudio)]
+(deftest response-format-openai-compatible-is-json-schema
+  (testing ":openai-compatible gets response_format json_schema (the only structured mode LM
+            Studio accepts, and LM Studio is the only OpenAI-compatible server tested)"
+    (let [c (captured-convo :openai-compatible)]
       (is (= "json_schema" (get-in c [:response_format :type])))
       (is (= "search_phrases" (get-in c [:response_format :json_schema :name])))
       (is (true? (get-in c [:response_format :json_schema :strict])))
@@ -419,15 +432,19 @@
         (is (= "string" (get-in schema [:properties :phrases :items :type])))))))
 
 (deftest response-format-azure-is-json-object
-  (testing ":azure-openai gets response_format json_object (widely supported on Azure gpt-4o)"
-    (let [c (captured-convo :azure-openai)]
+  (testing ":azure gets response_format json_object (widely supported on Azure gpt-4o)"
+    (let [c (captured-convo :azure)]
       (is (= {:type "json_object"} (:response_format c))))))
 
-(deftest response-format-openrouter-is-omitted
-  (testing ":openrouter gets NO response_format (most compatible across routed models)"
-    (let [c (captured-convo :openrouter)]
-      (is (not (contains? c :response_format))
-          "openrouter omits response_format entirely; prompt + heuristic parser do the work"))))
+(deftest response-format-is-chosen-by-provider-not-by-endpoint
+  ;; REPLACES response-format-openrouter-is-omitted. The old :openrouter arm sent no
+  ;; response_format; Phase 3 of the provider-resolver change made OpenRouter a services.llm value, and the
+  ;; format follows the provider, so an OpenRouter endpoint now gets json_schema.
+  ;; That is a KNOWN, UNTESTED LIMITATION, pinned so it cannot change unnoticed: an
+  ;; OpenRouter-routed model that rejects structured output would fail here.
+  (testing "an OpenRouter endpoint is :openai-compatible like any other"
+    (let [c (captured-convo :openai-compatible {:llm-endpoint "https://openrouter.ai/api/v1"})]
+      (is (= "json_schema" (get-in c [:response_format :type]))))))
 
 ;; ============================================================================
 ;; Integration Tests
@@ -442,7 +459,7 @@
           cache-dir test-cache-dir
           cache-path (str cache-dir
                           (sp/cache-key chunk
-                                        (:search-phrases/model config)
+                                        {:provider :azure :model "dep-1"}
                                         (:search-phrases/prompt config))
                           ".edn")
           phrases ["authentication setup" "config auth"]]
@@ -452,3 +469,270 @@
       ;; Read should work
       (let [cached (sp/read-cached-phrases cache-path)]
         (is (= phrases cached))))))
+
+;; ============================================================================
+;; The entry a RUN writes is keyed by what that run actually sent
+;; ============================================================================
+
+(defn- accessor-for
+  "One tenant, fully credentialed on both branches, with the provider decision
+   and the model it will send as the only variables."
+  [provider model]
+  (fn [_opts & ks]
+    (case (vec ks)
+      [:services :llm :provider] provider
+      [:services :llm :model] model
+      [:services :llm :api-key] "llm-key"
+      [:services :llm :api-endpoint] "http://localhost:1234"
+      [:services :azure-openai :api-key] "key-1"
+      [:services :azure-openai :api-endpoint] "https://example.azure.com"
+      [:services :azure-openai :deployment-name] model
+      [:services :azure-openai :model-name] model
+      nil)))
+
+(defn- file-names [dir]
+  (set (map #(.getName %) (.listFiles (io/file dir)))))
+
+(defn- distil-once!
+  "Run the real distill task for `chunk` as `provider`/`model`, with the client
+   stubbed. Answers the cache files present afterwards - in the local directory
+   and in the declared one - and whether the client was called."
+  [provider model chunk]
+  (let [called (atom 0)
+        result (atom nil)]
+    (reset! result
+     (with-redefs [digdir.config.accessor/get (accessor-for provider model)
+                  digdir.llm.client/create-chat-completion
+                  (fn [_conversation _opts]
+                    (swap! called inc)
+                    {:choices [{:message {:content "{\"phrases\": [\"alpha\", \"beta\"]}"}}]})]
+      (:search-phrases
+       (m/? (sp/mk-distill-search-phrases-t {:tenant "ka"
+                                            :search-phrases/model "configured-and-never-sent"
+                                            :search-phrases/fallback-model "fb"
+                                            :search-phrases/prompt "Generate phrases: REPLACE_ME"}
+                                            chunk
+                                            "test")))))
+    {:called @called
+     :result @result
+     :files (file-names test-cache-dir)
+     :declared-files (file-names test-declared-dir)}))
+
+(deftest two-different-effective-models-do-not-share-a-cache-entry
+  ;; THE case the phrase negative-cache issue turns on. The configured model is identical in both runs and
+  ;; is never sent; what differs is the model the provider actually serves.
+  (let [chunk {:chunk_id "x" :content_markdown (str "shared text " (random-uuid))}
+        a (distil-once! :azure "dep-A" chunk)
+        b (distil-once! :azure "dep-B" chunk)]
+    (is (= 1 (:called a)) "POSITIVE CONTROL: run A called the model")
+    (is (= 1 (:called b)) "run B called the model too, so it did not read A's entry")
+    (is (= 2 (count (:files b))) "two entries for one chunk: one per model actually sent")))
+
+(deftest the-same-effective-model-shares-one-cache-entry
+  ;; POSITIVE CONTROL for the test above: identical identity, one entry, and the
+  ;; second run is a cache hit - so "not shared" above is not vacuously true
+  ;; because nothing was ever written or read.
+  (let [chunk {:chunk_id "y" :content_markdown (str "shared text " (random-uuid))}
+        a (distil-once! :azure "dep-SAME" chunk)
+        b (distil-once! :azure "dep-SAME" chunk)]
+    (is (= 1 (:called a)) "run 1 called the model")
+    (is (= 0 (:called b)) "run 2 is a cache HIT: the entry was written AND read")
+    (is (= 1 (count (:files b))) "one entry")))
+
+(deftest the-provider-that-answers-is-part-of-the-entry-identity
+  ;; end to end: same model name, different provider.
+  (let [chunk {:chunk_id "z" :content_markdown (str "shared text " (random-uuid))}
+        a (distil-once! :azure "same-name" chunk)
+        b (distil-once! :openai-compatible "same-name" chunk)]
+    (is (= 1 (:called a)))
+    (is (= 1 (:called b)) "the openai-compatible run did not read the azure entry")
+    (is (= 2 (count (:files b))))))
+
+;; ============================================================================
+;; TIER 2: a DECLARED generator, looked up under its own name
+;; ============================================================================
+;;
+;; The archive ships phrases somebody else's model produced. Serving them as if
+;; this install had produced them is the laundering the KUDOS phrase-parser unification refused; refusing them
+;; costs every newcomer the whole demo bill. Tier 2 is the third option: look
+;; them up under the identity that DID produce them, declared as data.
+
+;; Must equal the shipped `phrase-cache-folder-v2.identity.edn`: these tests
+;; stub nothing about the declaration, so they read the real one.
+(def ^:private declared {:provider :azure :model "gpt-4o"})
+
+(defn- write-local!
+  "Put an entry in the LOCAL directory directly, under `identity`, so a test can
+   set up tier 1 without going through a run."
+  [identity chunk prompt phrases]
+  (sp/ensure-cache-dir! test-cache-dir)
+  (sp/write-cached-phrases! (str test-cache-dir (sp/cache-key chunk identity prompt) ".edn") phrases))
+
+(defn- write-declared!
+  "Put an entry where the boot unpack puts one - the DECLARED directory, under
+   the declared identity - so a test can set up tier 2."
+  [chunk prompt phrases]
+  (sp/ensure-cache-dir! test-declared-dir)
+  (sp/write-cached-phrases! (str test-declared-dir (sp/cache-key chunk declared prompt) ".edn") phrases))
+
+(defn- write-declared-as-shipped!
+  "Put an entry where the unpack puts the COMMITTED archive's: the declared
+   directory, under `main`'s four-segment key, which the unpack now keeps
+   rather than re-keying. Hashed HERE, not by `sp/legacy-cache-key`,
+   so a mistake there is not copied into the check."
+  [chunk prompt phrases]
+  (sp/ensure-cache-dir! test-declared-dir)
+  (sp/write-cached-phrases!
+   (str test-declared-dir
+        (str/join "-" [(core/sha256-short-hash (:content_markdown chunk))
+                       (core/sha256-short-hash (:model declared))
+                       (core/sha256-short-hash prompt)
+                       sp/parser-version])
+        ".edn")
+   phrases))
+
+(def ^:private the-prompt "Generate phrases: REPLACE_ME")
+
+(defn- entries-for
+  "The file names in `files` that belong to `chunk`, under ANY identity, prompt
+   or version: the content hash is the key's first segment."
+  [chunk files]
+  (let [prefix (str (core/sha256-short-hash (:content_markdown chunk)) "-")]
+    (set (filter #(str/starts-with? % prefix) files))))
+
+(deftest the-tests-declared-identity-is-the-shipped-one
+  ;; Every tier-2 test reads the REAL declaration. If the resource changed and
+  ;; `declared` did not, most of them would go red - but the collision test
+  ;; would stay green while no longer colliding, and the newcomer test's
+  ;; non-vacuity check would be checking a constant nothing reads.
+  (is (= declared (sp/declared-identity))))
+
+(deftest tier-2-precedence-local-positive-then-declared-positive-then-local-negative
+  ;; THE ORDER IS THE POINT. A mis-loaded local model is exactly what writes
+  ;; negatives, so "local first" unconditionally would make the archive stop
+  ;; helping precisely when the local model is broken.
+  (testing "a local positive wins over the declared one"
+    (let [chunk {:chunk_id "p1" :content_markdown (str "text " (random-uuid))}]
+      (write-local! {:provider :azure :model "dep-local"} chunk the-prompt ["local"])
+      (write-declared! chunk the-prompt ["declared"])
+      (let [r (distil-once! :azure "dep-local" chunk)]
+        (is (= 0 (:called r)) "no call: it was served from the cache")
+        (is (= ["local"] (:result r)) "the LOCAL phrases came back, not the declared ones"))))
+
+  (testing "the declared positive is used when there is no local entry"
+    (let [chunk {:chunk_id "p2" :content_markdown (str "text " (random-uuid))}]
+      (write-declared! chunk the-prompt ["declared"])
+      (let [r (distil-once! :azure "dep-local" chunk)]
+        (is (= 0 (:called r)) "no call: the declared entry answered")
+        (is (= ["declared"] (:result r)) "and its phrases are what came back")
+        ;; Copying a declared hit to the local key is the MIRROR of
+        ;; the laundering: the declared generator's phrases, stamped with this
+        ;; install's name. Nothing else here has a declared hit to promote.
+        ;; Per CHUNK, under any identity: the arms above share this directory.
+        (is (= #{} (entries-for chunk (:files r)))
+            "and NOTHING was written locally for this chunk: a declared hit is served, never promoted"))))
+
+  (testing "the declared positive BEATS a local negative"
+    (let [chunk {:chunk_id "p3" :content_markdown (str "text " (random-uuid))}]
+      (write-local! {:provider :azure :model "dep-local"} chunk the-prompt [])
+      (write-declared! chunk the-prompt ["declared"])
+      (let [r (distil-once! :azure "dep-local" chunk)]
+        (is (= 0 (:called r)))
+        (is (= ["declared"] (:result r))
+            "a local [] must not mask a declared generator's phrases"))))
+
+  ;; ⚠️ This arm guards a state the pipeline's own writer cannot create today:
+  ;; it caches only non-empty results, and the loader's negatives live in
+  ;; `cache/search-phrases/`, which has no tier 2. It is pinned for the port of
+  ;; the single-phrase reply issue's negative cache to this path, not because it fires now.
+  (testing "a local negative is used when the declared tier has nothing"
+    (let [chunk {:chunk_id "p4" :content_markdown (str "text " (random-uuid))}]
+      (write-local! {:provider :azure :model "dep-local"} chunk the-prompt [])
+      (let [r (distil-once! :azure "dep-local" chunk)]
+        (is (= 0 (:called r)) "the local negative answered; no call")
+        (is (= [] (:result r)))))))
+
+(deftest tier-2-is-read-only-a-write-always-uses-the-local-identity
+  ;; A write under the declared identity IS the laundering: it would stamp this
+  ;; install's output with somebody else's name.
+  (let [chunk {:chunk_id "w" :content_markdown (str "text " (random-uuid))}
+        r (distil-once! :azure "dep-local" chunk)
+        local-key (sp/cache-key chunk {:provider :azure :model "dep-local"} the-prompt)
+        declared-key (sp/cache-key chunk declared the-prompt)]
+    (is (contains? (:files r) (str local-key ".edn")) "POSITIVE CONTROL: it wrote under the local identity")
+    (is (not (contains? (:files r) (str declared-key ".edn")))
+        "and never under the declared identity")
+    (is (= #{} (:declared-files r)) "and nothing into the declared directory")))
+
+(deftest tier-2-is-read-only-even-when-the-local-identity-IS-the-declared-one
+  ;; the case the test above cannot reach: its local model is
+  ;; `dep-local`, never the declared one. An `:azure` install whose deployment
+  ;; is named `gpt-4o` - an ordinary Azure name - computes EXACTLY the declared
+  ;; key, because an identity is two names. The key cannot keep this write out
+  ;; of the archive's population; only the directory can.
+  (let [chunk {:chunk_id "c" :content_markdown (str "text " (random-uuid))}
+        r (distil-once! (:provider declared) (:model declared) chunk)
+        the-key (str (sp/cache-key chunk declared the-prompt) ".edn")]
+    (is (= 1 (:called r)) "POSITIVE CONTROL: nothing was cached, so the local model answered")
+    (is (contains? (:files r) the-key)
+        "POSITIVE CONTROL: its output IS keyed exactly like a declared entry, in the local directory")
+    (is (= #{} (:declared-files r))
+        "and NOTHING reached the directory tier 2 reads, where it would pass for the archive's own")))
+
+(deftest tier-2-is-positive-only-a-declared-negative-is-ignored
+  ;; "This chunk has no phrases" is a claim about the chunk under a model. Only
+  ;; the local model may make it here.
+  (let [chunk {:chunk_id "n" :content_markdown (str "text " (random-uuid))}]
+    (write-declared! chunk the-prompt [])
+    (let [r (distil-once! :azure "dep-local" chunk)]
+      (is (= 1 (:called r)) "the declared [] was ignored, so the model was asked"))))
+
+(deftest tier-2-serves-the-committed-archive-in-its-own-four-segment-keys
+  ;; The unpack no longer translates the committed archive into the
+  ;; current grammar, so tier 2 must find it in `main`'s: content, the DECLARED
+  ;; model, prompt, version. Run as a newcomer on another provider AND another
+  ;; model, the people the archive is for - so a lookup built from anything
+  ;; local would miss.
+  (let [chunk {:chunk_id "as" :content_markdown (str "text " (random-uuid))}]
+    (write-declared-as-shipped! chunk the-prompt ["as shipped"])
+    (let [r (distil-once! :openai-compatible "a-local-model" chunk)]
+      (is (= 0 (:called r)) "no call: the archive answered, in its own key")
+      (is (= ["as shipped"] (:result r)))
+      (is (= #{} (:files r)) "and nothing was written locally"))))
+
+(deftest a-main-era-entry-in-the-LOCAL-directory-is-never-served
+  ;; The legacy key is read ONLY in the declared directory, where only the pinned
+  ;; archive can put one. Every install that ran `main` holds main's four-segment
+  ;; entries in its LOCAL directory - its own output, keyed on the CONFIGURED model
+  ;; whatever it sent - and "every existing entry becomes unreachable" is this PR's
+  ;; own rule. WIDENING THIS READ serves output from before the phrase negative-cache issue of UNKNOWN model as if it
+  ;; were current: the backfill the KUDOS phrase-parser unification refused. Both configured-model spellings a
+  ;; main-era key could carry are planted.
+  (let [chunk {:chunk_id "lg" :content_markdown (str "text " (random-uuid))}]
+    (sp/ensure-cache-dir! test-cache-dir)
+    (doseq [m [(:model declared) "configured-and-never-sent"]]
+      (sp/write-cached-phrases!
+       (str test-cache-dir
+            (str/join "-" [(core/sha256-short-hash (:content_markdown chunk))
+                           (core/sha256-short-hash m)
+                           (core/sha256-short-hash the-prompt)
+                           sp/parser-version])
+            ".edn")
+       ["a main-era local entry"]))
+    (let [r (distil-once! :openai-compatible "a-local-model" chunk)]
+      (is (= 1 (:called r)) "the model was asked: a main-era LOCAL entry is never served")
+      (is (not= ["a main-era local entry"] (:result r))))))
+
+(deftest tier-2-serves-a-newcomer-whose-provider-is-not-the-declared-one
+  ;; Since the setup-env provider-prompt issue a newcomer who skips the provider question gets
+  ;; `:openai-compatible` - the main beneficiary of the whole tier - while every
+  ;; test above runs a local `:azure`, the declared provider. Building the
+  ;; declared key with the LOCAL provider would pass all of them.
+  (let [chunk {:chunk_id "nc" :content_markdown (str "text " (random-uuid))}]
+    (is (not= :openai-compatible (:provider declared))
+        "NON-VACUITY: the local provider below differs from the declared one")
+    (write-declared! chunk the-prompt ["declared"])
+    (let [r (distil-once! :openai-compatible "a-local-model" chunk)]
+      (is (= 0 (:called r)) "no call: the declared archive answered a different provider")
+      (is (= ["declared"] (:result r)))
+      (is (= #{} (:files r)) "and nothing was written locally"))))

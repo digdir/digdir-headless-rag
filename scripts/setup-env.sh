@@ -88,11 +88,39 @@ ACCESS_VARS="ADMIN_USER_EMAILS"
 # means a clean install always has a CHOSEN provider rather than no value at all.
 PROVIDER_VARS="AZURE_OPENAI_USE_AZURE"
 
+# A FIFTH list, and the first that is CONDITIONAL: what the OpenAI-compatible
+# path needs, asked only when the provider answer above means NOT Azure, so the
+# Azure path prints exactly what it printed before. Before this, the
+# script asked "Azure or not?" and then asked for nothing the "not" needs.
+#
+# Its own list because skipping it has its own cost, and neither existing
+# message states it. The server STARTS without these; its first LLM call then
+# refuses, naming the unset path. PROMPTED_VARS is asked before the provider
+# question, of everyone. OPTIONAL_PROMPTED_VARS' guard would even ACCEPT these,
+# because they are `:tier :optional` (only one of the two paths uses them),
+# while its message, "reranking stays off", is false for them.
+OPENAI_COMPATIBLE_VARS="OPENAI_API_ENDPOINT OPENAI_API_KEY"
+
+# A SIXTH, on the same principle: the model costs something different again.
+# Nothing refuses without it. The request goes out naming NO model (measured
+# for the setup-env provider-prompt issue: `"model": null` on the wire), and what a server does with that has
+# not been measured, so its message must not promise a refusal or a success.
+# The variable keeps its legacy Azure spelling; it seeds services.llm.model.
+OPENAI_COMPATIBLE_MODEL_VARS="AZURE_OPENAI_MODEL_NAME"
+
 say() { printf '%s\n' "$*"; }
 
 # Can we actually OPEN a terminal? Probed once, by opening it — see the note at
 # the prompt loop for why an existence test is not enough.
-if { : >/dev/tty; } 2>/dev/null; then TTY_AVAILABLE=1; else TTY_AVAILABLE=0; fi
+#
+# ⚠️ IN A SUBSHELL, and that is load-bearing. `:` is a POSIX SPECIAL built-in,
+# and a failed redirect on one makes a non-interactive shell EXIT. dash, which
+# is /bin/sh on Debian and Ubuntu, did exactly that with no terminal attached:
+# exit 2, silently (stderr was already /dev/null), before writing a byte of
+# .env. macOS /bin/sh does not, so it was never seen until setup-env-run-test
+# first ran on Linux. Inside ( ) the subshell takes the exit, and the answer is
+# just "no terminal".
+if (: >/dev/tty) 2>/dev/null; then TTY_AVAILABLE=1; else TTY_AVAILABLE=0; fi
 
 # 32 bytes of urandom, base64, punctuation stripped so the value is safe
 # unquoted in a .env that docker compose parses. /dev/urandom rather than
@@ -129,6 +157,55 @@ set_var() {
     printf '%s=%s\n' "$_name" "$_value" >> "$_tmp"
   fi
   mv "$_tmp" "$ENV_FILE"
+}
+
+# The provider answer in the env file as the RUNTIME will read it: prints
+# `azure`, `not-azure` or `ambiguous`.
+#
+# ⚠️ A SECOND COPY of `digdir.config.env-bridge`'s parse (`coerce-value` for
+# `:provider-switch`): trimmed, any case, true/1/yes/on is Azure and anything
+# else is not. That includes blank, because unset means NOT Azure
+# (`digdir.llm.provider/selected-provider`). Accepting only `false` here would
+# send `no` down the OpenAI-compatible path with none of its values asked for.
+# setup-env-run-test pins this against `coerce-value`, row by row.
+#
+# ⚠️ AND IT ANSWERS ONLY WHEN IT IS CERTAIN. docker compose, not this
+# script, turns the env file into the variable the runtime sees, and it reads
+# more shapes than `current_value` does. Measured with Compose 5.5.1: quotes and
+# a trailing ` # comment` are stripped, `${X:-...}` is interpolated, an `export `
+# prefix, a leading space and spaces around `=` all still assign, and the LAST
+# of two assignments wins. One branch below clears the Azure key's placeholder,
+# so acting on a line compose reads differently changed an Azure user's `.env`.
+#
+# So certainty is defined POSITIVELY, on BOTH sides. Unset means the name
+# appears on no line that is not a comment. Set means exactly one such line,
+# spelled `AZURE_OPENAI_USE_AZURE=` at the start, whose trimmed value is one bare
+# word. Every other shape, including shapes nobody has listed, is `ambiguous`,
+# and ambiguous acts on NEITHER branch. There is no third parser: this
+# recognises the shapes it is sure of and refuses the rest.
+provider_answer() {
+  # PRESENCE is defined positively too: the NAME on any line that is not a
+  # comment. A regex of assignment spellings made "unset" a catch-all, so every
+  # spelling it did not know counted as unset, and unset is the branch that
+  # clears. Compose also assigns with `KEY: value` (how a compose
+  # `environment:` block is written, so it arrives by copy-paste), after a UTF-8
+  # BOM, and from a bare `KEY` inherited from its own shell. All three count
+  # here, and are then ambiguous below. Only comment lines are excluded, because
+  # compose ignores `#`, indented `#` and tab-indented `#` alike.
+  _n=$(grep -v '^[[:space:]]*#' "$ENV_FILE" 2>/dev/null | grep -c 'AZURE_OPENAI_USE_AZURE' || true)
+  if [ "${_n:-0}" = "0" ]; then echo not-azure; return 0; fi
+  if [ "$_n" != "1" ] || ! grep -qE '^AZURE_OPENAI_USE_AZURE=' "$ENV_FILE"; then
+    echo ambiguous; return 0
+  fi
+  _p=$(current_value AZURE_OPENAI_USE_AZURE | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  # LC_ALL=C: a locale's collation can put non-ASCII letters inside A-Z.
+  if printf '%s' "$_p" | LC_ALL=C grep -q '[^A-Za-z0-9._-]'; then
+    echo ambiguous; return 0
+  fi
+  case "$(printf '%s' "$_p" | tr '[:upper:]' '[:lower:]')" in
+    true|1|yes|on) echo azure ;;
+    *) echo not-azure ;;
+  esac
 }
 
 say ""
@@ -238,6 +315,70 @@ for v in $PROVIDER_VARS; do
   fi
 done
 
+# The other half of the question above. Gated on the answer as the env
+# file now holds it, so a typed answer and an earlier one take the same path.
+# Read ONCE, here: nothing below writes the switch.
+provider=$(provider_answer)
+
+# Ambiguous acts on neither branch: everything below then prints exactly what
+# it printed before the setup-env provider-prompt issue, and this names the variable - never its value.
+if [ "$provider" = "ambiguous" ]; then
+  say ""
+  say "  ⚠ AZURE_OPENAI_USE_AZURE is written in a way docker compose may read"
+  say "    differently from this script (quoted, commented, interpolated, indented"
+  say "    or set more than once), so nothing that depends on the provider was"
+  say "    done. Write it bare on one line, true or false, and run this again."
+fi
+
+if [ "$provider" = "not-azure" ]; then
+  say ""
+  say "  The OpenAI-compatible server (unset or false above both mean NOT Azure):"
+  # The Azure key's placeholder blocks this user and protects nothing. The
+  # database setup refuses to seed while any secret holds the marker, and its
+  # fix, re-running this script, asked the same Azure question again. A blank
+  # Azure key passes every boot refusal on this path (measured for the setup-env provider-prompt issue).
+  case "$(current_value AZURE_OPENAI_API_KEY)" in
+    *"$PLACEHOLDER_MARKER"*)
+      set_var AZURE_OPENAI_API_KEY ""
+      say "      AZURE_OPENAI_API_KEY  cleared — it held the .env.example placeholder,"
+      say "                            which the database setup refuses to seed on."
+      say "                            Not using Azure, it needs no value."
+      ;;
+  esac
+  for v in $OPENAI_COMPATIBLE_VARS $OPENAI_COMPATIBLE_MODEL_VARS; do
+    if needs_value "$v"; then
+      case "$v" in
+        OPENAI_API_ENDPOINT) hint="base URL including /v1, blank to skip" ;;
+        OPENAI_API_KEY) hint="any non-empty value if your server ignores keys, blank to skip" ;;
+        *) hint="the model your server serves, blank to skip" ;;
+      esac
+      if [ "$TTY_AVAILABLE" = "1" ]; then
+        printf '      %s (%s): ' "$v" "$hint" > /dev/tty
+        read -r answer < /dev/tty || answer=""
+      else
+        answer=""
+      fi
+      if [ -n "${answer:-}" ]; then
+        set_var "$v" "$answer"
+        say "      $v  set"
+      else
+        case " $OPENAI_COMPATIBLE_MODEL_VARS " in
+          *" $v "*)
+            say "      $v  SKIPPED — requests will name no model; whether your"
+            say "                            server accepts that has not been tested."
+            ;;
+          *)
+            say "      $v  SKIPPED — the server starts, and its first LLM call refuses"
+            say "                            until this is set."
+            ;;
+        esac
+      fi
+    else
+      say "      $v  already set, left alone"
+    fi
+  done
+fi
+
 say ""
 say "  Who may administer this instance:"
 for v in $ACCESS_VARS; do
@@ -265,8 +406,17 @@ say ""
 
 # Names only, never values — the same rule the Clojure side follows, and it
 # matters more here because this script has just handled every one of them.
+#
+# Off the Azure path the Azure values are not needed, and saying the server
+# will refuse to start over them was false: blank, nothing refuses.
+# Only when that is CERTAIN - ambiguous keeps the warning it always printed.
+if [ "$provider" = "not-azure" ]; then
+  refusing_vars="$GENERATED_VARS"
+else
+  refusing_vars="$GENERATED_VARS $PROMPTED_VARS"
+fi
 remaining=""
-for v in $GENERATED_VARS $PROMPTED_VARS; do
+for v in $refusing_vars; do
   if needs_value "$v"; then remaining="$remaining $v"; fi
 done
 
@@ -274,6 +424,19 @@ if [ -n "$remaining" ]; then
   say "  ⚠ Still placeholder or empty:$remaining"
   say "    The server will refuse to start until these are real values."
   say ""
+fi
+
+# A different consequence again, so a different warning: the server starts.
+if [ "$provider" = "not-azure" ]; then
+  unset_llm=""
+  for v in $OPENAI_COMPATIBLE_VARS; do
+    if needs_value "$v"; then unset_llm="$unset_llm $v"; fi
+  done
+  if [ -n "$unset_llm" ]; then
+    say "  ⚠ Still unset:$unset_llm"
+    say "    The server starts, and its first LLM call refuses until these are set."
+    say ""
+  fi
 fi
 
 # Reported separately because the consequence is different: the server starts

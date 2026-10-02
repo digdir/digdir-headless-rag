@@ -40,11 +40,9 @@
             [clojure.string :as str]
             [digdir.llm.model-params :as model-params]
             [digdir.llm.provenance :as provenance]
-            [digdir.secrets :as secrets]
             [taoensso.telemere :as t]
             [wkok.openai-clojure.api :as wkok]))
 
-(def ^:private default-openai-endpoint "https://api.openai.com/v1")
 
 (defn- env-num
   "Parse a numeric env var (Long or Double) via EDN; nil if unset/non-numeric."
@@ -90,8 +88,13 @@
 
 (defn- openai-compat-completion
   "Direct clj-http POST to an OpenAI-compatible `/chat/completions`. Endpoint and
-   key come from opts, else the `OPENAI_API_ENDPOINT` / `OPENAI_API_KEY` env vars
-   (the same vars wkok's openai impl honours), else the public OpenAI default.
+   key come from opts, and ONLY from opts: a nil one refuses,
+   naming it. This used to fill a nil endpoint from `OPENAI_API_ENDPOINT` (else
+   the public OpenAI URL) and a nil key from the `OPENAI_API_KEY` secret - a
+   process-global value silently standing in for a per-tenant one. Callers get
+   credentials from `digdir.llm.provider/resolve`, which never returns nil.
+   (Until Phase 3 of the provider-resolver change one caller outside the resolver, search-phrases'
+   `:lmstudio` arm, carried that old fallback itself; Phase 3 deleted the arm.)
    When `OPENAI_REASONING_EFFORT` is set and the body doesn't already specify it,
    it's injected — this is how we turn reasoning off/level for local models
    globally without editing every call site. Sampling/length params
@@ -103,14 +106,16 @@
    non-thinking mode on models where the `enable_thinking` flag is a no-op (Qwen3.6
    GGUF in LM Studio) — single-turn callers only (e.g. the judge), not the agent."
   [params {:keys [api-key api-endpoint] :as opts}]
-  (let [env-endpoint (System/getenv "OPENAI_API_ENDPOINT")
-        endpoint (or api-endpoint env-endpoint default-openai-endpoint)
-        opt-key? (some? api-key)
-        ;; Was `(System/getenv "OPENAI_API_KEY")`, which yielded nil when unset
-        ;; and sent a keyless request — the provider then failed to authenticate,
-        ;; one layer away from the actual cause. Now it fails here, naming the
-        ;; secret (#22). An explicit `:api-key` in opts still wins.
-        api-key  (or api-key (secrets/get! :openai-api-key))
+  ;; nil only - not blank. A nil is what this used to FILL from the environment;
+  ;; blank-rejection is the resolver's job (`provider/resolve`), which every LLM
+  ;; call site goes through since Phase 3 of the provider-resolver change.
+  (let [missing (cond-> [] (nil? api-endpoint) (conj :api-endpoint) (nil? api-key) (conj :api-key))]
+    (when (seq missing)
+      (throw (ex-info (str "digdir.llm.client needs " (str/join " and " (map str missing))
+                           " in opts. It no longer reads OPENAI_API_ENDPOINT / OPENAI_API_KEY"
+                           ": credentials come from digdir.llm.provider/resolve.")
+                      {:missing missing}))))
+  (let [endpoint api-endpoint
         effort   (System/getenv "OPENAI_REASONING_EFFORT")
         overrides (env-inference-overrides)
         disable-thinking? (env-flag? "OPENAI_DISABLE_THINKING")
@@ -150,10 +155,10 @@
      {:path :blocking
       :branch :openai
       :endpoint endpoint
-      :endpoint-from (cond api-endpoint :opts env-endpoint :env :else :default)
+      :endpoint-from :opts
       :endpoint-rederived? false
       :key-present? (not (str/blank? api-key))
-      :key-from (if opt-key? :opts :secret)
+      :key-from :opts
       :key-rederived? false
       :caller params
       :pre-normalize merged

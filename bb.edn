@@ -1127,7 +1127,7 @@
                                           (println (str "    " ((resolve (quote digdir.setup.demo-dataset/seed!)))))
                                           (println "  done. Fetch the corpus with `bb demo-corpus` if you have not."))))}
 
-         phrase-cache-archive {:doc "Rebuild the committed warm phrase-cache archive from a cache directory (yardarm-warmcache). The archive is regenerated rather than maintained: a change to the chunker, prompt, model constant or parser-version orphans every entry, at which point re-run a materialisation and point this at the resulting cache dir. (usage: bb phrase-cache-archive <cache-dir> [out-file])"
+         phrase-cache-archive {:doc "Rebuild the committed warm phrase-cache archive from a cache directory (yardarm-warmcache). The archive is regenerated rather than maintained: a change to the chunker, prompt or parser-version orphans every entry, at which point re-run a materialisation into an EMPTY cache dir, point this at it, and update phrase-cache-folder-v2.identity.edn to the rebuilding installation - see server/scripts/corpus/README.md. (usage: bb phrase-cache-archive <cache-dir> [out-file])"
                                :task (shell (str "bb server/scripts/corpus/build_phrase_cache_archive.clj "
                                                  (clojure.string/join " " *command-line-args*)))}
          demo-corpus {:doc "Fetch the demo NorQuAD corpus (352 Wikipedia articles + distractors) into DEMO_CORPUS_DIR (default ./demo-corpus). Nothing is checked in: NorQuAD's CC0 covers its questions and answers, not the Wikipedia prose, so the text is fetched from Wikipedia under CC BY-SA at setup. Resumable — an article already written is not refetched. (usage: bb demo-corpus [distractor-count])"

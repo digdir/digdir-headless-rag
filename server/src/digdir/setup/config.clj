@@ -49,9 +49,9 @@
 
 (defn ensure-typesense-config-definitions! "Ensure Typesense config definitions exist in the database." [] (ensure-config-definition! "services.typesense.api-host" {:root :platform, :value-type :string, :description "Typesense API host", :category :services, :service :search, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.typesense.api-tls" {:root :platform, :value-type :boolean, :description "Use TLS for Typesense API", :category :services, :service :search, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.typesense.api-key-admin" {:root :platform, :value-type :string, :encrypted? true, :description "Typesense admin API key", :category :services, :service :search, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.typesense.collection-prefix" {:root :platform, :value-type :string, :description "Prefix for Typesense collection names", :category :services, :service :search, :sensitivity :internal, :function :settings}))
 
-(defn ensure-azure-openai-config-definitions! "Ensure Azure OpenAI config definitions exist in the database." [] (ensure-config-definition! "services.azure-openai.api-key" {:root :platform, :value-type :string, :encrypted? true, :description "Azure OpenAI API key", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.azure-openai.api-endpoint" {:root :platform, :value-type :string, :description "Azure OpenAI API endpoint URL", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.azure-openai.deployment-name" {:root :platform, :value-type :string, :description "Azure OpenAI deployment name", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.azure-openai.api-version" {:root :platform, :value-type :string, :description "Azure OpenAI API version", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.azure-openai.model-name" {:root :platform, :value-type :string, :description "Azure OpenAI model name (for non-Azure OpenAI)", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.azure-openai.use-azure-openai-api" {:root :platform, :value-type :boolean, :description "Use Azure OpenAI API instead of standard OpenAI", :category :services, :service :llm, :sensitivity :internal, :function :settings}))
+(defn ensure-azure-openai-config-definitions! "Ensure Azure OpenAI config definitions exist in the database." [] (ensure-config-definition! "services.azure-openai.api-key" {:root :platform, :value-type :string, :encrypted? true, :description "Azure OpenAI API key", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.azure-openai.api-endpoint" {:root :platform, :value-type :string, :description "Azure OpenAI API endpoint URL", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.azure-openai.deployment-name" {:root :platform, :value-type :string, :description "Azure OpenAI deployment name", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.azure-openai.api-version" {:root :platform, :value-type :string, :description "Azure OpenAI API version", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.azure-openai.model-name" {:root :platform, :value-type :string, :description "LEGACY spelling of services.llm.model, and its FALLBACK: read only when services.llm.model is unset. Migrate the value to services.llm.model; a later change removes this read.", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.azure-openai.use-azure-openai-api" {:root :platform, :value-type :boolean, :description "Use Azure OpenAI API instead of standard OpenAI", :category :services, :service :llm, :sensitivity :internal, :function :settings}))
 
-(defn ensure-other-services-config-definitions! "Ensure other service config definitions exist in the database." [] (ensure-config-definition! "services.openrouter.api-key" {:root :platform, :value-type :string, :encrypted? true, :description "OpenRouter API key", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.openrouter.model" {:root :platform, :value-type :string, :description "Model name sent to OpenRouter when services.search-phrases.provider is :openrouter", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.colbert.api-url" {:root :platform, :value-type :string, :description "ColBERT reranking service URL", :category :services, :service :search, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.colbert.api-key" {:root :platform, :value-type :string, :encrypted? true, :description "ColBERT reranking service API key", :category :services, :service :search, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.marker.api-url" {:root :platform, :value-type :string, :encrypted? true, :description "Marker document parser API URL", :category :services, :service :llm, :sensitivity :secret, :function :credentials}) (ensure-config-definition! "services.marker.api-key" {:root :platform, :value-type :string, :encrypted? true, :description "Marker document parser API key", :category :services, :service :llm, :sensitivity :secret, :function :credentials}) (ensure-config-definition! "services.marker.timeout-ms" {:root :platform, :value-type :number, :description "Marker request socket/connection timeout in milliseconds. Defaults to 21600000 (6 hours) when unset — large PDFs are genuinely slow to render. Lower it to shorten the dev feedback loop.", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.marker.retry-delays-ms" {:root :platform, :value-type :edn, :description "Marker retry ladder for 502/503/429, as a vector of millisecond delays — one entry per retry. Defaults to [60000 600000 1800000 3600000 7200000 86400000] (1min, 10min, 30min, 60min, 120min, 24hr) when unset. Use e.g. [1000 5000] in dev, or [] for no retries.", :category :services, :service :llm, :sensitivity :internal, :function :settings}))
+(defn ensure-other-services-config-definitions! "Ensure other service config definitions exist in the database." [] (ensure-config-definition! "services.colbert.api-url" {:root :platform, :value-type :string, :description "ColBERT reranking service URL", :category :services, :service :search, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.colbert.api-key" {:root :platform, :value-type :string, :encrypted? true, :description "ColBERT reranking service API key", :category :services, :service :search, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.marker.api-url" {:root :platform, :value-type :string, :encrypted? true, :description "Marker document parser API URL", :category :services, :service :llm, :sensitivity :secret, :function :credentials}) (ensure-config-definition! "services.marker.api-key" {:root :platform, :value-type :string, :encrypted? true, :description "Marker document parser API key", :category :services, :service :llm, :sensitivity :secret, :function :credentials}) (ensure-config-definition! "services.marker.timeout-ms" {:root :platform, :value-type :number, :description "Marker request socket/connection timeout in milliseconds. Defaults to 21600000 (6 hours) when unset — large PDFs are genuinely slow to render. Lower it to shorten the dev feedback loop.", :category :services, :service :llm, :sensitivity :internal, :function :settings}) (ensure-config-definition! "services.marker.retry-delays-ms" {:root :platform, :value-type :edn, :description "Marker retry ladder for 502/503/429, as a vector of millisecond delays — one entry per retry. Defaults to [60000 600000 1800000 3600000 7200000 86400000] (1min, 10min, 30min, 60min, 120min, 24hr) when unset. Use e.g. [1000 5000] in dev, or [] for no retries.", :category :services, :service :llm, :sensitivity :internal, :function :settings}))
 
 (defn ensure-llm-config-definitions!
   "Ensure the `services.llm.*` definitions exist: one
@@ -68,10 +68,18 @@
 
    Fork-owned like the `services.azure-openai.*` family, so the env bridge's
    write onto the tenant's own Platform/default node is where the runtime will
-   look. `services.llm.model` is deliberately absent until the
-   `services.azure-openai.model-name` migration: a path an operator can set to
-   no effect for several phases is the trap the provider-resolver change exists to remove."
+   look.
+
+   `services.llm.model` arrived with Phase 4 of the provider-resolver change, the
+   `services.azure-openai.model-name` migration, and NOT before: a path an
+   operator can set to no effect for several phases is the trap the provider-resolver change exists to
+   remove. It is defined and read in the same change, with the legacy path as
+   its fallback so values can be migrated in any order."
   []
+  (ensure-config-definition! "services.llm.model"
+                             {:root :platform :value-type :string
+                              :description "The model this tenant sends on the OpenAI-compatible branch. Falls back to services.azure-openai.model-name while that still holds a value; on Azure the model is the deployment name."
+                              :category :services :service :llm :sensitivity :internal :function :settings})
   (ensure-config-definition! "services.llm.provider"
                              {:root :platform :value-type :edn
                               :description "Which LLM provider this tenant routes through. Keyword: :azure or :openai-compatible."
@@ -84,30 +92,6 @@
                              {:root :platform :value-type :string :encrypted? true
                               :description "API key for the OpenAI-compatible endpoint. Must be non-empty even for a server that ignores it."
                               :category :services :service :llm :sensitivity :internal :function :credentials}))
-
-(defn ensure-lmstudio-config-definitions!
-  "Ensure config definitions for the LM Studio (or any OpenAI-compatible
-   local-model) provider exist in the database. Paired with
-   `services.search-phrases.provider := :lmstudio` to redirect the
-   search-phrases primary LLM call to a local endpoint, e.g. for cost
-   savings during ingest."
-  []
-  (ensure-config-definition! "services.lmstudio.api-key"
-                             {:root :platform :value-type :string :encrypted? true
-                              :description "API key for the local OpenAI-compatible endpoint (LM Studio accepts any non-empty string)"
-                              :category :services :service :llm :sensitivity :internal :function :credentials})
-  (ensure-config-definition! "services.lmstudio.api-endpoint"
-                             {:root :platform :value-type :string
-                              :description "Base URL for the local OpenAI-compatible endpoint, e.g. http://localhost:1234"
-                              :category :services :service :llm :sensitivity :internal :function :settings})
-  (ensure-config-definition! "services.lmstudio.model"
-                             {:root :platform :value-type :string
-                              :description "Model name to send in the request body (LM Studio uses whatever model is loaded)"
-                              :category :services :service :llm :sensitivity :internal :function :settings})
-  (ensure-config-definition! "services.search-phrases.provider"
-                             {:root :platform :value-type :edn
-                              :description "Which OpenAI-compatible provider drives the search-phrases primary call. Keyword: :azure-openai, :openrouter, or :lmstudio. Defaults to :azure-openai if unset."
-                              :category :services :service :llm :sensitivity :internal :function :settings}))
 
 (defn ensure-system-config-definitions! "Ensure system-level config definitions exist in the database." [] (ensure-config-definition! "system.io-validation.enabled" {:root :platform, :ownership :inherit, :value-type :boolean, :description "Enable Malli I/O schema validation for skill executions. Off in production; enable per-tenant for debugging.", :category :system, :service :other, :sensitivity :internal, :function :settings}))
 
@@ -129,25 +113,23 @@
 
 (defn ensure-self-improvement-config-definitions!
   "Ensure config definitions for the self-improvement (enrichment-generation)
-   LLM usage. Follows the `services.<usage>.provider` model-usage convention
-   (cf. `services.search-phrases.provider`): a provider selector lets the
-   propose-questions / propose-phrases enrichment calls be redirected to a local
-   model (LM Studio via `services.lmstudio.*`) for cost, independent of the
-   agent and judge models. Model + reasoning-effort overrides are usage-scoped."
+   LLM usage. The model and reasoning-effort overrides are usage-scoped and
+   still read.
+
+   There is no provider override: enrichment follows the provider decision
+   (`services.llm.provider`) like every LLM call, and the provider-resolver change
+   Phase 4 removed the retired `services.self-improvement.provider`
+   definition."
   []
-  (ensure-config-definition! "services.self-improvement.provider"
-                             {:root :platform, :ownership :inherit, :value-type :edn,
-                              :description "Which OpenAI-compatible provider drives the self-improvement enrichment-generation calls. Keyword: :azure-openai, :openrouter, or :lmstudio. Defaults to :azure-openai if unset.",
-                              :category :services, :service :llm, :sensitivity :internal, :function :settings})
   (ensure-config-definition! "services.self-improvement.model"
                              {:root :platform, :ownership :inherit, :value-type :string,
-                              :description "Usage-scoped model override for self-improvement enrichment generation. When set, wins over the active provider's conventional model key (e.g. services.lmstudio.model) — lets self-improvement pin a model distinct from other lmstudio usages.",
+                              :description "Usage-scoped model override for self-improvement enrichment generation. When set, wins over the provider's default model (the Azure deployment name, or services.azure-openai.model-name).",
                               :category :services, :service :llm, :sensitivity :internal, :function :settings})
   (ensure-config-definition! "services.self-improvement.reasoning-effort"
                              {:root :platform, :ownership :inherit, :value-type :string,
                               :description "Optional reasoning_effort passed on self-improvement enrichment calls (e.g. \"none\", \"low\"). Reasoning-class local models otherwise spend most of the token budget on a thinking channel before emitting output. Omit for non-reasoning models.",
                               :category :services, :service :llm, :sensitivity :internal, :function :settings}))
 
-(defn ensure-all-config-definitions! "Ensure all config definitions exist in the database.\n   This is called after import to make sure all required definitions are present." [] (println "Ensuring all config definitions exist...") (ensure-email-config-definitions!) (ensure-typesense-config-definitions!) (ensure-azure-openai-config-definitions!) (ensure-llm-config-definitions!) (ensure-other-services-config-definitions!) (ensure-lmstudio-config-definitions!) (ensure-system-config-definitions!) (ensure-pipeline-config-definitions!) (ensure-skill-config-definitions!) (ensure-judge-config-definitions!) (ensure-self-improvement-config-definitions!) (println "  Config definitions ensured."))
+(defn ensure-all-config-definitions! "Ensure all config definitions exist in the database.\n   This is called after import to make sure all required definitions are present." [] (println "Ensuring all config definitions exist...") (ensure-email-config-definitions!) (ensure-typesense-config-definitions!) (ensure-azure-openai-config-definitions!) (ensure-llm-config-definitions!) (ensure-other-services-config-definitions!) (ensure-system-config-definitions!) (ensure-pipeline-config-definitions!) (ensure-skill-config-definitions!) (ensure-judge-config-definitions!) (ensure-self-improvement-config-definitions!) (println "  Config definitions ensured."))
 
 (defn setup-typesense-defaults "Set up default values for Typesense configuration." [] (ensure-typesense-config-definitions!) (let [current-prefix (setup-common/get-global-config "services.typesense.collection-prefix")] (when-not current-prefix (set-global-config! "services.typesense.collection-prefix" "digdir_rag_") (println "  Set default Typesense collection prefix: digdir_rag_"))))

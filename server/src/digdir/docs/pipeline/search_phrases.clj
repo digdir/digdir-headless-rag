@@ -14,102 +14,45 @@
             [clojure.java.io :as jio]
             [taoensso.telemere :as t]
             [digdir.docs.pipeline.core :as core]
-            [digdir.config.accessor :as cfg]))
+            [digdir.llm.provider :as provider]))
 
 ;; ============================================================================
-;; OpenAI Configuration
+;; The call spec
 ;; ============================================================================
 
-(defn- required
-  "`v`, or a throw naming `path` - never nil.
+(defn- call-spec
+  "`provider/resolve`'s call spec for `tenant`: the tenant's
+   provider decision, its model and its own credentials. A missing credential
+   refuses there, naming its path.
 
-   The :openrouter arm cannot pass nil on. A nil model can only fail at the
-   vendor, one layer from its cause: OpenRouter has no \"whatever model is
-   loaded\" default the way LM Studio does. And a nil key is WORSE than a
-   failure: `digdir.llm.client` fills a nil `:api-key` from the OPENAI_API_KEY
-   secret, which would send the process-global OpenAI-compatible key to
-   openrouter.ai. Both paths were unreachable until the OpenRouter model-registration issue registered
-   `services.openrouter.model`; this closes what that made reachable.
-
-   Names the path and tenant only, never a value."
-  [tenant path v]
-  (if (str/blank? (some-> v str))
-    (throw (ex-info (str path " is unset for tenant " (pr-str tenant)
-                         ", so search-phrases cannot use :openrouter. Set it with"
-                         " `bb config-set " path " <value> " tenant " platform default`.")
-                    {:path path :tenant tenant}))
-    v))
-
-(defn openai-implementation
-  "Resolve OpenAI implementation config on demand from runtime config.
-   `impl` is one of `:azure-openai`, `:openrouter`, `:lmstudio`."
-  [tenant impl]
-  (case impl
-    :azure-openai
-    {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-     :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-     :impl :azure
-     :request {:timeout 30000}}
-
-    :openrouter
-    {:api-key (required tenant "services.openrouter.api-key"
-                        (cfg/get {:tenant tenant} :services :openrouter :api-key))
-     :api-endpoint "https://openrouter.ai/api/v1"
-     :request {:timeout 30000}}
-
-    ;; OpenAI-compatible local endpoint (LM Studio, Ollama with
-    ;; OpenAI-compatible API, vLLM, etc.). Omits `:impl :azure` so the
-    ;; wkok client uses the standard OpenAI URL shape
-    ;; (`{endpoint}/v1/chat/completions`).
-    ;;
-    ;; Timeout is generous (5 min) because (a) local models can be large
-    ;; (we tested with gemma-3 26B), (b) the pipeline fires all chunks of
-    ;; a document in parallel via m/join — LM Studio serves them
-    ;; sequentially on one GPU, so the Nth chunk waits in queue before
-    ;; even starting. A 60s timeout caused most calls to fail under
-    ;; parallel load (2026-05-26).
-    :lmstudio
-    {:api-key (cfg/get {:tenant tenant} :services :lmstudio :api-key)
-     :api-endpoint (cfg/get {:tenant tenant} :services :lmstudio :api-endpoint)
-     :request {:timeout 300000}}
-
-    (throw (ex-info "Unknown OpenAI implementation" {:impl impl}))))
-
-(defn- resolve-provider
-  "Which provider is active for the search-phrases primary path. Read
-   from `:services :search-phrases :provider` (a keyword); defaults to
-   `:azure-openai` for backward compatibility when the key is absent."
+   The Azure branch keeps the 30s timeout this namespace always gave it. The
+   OpenAI-compatible branch needs none: `digdir.llm.client` does not read
+   `:request` there (its socket timeout is `OPENAI_SOCKET_TIMEOUT_MS`,
+   default 10 min), so the 5 min this namespace used to pass was never
+   applied."
   [tenant]
-  (or (cfg/get {:tenant tenant} :services :search-phrases :provider)
-      :azure-openai))
+  (let [spec (provider/resolve tenant)]
+    (cond-> spec
+      (= :azure (:provider spec)) (assoc :request {:timeout 30000}))))
 
-(defn- resolve-model
-  "Per-provider model-name resolution. Each provider has its own
-   conventional config key so different deployments can coexist:
-     :azure-openai  → :services :azure-openai :deployment-name
-     :openrouter    → :services :openrouter :model
-     :lmstudio      → :services :lmstudio :model"
-  [tenant provider]
-  (case provider
-    :azure-openai (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-    :openrouter   (required tenant "services.openrouter.model"
-                            (cfg/get {:tenant tenant} :services :openrouter :model))
-    :lmstudio     (cfg/get {:tenant tenant} :services :lmstudio :model)))
+(defn- complete
+  "One chat completion on `spec`. The model is the provider's own: a
+   caller-supplied `:model` is overwritten, as it always was here."
+  [spec conversation]
+  (openai/create-chat-completion (assoc conversation :model (:model spec)) spec))
 
 (defn create-chat-completion
-  "Creates a chat completion via whichever provider is configured as
-   the primary for search-phrases. The active provider is read from
-   `:services :search-phrases :provider` (default `:azure-openai`),
-   and the model name from the provider's own config tree.
+  "Creates a chat completion on `tenant`'s provider, which since Phase 3 of the provider-resolver change
+   is the one decision every LLM call follows (`services.llm.provider`, the
+   legacy boolean as its fallback) - `services.search-phrases.provider` is
+   retired and no longer read.
 
    `conversation` is `{:messages [...] [:response_format ...]}`. The
-   `:model` key is set here from config — any caller-supplied `:model`
-   is overwritten."
+   `:model` key is set here from the provider's default model (the Azure
+   deployment name, or `services.azure-openai.model-name`) — any
+   caller-supplied `:model` is overwritten."
   [tenant conversation]
-  (let [provider (resolve-provider tenant)]
-    (openai/create-chat-completion
-     (assoc conversation :model (resolve-model tenant provider))
-     (openai-implementation tenant provider))))
+  (complete (call-spec tenant) conversation))
 
 ;; ============================================================================
 ;; Response Parsing
@@ -204,11 +147,47 @@
   (when-not (java.io.File/.exists (jio/file cache-dir))
     (jio/make-parents (str cache-dir "placeholder"))))
 
+(defn local-cache-dir
+  "Where a run for `cache-dir-name` reads AND WRITES its own entries, e.g.
+   'website' -> 'cache/website-search-phrases/'. Relative, so under the
+   container's /app it lands inside the `digdir-cache` volume."
+  [cache-dir-name]
+  (str "cache/" cache-dir-name "-search-phrases/"))
+
+(defn declared-cache-dir
+  "Where the DECLARED generator's entries live for `cache-dir-name` (tier 2,
+   the phrase negative-cache fix, option e): a directory of its own, which the boot unpack fills and NO
+   RUN EVER WRITES.
+
+   ⛔ THIS MUST NOT BE THE LOCAL DIRECTORY, and it once was. The
+   identity in a key is two NAMES, so a local install on `:azure` whose
+   deployment is called `gpt-4o` computes exactly the declared key. With one
+   shared directory its misses were written INTO the archive's population,
+   indistinguishable from the curated entries, and a rebuild would have packed
+   and shipped them as the declared generator's output. No key shape can
+   separate two identities whose names are equal. Separate storage keeps THIS
+   installation's output out of the archive's population - which is all it
+   does: it cannot tell the two models apart, so a mis-loaded model still
+   writes junk under its own correct-looking name, locally.
+
+   It cannot collide with any run's directory: `local-cache-dir` always ends in
+   `-search-phrases/`, this always in `-search-phrases-declared/`."
+  [cache-dir-name]
+  (str "cache/" cache-dir-name "-search-phrases-declared/"))
+
 (def parser-version
   "Bump when parse-phrases-response changes in a way that makes prior
-   cache entries unreliable. Included in `cache-key` so old cache
-   files (with no version suffix or a different one) are ignored —
+   cache entries unreliable. It is the LAST segment of `cache-key`, whose
+   earlier segments name the chunk text, the provider that answers and the
+   model actually sent. Old cache files (with no version suffix, a different
+   one, or the four-segment key that predates the provider) are ignored —
    they become orphan disk space that can be cleaned up out-of-band.
+
+   That includes NEGATIVE entries: the KUDOS loader caches `[]` when the
+   primary answered in full and this parser found no phrases. So a
+   change that finds phrases where the current parser finds none — even
+   one that leaves every existing phrase list the same — must bump this,
+   or those chunks are never asked again.
 
    v2 (2026-05-26): switched parser to JSON-mode-first with a
    line-walking heuristic fallback. The v1 parser took the last line
@@ -216,12 +195,34 @@
    only.\" etc.) instead of phrases for 99.9% of cached responses."
   "v2")
 
+(defn identity-segments
+  "`identity`'s two segments of `cache-key`, in key order: `[provider model]`.
+   Public so the boot unpack verifies an archive with exactly the hashing the
+   lookup will use."
+  [{:keys [provider model]}]
+  [(core/sha256-short-hash (if (keyword? provider) (name provider) (str provider)))
+   (core/sha256-short-hash model)])
+
 (defn cache-key
-  "Generates a cache key for a chunk's search phrases based on:
-   - chunk content (hashed)
-   - model name
-   - prompt (hashed)
-   - parser version (so a parser change invalidates prior cache)
+  "The cache key for one chunk's search phrases, under ONE `identity`:
+
+     <sha256-short(chunk text)>-<sha256-short(provider)>-<sha256-short(model)>-<sha256-short(prompt)>-<parser-version>
+
+   `identity` is `{:provider … :model …}`: the provider that answers and **the
+   model that is actually sent** — `(provider/selected-provider tenant)` and
+   `(provider/model-for tenant …)`. Neither reads a credential, so the key is
+   computable before the call, which is what a cache needs.
+
+   ⚠️ NOT the configured `:search-phrases/model`. That value is overwritten by
+   `complete` before the request leaves, so keying on it named a model that was
+   never sent, and two different effective models shared one entry. The
+   provider is its own segment because the provider CHANGES THE PROMPT BYTES —
+   `response-format-for-provider`, and the JSON mention Azure requires.
+
+   Takes an identity rather than a tenant so the key can be built under a
+   DECLARED identity that is not this install's: tier 2 reads the shipped warm
+   cache that way (the phrase negative-cache issue option e). It reads only - a write always uses the
+   identity that produced the entry, and always goes to `local-cache-dir`.
 
    Keyed on content rather than `chunk_id`, because content is what
    determines the answer: `distill-search-phrases` sends the prompt with
@@ -231,13 +232,79 @@
    have meant re-generating phrases for every copy of a duplicated chunk, and
    the corpus has 9% duplicates. Same inputs, same key, one LLM call.
 
-   Cache files written under the old key are simply never read again — the
-   same orphaning as a `parser-version` bump."
-  [chunk model prompt]
+   Cache files written under any earlier key are simply never read again — the
+   same orphaning as a `parser-version` bump, and there is no migration: an
+   entry written before this change cannot say which model produced it, so
+   re-keying one would assert an identity nobody measured."
+  [chunk identity prompt]
+  ;; REFUSE a non-map identity. The arity did not change when the second
+  ;; argument became `{:provider … :model …}`, so a caller left on the old
+  ;; `model` string would destructure to nils and key EVERY chunk under one
+  ;; degenerate identity - silently, and only visible as a cache that never
+  ;; hits. A missed call site fails here instead.
+  (when-not (and (map? identity) (:provider identity) (:model identity))
+    (throw (ex-info "cache-key needs {:provider … :model …}: the provider that answers and the model actually sent"
+                    {:identity identity})))
+  (let [[provider-seg model-seg] (identity-segments identity)]
+    (str (core/sha256-short-hash (:content_markdown chunk)) "-"
+         provider-seg "-"
+         model-seg "-"
+         (core/sha256-short-hash prompt) "-"
+         parser-version)))
+
+(defn legacy-cache-key
+  "The FOUR-segment key an archive built before the phrase negative-cache issue carries:
+
+     <sha256-short(chunk text)>-<sha256-short(model)>-<sha256-short(prompt)>-<parser-version>
+
+   - exactly `main`'s key, whose model segment hashed the CONFIGURED model.
+   Tier 2 looks the committed archive up under it, with the DECLARED model,
+   because the unpack stores that archive AS SHIPPED rather than re-keying it:
+   a re-key would write a provider segment nobody generated, copied from the
+   declaration it would later be checked against.
+
+   Read-only. Nothing writes under it: a run always writes `cache-key`."
+  [chunk identity prompt]
   (str (core/sha256-short-hash (:content_markdown chunk)) "-"
-       (core/sha256-short-hash model) "-"
+       (second (identity-segments identity)) "-"
        (core/sha256-short-hash prompt) "-"
        parser-version))
+
+(def declared-identity-resource
+  "The generator that produced the committed warm cache, shipped as DATA beside
+   the archive itself. Not derived from the archive's keys: a key's segments are
+   hashes, and tier 2 must combine the DECLARED provider and model with the
+   LOCAL prompt and parser version, so an installation that changed its prompt
+   MISSES. Deriving by position would couple three segments where two travel."
+  "demo-corpus/phrase-cache-folder-v2.identity.edn")
+
+(defn validate-declared-identity
+  "EXACTLY ONE identity, refused rather than iterated. Every extra generator is
+   another model whose output we would serve, which is a policy decision and not
+   a configuration value - so a list fails here instead of growing the lookup."
+  [declaration]
+  (when-not (map? declaration)
+    (throw (ex-info "the declared phrase-cache identity must be ONE map: a collection of identities is refused, not iterated"
+                    {:resource declared-identity-resource :type (type declaration)})))
+  (when-not (and (:provider declaration) (:model declaration))
+    (throw (ex-info "the declared phrase-cache identity needs :provider and :model"
+                    {:resource declared-identity-resource :declaration (select-keys declaration [:provider :model])})))
+  (select-keys declaration [:provider :model]))
+
+(def declared-identity
+  "The ONE generator whose entries this installation will read but never write
+   (the phrase negative-cache issue option e) - read from `declared-cache-dir`, which no run writes. nil
+   when no declaration ships, which is the normal state for any cache that is
+   not the demo warm cache.
+
+   Serving these entries is a DECLARED acceptance of one curated generator. The
+   alternative is not safety: without it, two installations that happen to share
+   a model name already serve each other's entries silently, with no policy and
+   no record."
+  (memoize
+   (fn []
+     (when-let [r (jio/resource declared-identity-resource)]
+       (validate-declared-identity (edn/read-string (slurp r)))))))
 
 (defn read-cached-phrases
   "Reads cached phrases from file if they exist.
@@ -325,23 +392,23 @@
 
 (defn- response-format-for-provider
   "Return the value to put under `:response_format` in a chat-completion
-   request, scoped to the provider:
+   request, scoped to the provider (`provider/resolve`'s vocabulary):
 
-   - `:lmstudio`     → `json_schema` (the only structured-output mode
-                        LM Studio accepts — it rejects `json_object`
-                        with HTTP 400)
-   - `:azure-openai` → `json_object` (widely supported on Azure gpt-4o)
-   - `:openrouter`   → nil (most compatible — many routed models
-                        don't honor structured-output requests; the
-                        prompt itself instructs the model to emit JSON
-                        and the heuristic parser handles free-form
-                        responses)
-   - default         → nil"
+   - `:azure`             → `json_object` (widely supported on Azure gpt-4o)
+   - `:openai-compatible` → `json_schema`, the only structured-output mode
+                            LM Studio accepts (it rejects `json_object` with
+                            HTTP 400). LM Studio is the only OpenAI-compatible
+                            server this path has been run against, so it
+                            decides (Phase 3 of the provider-resolver change, which folded the old
+                            `:lmstudio` and `:openrouter` arms into this one).
+                            ⚠️ UNTESTED: an OpenRouter-routed model that rejects
+                            structured output would fail here, where the old
+                            `:openrouter` arm sent no `response_format`.
+   - anything else        → nil"
   [provider]
   (case provider
-    :lmstudio     {:type "json_schema" :json_schema json-schema-phrases}
-    :azure-openai {:type "json_object"}
-    :openrouter   nil
+    :openai-compatible {:type "json_schema" :json_schema json-schema-phrases}
+    :azure             {:type "json_object"}
     nil))
 
 (defn- ensure-json-mentioned-when-required
@@ -374,14 +441,15 @@
    `parse-phrases-response` JSON-then-heuristic parser, which handles
    both structured and free-form responses."
   [tenant model prompt chunk-content]
-  (let [rf (response-format-for-provider (resolve-provider tenant))
+  (let [spec (call-spec tenant)
+        rf (response-format-for-provider (:provider spec))
         content (-> prompt
                     (str/replace "REPLACE_ME" chunk-content)
                     (ensure-json-mentioned-when-required rf))
         convo (cond-> {:model model
                        :messages [{:role "user" :content content}]}
                 rf (assoc :response_format rf))]
-    (parse-phrases-response (create-chat-completion tenant convo))))
+    (parse-phrases-response (complete spec convo))))
 
 (defn mk-distill-search-phrases-t
   "Creates a Missionary task that generates search phrases for a chunk.
@@ -392,16 +460,60 @@
    - :search-phrases/fallback-model - fallback if primary fails
    - :search-phrases/prompt - prompt template (REPLACE_ME is replaced with content)
 
-   cache-dir-name is used to create source-specific cache directories
-   (e.g., 'website' -> 'cache/website-search-phrases/')"
+   cache-dir-name names two source-specific directories: `local-cache-dir`,
+   which this reads and writes, and `declared-cache-dir`, which it only reads
+   (e.g., 'website' -> 'cache/website-search-phrases/' and
+   'cache/website-search-phrases-declared/')"
   [{:search-phrases/keys [model fallback-model prompt] :as config} chunk cache-dir-name]
   (m/via m/blk
-         (let [cache-dir (str "cache/" cache-dir-name "-search-phrases/")
-               cache-path (str cache-dir (cache-key chunk model prompt) ".edn")]
+         (let [cache-dir (local-cache-dir cache-dir-name)
+               ;; The identity that will answer, resolved BEFORE the key: the
+               ;; provider decision and the model this call actually sends.
+               ;; `complete` overwrites the caller's `:model` with the
+               ;; provider's own, so `model` above is never on the wire
+               ;; — and both reads here are credential-free, so a cache HIT
+               ;; still works on a tenant whose credentials are missing.
+               call-identity {:provider (provider/selected-provider (:tenant config))
+                              :model (provider/model-for (:tenant config))}
+               cache-path (str cache-dir (cache-key chunk call-identity prompt) ".edn")
+               ;; TIER 2, READ-ONLY: the declared generator's entries, under ITS
+               ;; identity and this installation's prompt and parser version, in
+               ;; ITS OWN DIRECTORY. The key alone cannot keep a write out: an
+               ;; install whose provider and model are NAMED like the declared
+               ;; ones computes this very key. So nothing below writes
+               ;; outside `cache-dir`, and this path is never under it - a local
+               ;; write can never land among the declared entries, whatever the
+               ;; names are. Writing there would stamp our output with somebody
+               ;; else's name, which is the laundering the KUDOS phrase-parser unification refused.
+               ;; The declared directory holds its archive AS SHIPPED, so its
+               ;; keys are in the grammar that archive was built under: the
+               ;; current key, or `main`'s four-segment one (the committed
+               ;; archive). One archive has one shape; both are tried.
+               declared (declared-identity)
+               declared-paths (when declared
+                                (let [dir (declared-cache-dir cache-dir-name)]
+                                  [(str dir (cache-key chunk declared prompt) ".edn")
+                                   (str dir (legacy-cache-key chunk declared prompt) ".edn")]))
+               local-entry (read-cached-phrases cache-path)
+               declared-entry (when (and declared-paths (not (seq local-entry)))
+                                (some read-cached-phrases declared-paths))
+               ;; PRECEDENCE, and the order is the point: a local positive, then
+               ;; the declared positive, then a local negative. A mis-loaded
+               ;; local model is exactly what writes negatives, so serving a
+               ;; local [] ahead of a declared generator's phrases would make
+               ;; the archive stop helping precisely when the model is broken.
+               ;; Tier 2 is POSITIVE-ONLY: "this chunk has no phrases" is a
+               ;; claim about the chunk under a model, and only the local model
+               ;; may make it here.
+               cached-phrases (cond
+                                (seq local-entry) local-entry
+                                (seq declared-entry) declared-entry
+                                (some? local-entry) local-entry
+                                :else nil)]
 
            (ensure-cache-dir! cache-dir)
 
-           (if-let [cached-phrases (read-cached-phrases cache-path)]
+           (if (some? cached-phrases)
              (do
                (t/event! :search-phrases/cache-hit
                          {:data {:chunk_id (:chunk_id chunk)
@@ -413,13 +525,14 @@
                (let [tenant (:tenant config)
                      ;; Effective provider/model — the actual values used by
                      ;; create-chat-completion, which OVERWRITES the caller-
-                     ;; supplied :model with `(resolve-model tenant provider)`.
+                     ;; supplied :model with the provider's default model.
                      ;; Logging only `model` (the pipeline-config arg) was
                      ;; misleading: a timeout from LM Studio surfaced as
                      ;; "failed with gpt-5.4-mini" even though gpt-5.4-mini
-                     ;; was never sent anywhere (2026-05-26).
-                     provider (resolve-provider tenant)
-                     effective-model (resolve-model tenant provider)
+                     ;; was never sent anywhere (2026-05-26). Neither read
+                     ;; touches a credential.
+                     provider (provider/selected-provider tenant)
+                     effective-model (provider/model-for tenant)
                      ;; Chunk context shared by all failure events so an
                      ;; operator can locate the offending source content.
                      chunk-ref {:chunk_id (:chunk_id chunk)

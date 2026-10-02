@@ -30,7 +30,10 @@
   {"services.azure-openai.api-key" "az-key"
    "services.azure-openai.api-endpoint" "https://azure.call-sites.invalid"
    "services.azure-openai.deployment-name" "az-deployment"
-   "services.azure-openai.model-name" "generic-model"})
+   "services.azure-openai.model-name" "generic-model"
+   ;; the openai-compatible branch reads its own credentials now.
+   "services.llm.api-key" "llm-key"
+   "services.llm.api-endpoint" "https://llm.call-sites.invalid"})
 
 (defn- sent
   "Run `f` with the switch at `switch` and both transports stubbed. Returns the

@@ -104,23 +104,36 @@
       (is (= {:model "gpt-5.5" :max_completion_tokens 400} (:sent rec)))
       (is (true? (:normalized? rec))))))
 
-(deftest direct-branch-key-from-the-secret-store-is-recorded-by-presence-only
-  (with-redefs [client/env-num no-env-overrides
-                secrets/get! (fn [k] (when (= k :openai-api-key) secret-key))]
-    (let [[rec] (direct-call {:model "m" :messages messages}
-                             {:api-endpoint "http://localhost:1234/v1"})]
-      (is (true? (:key-present? rec)))
-      (is (= :secret (:key-from rec)))
-      (is (not (str/includes? (pr-str rec) secret-key))))))
+(defn- refused-direct-call
+  "A direct-branch call that must refuse: returns {:posts n :error e :secret-reads n}."
+  [params opts]
+  (let [posts (atom 0) reads (atom 0)]
+    (with-redefs [http/post (fn [_ _] (swap! posts inc) {:body {:choices []}})
+                  secrets/get! (fn [k] (swap! reads inc) (when (= k :openai-api-key) secret-key))]
+      (let [error (try (client/create-chat-completion params opts) nil
+                       (catch clojure.lang.ExceptionInfo e e))]
+        {:posts @posts :error error :secret-reads @reads}))))
 
-(deftest direct-branch-endpoint-provenance-without-opts
+(deftest direct-branch-refuses-a-missing-key-and-never-reads-the-secret-store
+  ;; FLIPPED by the provider-resolver change. Phase 0 recorded a key filled from the
+  ;; OPENAI_API_KEY secret as `:key-from :secret`. The client no longer fills
+  ;; it: a missing key refuses, and the secret store is not consulted at all.
   (with-redefs [client/env-num no-env-overrides]
-    (let [[rec] (direct-call {:model "m" :messages messages} {:api-key "k"})
-          env-endpoint (System/getenv "OPENAI_API_ENDPOINT")]
-      (if env-endpoint
-        (is (= :env (:endpoint-from rec)))
-        (do (is (= :default (:endpoint-from rec)))
-            (is (= "api.openai.com" (:endpoint-host rec))))))))
+    (let [{:keys [posts error secret-reads]} (refused-direct-call {:model "m" :messages messages}
+                                                                  {:api-endpoint "http://localhost:1234/v1"})]
+      (is (zero? posts) "nothing reaches the wire")
+      (is (zero? secret-reads) "the secret store is not read")
+      (is (= [:api-key] (:missing (ex-data error))))
+      (is (not (str/includes? (str (ex-message error)) secret-key))))))
+
+(deftest direct-branch-refuses-a-missing-endpoint-and-never-reads-the-env
+  ;; FLIPPED by the provider-resolver change. Phase 0 recorded an endpoint filled from
+  ;; OPENAI_API_ENDPOINT (`:env`) or the public default (`:default`). The
+  ;; client no longer fills it: a missing endpoint refuses, naming it.
+  (with-redefs [client/env-num no-env-overrides]
+    (let [{:keys [posts error]} (refused-direct-call {:model "m" :messages messages} {:api-key "k"})]
+      (is (zero? posts) "nothing reaches the wire")
+      (is (= [:api-endpoint] (:missing (ex-data error)))))))
 
 ;; =============================================================================
 ;; Blocking, Azure branch
@@ -221,14 +234,21 @@
 ;; an ABSENCE — never as a default like `:config`, or the guard would be green
 ;; exactly when the mechanism it guards has broken.
 
+;; what `provider/resolve` returns now. No `:present?` (a credential
+;; that is not present refuses instead), and the openai-compatible branch
+;; carries its own credentials from `services.llm.*` instead of `:unresolved`.
 (def ^:private tagged-azure-opts
   {:impl :azure :api-key "k" :api-endpoint "https://example.openai.azure.com"
-   :provider/source {:api-key {:from :config :path "services.azure-openai.api-key" :present? true}
-                     :api-endpoint {:from :config :path "services.azure-openai.api-endpoint" :present? true}}})
+   :provider/source {:api-key {:from :config :path "services.azure-openai.api-key"}
+                     :api-endpoint {:from :config :path "services.azure-openai.api-endpoint"}
+                     ;; the model answers from a path too
+                     :model {:from :config :path "services.azure-openai.deployment-name"}}})
 
 (def ^:private tagged-openai-compatible-opts
-  {:impl :openai :api-key nil :api-endpoint nil
-   :provider/source {:api-key {:from :unresolved} :api-endpoint {:from :unresolved}}})
+  {:impl :openai :api-key "llm-key" :api-endpoint "http://llm.provenance.invalid"
+   :provider/source {:api-key {:from :config :path "services.llm.api-key"}
+                     :api-endpoint {:from :config :path "services.llm.api-endpoint"}
+                     :model {:from :config :path "services.llm.model"}}})
 
 (deftest the-source-tag-reaches-the-record-on-every-transport
   (with-redefs [client/env-num no-env-overrides
@@ -237,16 +257,46 @@
       (let [[rec] (azure-call {:model "m" :messages messages} tagged-azure-opts)]
         (is (= :config (:key-source rec)))
         (is (= :config (:endpoint-source rec)))))
-    (testing "blocking direct"
+    (testing "blocking direct (FLIPPED by the provider-resolver change: :unresolved -> :config)"
       (let [[rec] (direct-call {:model "m" :messages messages} tagged-openai-compatible-opts)]
-        (is (= :unresolved (:key-source rec)))
-        (is (= :unresolved (:endpoint-source rec)))))
+        (is (= :config (:key-source rec)))
+        (is (= :config (:endpoint-source rec)))))
     (testing "streaming Azure"
       (let [[rec] (streaming-call {:model "m" :messages messages} tagged-azure-opts)]
         (is (= :config (:key-source rec)))))
-    (testing "streaming direct"
+    (testing "streaming direct (FLIPPED by the provider-resolver change: :unresolved -> :config)"
       (let [[rec] (streaming-call {:model "m" :messages messages} tagged-openai-compatible-opts)]
-        (is (= :unresolved (:key-source rec)))))))
+        (is (= :config (:key-source rec)))))))
+
+(deftest the-record-says-WHICH-model-key-answered
+  ;; Phase 4 of the provider-resolver change. The model reads two paths, so `:from :config` cannot say which
+  ;; one answered - both are config. The record carries the PATH, and `:neither`
+  ;; when no path answered, so a source that names a path is one that decided.
+  (with-redefs [client/env-num no-env-overrides
+                secrets/get! (constantly "s")]
+    (testing "the new key"
+      (let [[rec] (direct-call {:model "m" :messages messages} tagged-openai-compatible-opts)]
+        (is (= "services.llm.model" (:model-source rec)))))
+    (testing "the legacy key"
+      (let [opts (assoc-in tagged-openai-compatible-opts [:provider/source :model]
+                           {:from :config :path "services.azure-openai.model-name"})
+            [rec] (direct-call {:model "m" :messages messages} opts)]
+        (is (= "services.azure-openai.model-name" (:model-source rec)))))
+    (testing "neither: SAID, not guessed"
+      (let [opts (assoc-in tagged-openai-compatible-opts [:provider/source :model] {:from :neither})
+            [rec] (direct-call {:model "m" :messages messages} opts)]
+        (is (= :neither (:model-source rec)))))
+    (testing "a caller that named its model"
+      (let [opts (assoc-in tagged-openai-compatible-opts [:provider/source :model] {:from :caller})
+            [rec] (direct-call {:model "m" :messages messages} opts)]
+        (is (= :caller (:model-source rec)))))
+    (testing "Azure carries its own path"
+      (let [[rec] (azure-call {:model "m" :messages messages} tagged-azure-opts)]
+        (is (= "services.azure-openai.deployment-name" (:model-source rec)))))
+    (testing "a dropped tag reads as :untagged, never as a plausible path"
+      (let [[rec] (direct-call {:model "m" :messages messages}
+                               (update tagged-openai-compatible-opts :provider/source dissoc :model))]
+        (is (= :untagged (:model-source rec)))))))
 
 (deftest a-dropped-tag-reads-as-untagged-never-as-a-default
   (with-redefs [client/env-num no-env-overrides
@@ -272,4 +322,4 @@
                                        (assoc tagged-openai-compatible-opts :api-key "k")))
       (is (string? @!body) "absolute: a body was sent")
       (is (not (str/includes? @!body "provider/source")))
-      (is (not (str/includes? @!body "unresolved"))))))
+      (is (not (str/includes? @!body "services.llm.api-key")) "nor the tag's contents"))))

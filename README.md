@@ -322,15 +322,22 @@ Datahike backends are supported for the bootstrap connection:
   - `JWT_SECRET`
   - `CONFIG_MASTER_KEY` (enables DB-backed config)
 - **Other configuration settings required** — an LLM provider. Which one runs is
-  decided in the config DB by `services.azure-openai.use-azure-openai-api`, and
-  **both paths read that same `services.azure-openai.*` family** — the name is
-  historical, not a scope:
-  - **Azure OpenAI** (`use-azure-openai-api true` — you must SET this; there is
-    no longer a shipped default, and **unset means NOT Azure**) —
-    `AZURE_OPENAI_API_KEY`
-  - **Any OpenAI-compatible server, including a local one** (`false`) —
-    `OPENAI_API_ENDPOINT` *and* `OPENAI_API_KEY`, both read from the
-    environment. This is the **no-cloud-credentials path**: a local server on
+  decided per tenant in the config DB by `services.llm.provider`: `:azure` or
+  `:openai-compatible`. The legacy boolean `services.azure-openai.use-azure-openai-api`
+  is still honoured as its fallback, and `AZURE_OPENAI_USE_AZURE` (the legacy
+  spelling) seeds the new key. **Both paths still take the model name from the
+  `services.azure-openai.*` family**; the name is historical, not a scope.
+  Credentials are read from config, never from the environment: the variables
+  below are **seeding inputs**, written into config by `bb migration-import`,
+  `bb demo-tenant` (also run by `bb setup`) and the E2E boot seed:
+  - **Azure OpenAI** (`:azure` — you must SET this; there is no shipped
+    default, and **unset means NOT Azure**) — `AZURE_OPENAI_API_KEY` →
+    `services.azure-openai.api-key`
+  - **Any OpenAI-compatible server, including a local one**
+    (`:openai-compatible`) — `OPENAI_API_ENDPOINT` *and* `OPENAI_API_KEY` →
+    the tenant's `services.llm.api-endpoint` / `services.llm.api-key` (or set
+    them with `bb setup` / `bb config-set`). A missing one refuses, naming its
+    path. This is the **no-cloud-credentials path**: a local server on
     your own machine runs the whole path — retrieval, the tool-calling agent
     loop, streaming, synthesis. Verified end to end against **LM Studio**;
     Ollama, vLLM and llama.cpp reach the same client code but were not run.

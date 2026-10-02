@@ -12,6 +12,7 @@
             [digdir.config.db :as config-db]
             [digdir.config.env-bridge :as env-bridge]
             [digdir.config.verify :as verify]
+            [digdir.llm.provider :as provider]
             [digdir.secrets :as secrets]
             [taoensso.telemere :as t]))
 
@@ -44,8 +45,16 @@
                                  "services.azure-openai.use-azure-openai-api"]}
       (fn []
         (let [found (verify/unresolved-service-config :db "digdir")]
-          (is (= 5 (count found))
-              "all five required paths are unreachable from the entry node")
+          ;; four, not five - the provider switch left the required
+          ;; list (a presence check of it is the Azure-switch default mismatch at the verifier under read-both).
+          ;; Its shared-vs-default services issue shape is `unreachable-provider-decision`'s job now.
+          ;; three, not four - the MODEL left it for the same
+          ;; reason, and `unresolved-model` reports it through the one read.
+          (is (= 3 (count found))
+              "all three required paths are unreachable from the entry node")
+          (is (not-any? #(= "services.azure-openai.model-name" (:path %)) found)
+              "the model is not presence-checked on a raw path any more")
+          (is (not-any? #(= "services.azure-openai.use-azure-openai-api" (:path %)) found))
           (is (= ["platform/digdir/default"] (distinct (map :entry-node-id found)))
               "and the entry node is named, so the reader knows where it looked")
           (is (= [["platform/digdir/shared"]] (distinct (map :defined-on found)))
@@ -82,7 +91,9 @@
           (is (= ["platform/digdir/shared"]
                  (:defined-on (get by-path "services.typesense.api-host")))
               "on the wrong node")
-          (is (= [] (:defined-on (get by-path "services.azure-openai.model-name")))
+          ;; the model left the required list, so a path that is
+          ;; still on it stands in for "genuinely absent" here.
+          (is (= [] (:defined-on (get by-path "services.typesense.api-key-admin")))
               "genuinely absent"))))))
 
 ;; ---------------------------------------------------------------------------
@@ -252,7 +263,7 @@
                   accessor/get (fn [_ & _] nil)]  ; no default on the runtime read - #500
       (let [found (verify/unsupplied-first-query-config :db "digdir")
             by-path (into {} (map (juxt :path identity)) found)]
-        (is (every? (set (keys by-path)) ["OPENAI_API_ENDPOINT" "OPENAI_API_KEY"])
+        (is (every? (set (keys by-path)) ["services.llm.api-endpoint" "services.llm.api-key"])
             "#500: an UNSET switch reports what the OPENAI-COMPATIBLE path needs,
              because that is the path the runtime actually takes. This asserted the
              AZURE set until the verifier stopped defaulting the switch to true on
@@ -321,7 +332,7 @@
           (is (seq unsupplied) "the supply gap is still reported")
           (is (empty? (filter unreachable-paths (map :path unsupplied)))
               "but no path appears in both lists")
-          (is (contains? (set (map :path unsupplied)) "OPENAI_API_KEY")
+          (is (contains? (set (map :path unsupplied)) "services.llm.api-key")
               "and the LLM key - invisible to the reachability check - is in it"))))))
 
 ;; ---------------------------------------------------------------------------
@@ -356,8 +367,10 @@
         (is (not (contains? paths "services.azure-openai.api-key"))
             "not required when the switch says this install does not use Azure")
         (is (not (contains? paths "services.azure-openai.deployment-name")))
-        (is (contains? paths "services.azure-openai.model-name")
-            "the local path reads model-name instead")
+        ;; FLIPPED by Phase 4 of the provider-resolver change: the local path's model is services.llm.model,
+        ;; with services.azure-openai.model-name as its fallback.
+        (is (contains? paths "services.llm.model")
+            "the local path reads services.llm.model instead")
         (is (contains? paths "services.typesense.api-key-admin")
             "and Typesense is needed either way")))))
 
@@ -386,19 +399,149 @@
         (is (not (contains? paths "services.azure-openai.api-key"))
             "an absent switch must not demand an Azure key the runtime will never use")))))
 
-(deftest the-env-only-half-of-the-local-path-is-checked-in-the-ENVIRONMENT
-  ;; OPENAI_API_ENDPOINT / OPENAI_API_KEY have no config path at all. Looking
-  ;; for them in the config DB would report every install as broken.
-  (with-config {"services.azure-openai.use-azure-openai-api" false}
+(deftest the-local-paths-pair-is-checked-in-CONFIG-not-the-environment
+  ;; Phase 2 of the provider-resolver change INVERTED this test. OPENAI_API_ENDPOINT / OPENAI_API_KEY used
+  ;; to be read per call from the environment, so the check looked there. They
+  ;; are now seeding inputs for `services.llm.*`, which is all the production
+  ;; resolver reads - so the environment no longer answers "is it supplied".
+  (testing "present in the environment but never seeded is NOT supplied"
+    ;; The upgrade state: the variables are in `.env`, nothing wrote them to
+    ;; config, and the first LLM call refuses. Reporting it is the point.
+    (with-config {"services.azure-openai.use-azure-openai-api" false}
+      (fn []
+        (binding [secrets/*env-lookup* {"OPENAI_API_KEY" "set" "OPENAI_API_ENDPOINT" "set"}]
+          (let [by (into {} (map (juxt :path identity))
+                         (verify/unsupplied-first-query-config :db "digdir"))]
+            (is (= "OPENAI_API_KEY" (:env-var (get by "services.llm.api-key")))
+                "reported at its path, naming the variable that seeds it")
+            (is (contains? by "services.llm.api-endpoint")))))))
+
+  (testing "seeded into config is supplied, whatever the environment says"
+    (with-config {"services.azure-openai.use-azure-openai-api" false
+                  "services.llm.api-key" "set"
+                  "services.llm.api-endpoint" "set"}
+      (fn []
+        (binding [secrets/*env-lookup* (constantly nil)]
+          (let [paths (set (map :path (verify/unsupplied-first-query-config :db "digdir")))]
+            (is (not (contains? paths "services.llm.api-key")))
+            (is (not (contains? paths "services.llm.api-endpoint")))))))))
+
+;; ---------------------------------------------------------------------------
+;; the provider decision under read-both
+;; ---------------------------------------------------------------------------
+
+(deftest an-unset-provider-decision-is-not-reported-as-unresolved
+  ;; Unset is the legitimate local path, and a presence check of either raw
+  ;; path would disagree with the runtime for a tenant configured the legacy
+  ;; way (the Azure-switch default mismatch at the verifier). The contradictory case is provider_switch's.
+  (with-tree [(node "platform/digdir/default" "default")] {}
     (fn []
-      (binding [secrets/*env-lookup* (constantly nil)]
-        (let [by (into {} (map (juxt :path identity))
-                       (verify/unsupplied-first-query-config :db "digdir"))]
-          (is (= "OPENAI_API_KEY" (:env-var (get by "OPENAI_API_KEY")))
-              "reported under its variable name, since it has no path")
-          (is (contains? by "OPENAI_API_ENDPOINT"))))
-      (binding [secrets/*env-lookup* {"OPENAI_API_KEY" "set" "OPENAI_API_ENDPOINT" "set"}]
-        (let [paths (set (map :path (verify/unsupplied-first-query-config :db "digdir")))]
-          (is (not (contains? paths "OPENAI_API_KEY"))
-              "supplied in the environment is supplied")
-          (is (not (contains? paths "OPENAI_API_ENDPOINT"))))))))
+      (is (not-any? #(#{"services.azure-openai.use-azure-openai-api" "services.llm.provider"} (:path %))
+                    (verify/unresolved-service-config :db "digdir"))))))
+
+(deftest a-provider-decision-set-where-the-runtime-cannot-see-it-is-reported
+  ;; The shared-vs-default services issue's shape for the decision: the runtime sees none, and a value for one
+  ;; of its paths sits on a node it never enters.
+  (with-tree [(node "platform/digdir/default" "default")
+              (node "platform/digdir/shared" "shared" "platform/digdir/default")]
+    {"platform/digdir/shared" ["services.llm.provider"]}
+    (fn []
+      (testing "no decision reaches the runtime: reported, naming where the value is"
+        (with-redefs [provider/configured-provider (constantly nil)]
+          (let [found (verify/unreachable-provider-decision :db "digdir")]
+            (is (= ["services.llm.provider"] (mapv :path found)))
+            (is (= [["platform/digdir/shared"]] (mapv :defined-on found)))
+            (is (= "AZURE_OPENAI_USE_AZURE" (:env-var (first found)))))))
+      (testing "the runtime DOES see a decision: nothing to add"
+        (with-redefs [provider/configured-provider (constantly :azure)]
+          (is (= [] (verify/unreachable-provider-decision :db "digdir")))))
+      (testing "a decision that cannot be read: the check declines to answer"
+        (with-redefs [provider/configured-provider (fn [_] (throw (ex-info "unreadable" {})))]
+          (is (= [] (verify/unreachable-provider-decision :db "digdir"))))))))
+
+(deftest a-provider-value-on-a-reachable-node-is-not-called-unreachable
+  ;; A value the runtime CAN see that still reads as no decision is blank -
+  ;; unset - and is not "set where it cannot be seen".
+  (with-tree [(node "platform/digdir/default" "default")]
+    {"platform/digdir/default" ["services.llm.provider"]}
+    (fn []
+      (with-redefs [provider/configured-provider (constantly nil)]
+        (is (= [] (verify/unreachable-provider-decision :db "digdir")))))))
+
+;; ---------------------------------------------------------------------------
+;; the MODEL under read-both
+;; ---------------------------------------------------------------------------
+;;
+;; The same move this namespace already made for the provider decision, for the
+;; same reason, in its own words: a presence check of either raw path "would
+;; report it unconfigured while the runtime routes it fine, which is the Azure-switch default mismatch at the
+;; verifier". So `services.azure-openai.model-name` LEFT
+;; `runtime-required-service-paths`, and the model is reported through the one
+;; read instead.
+;;
+;; The new entry points are resolved dynamically on purpose: `with-redefs` on a
+;; symbol that does not exist yet is a COMPILE error, which would stop this
+;; whole namespace loading — and a namespace that never loads reports green.
+
+(defn- model-fns
+  "[configured-model-var unresolved-model-fn], either possibly nil."
+  []
+  [(ns-resolve 'digdir.llm.provider 'configured-model)
+   (some-> (ns-resolve 'digdir.config.verify 'unresolved-model) deref)])
+
+(deftest the-legacy-model-path-left-the-presence-check
+  (is (not-any? #(= ["services" "azure-openai" "model-name"] %) verify/runtime-required-service-paths)
+      "a raw presence check of the legacy path reports a migrated tenant unconfigured")
+  (is (some #(= ["services" "typesense" "api-host"] %) verify/runtime-required-service-paths)
+      "POSITIVE CONTROL: the list still holds the paths that have no read-both"))
+
+(deftest a-migrated-model-is-not-reported-unresolved
+  ;; The value moved to services.llm.model, and the runtime routes on it.
+  (with-tree [(node "platform/digdir/default" "default")]
+    {"platform/digdir/default" ["services.llm.model"]}
+    (fn []
+      (let [[var-cm unresolved] (model-fns)]
+        (is (some? var-cm) "digdir.llm.provider/configured-model does not exist")
+        (is (some? unresolved) "digdir.config.verify/unresolved-model does not exist")
+        (is (not-any? #(#{"services.llm.model" "services.azure-openai.model-name"} (:path %))
+                      (verify/unresolved-service-config :db "digdir"))
+            "the raw presence check no longer asks about either path")
+        (when (and var-cm unresolved)
+          (with-redefs-fn {var-cm (constantly "a-model")}
+            (fn [] (is (= [] (unresolved :db "digdir"))
+                       "the runtime sees a model: nothing to report"))))))))
+
+(deftest no-model-anywhere-is-reported-and-names-the-path-to-SET
+  ;; Today's coverage, kept: an openai-compatible tenant with no model at all was
+  ;; reported when the legacy path was presence-checked. It still is - through the
+  ;; one read - and the finding names the NEW path, which is the one to set now.
+  (with-tree [(node "platform/digdir/default" "default")] {}
+    (fn []
+      (let [[var-cm unresolved] (model-fns)]
+        (when (and var-cm unresolved)
+          (with-redefs-fn {var-cm (constantly nil)}
+            (fn []
+              (let [found (unresolved :db "digdir")]
+                (is (= ["services.llm.model"] (mapv :path found)))
+                (is (= [[]] (mapv :defined-on found)) "genuinely absent, and it says so")
+                (is (= "AZURE_OPENAI_MODEL_NAME" (:env-var (first found)))
+                    "the variable that seeds it, from the bridge")))))))))
+
+(deftest a-model-set-where-the-runtime-cannot-see-it-names-that-node
+  ;; The shared-vs-default services issue's shape for the model: no model reaches the runtime, and a value for
+  ;; one of the two paths sits on a node the runtime never enters.
+  (with-tree [(node "platform/digdir/default" "default")
+              (node "platform/digdir/shared" "shared" "platform/digdir/default")]
+    {"platform/digdir/shared" ["services.azure-openai.model-name"]}
+    (fn []
+      (let [[var-cm unresolved] (model-fns)]
+        (when (and var-cm unresolved)
+          (testing "reported, naming where the value actually is"
+            (with-redefs-fn {var-cm (constantly nil)}
+              (fn []
+                (let [found (unresolved :db "digdir")]
+                  (is (= ["services.llm.model"] (mapv :path found)))
+                  (is (= [["platform/digdir/shared"]] (mapv :defined-on found)))))))
+          (testing "a model that cannot be read: the check declines to answer"
+            (with-redefs-fn {var-cm (fn [_] (throw (ex-info "unreadable" {})))}
+              (fn [] (is (= [] (unresolved :db "digdir")))))))))))

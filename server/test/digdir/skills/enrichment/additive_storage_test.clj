@@ -205,6 +205,10 @@
                                             "Hvordan fungerer Dialogporten?")}}]})
       cfg/get (fn [_opts# & ks#]
                 (case (vec ks#)
+                  ;; enrichment follows the provider decision, and
+                  ;; unset means NOT Azure - so the Azure choice is stated, not
+                  ;; left to enrichment's old Azure default.
+                  [:services :llm :provider] :azure
                   [:services :azure-openai :api-key] "test-key"
                   [:services :azure-openai :api-endpoint] "https://fake.test"
                   [:services :azure-openai :deployment-name] "test-deployment"

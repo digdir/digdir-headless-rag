@@ -56,8 +56,9 @@
        ;; is a refusal.
        (log/info (str "Required boot environment: "
                       (pr-str (required-env/check!))))
-       ;; Unpack the committed warm phrase cache, if the volume is empty
-       ;; (yardarm-warmcache). After the secret check because it is an
+       ;; Unpack the committed warm phrase cache into its own directory, if
+       ;; that is empty (yardarm-warmcache; the provider-aware phrase-cache key moved it out of the
+       ;; directory runs write). After the secret check because it is an
        ;; optimisation and that is a refusal; before the seed and the server
        ;; because materialisation reads the directory it fills. Cannot fail the
        ;; boot: every path returns a map and is logged.

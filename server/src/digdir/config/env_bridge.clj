@@ -76,8 +76,11 @@
                                     introduced to describe.
                      :bootstrap   — needed BEFORE the config DB can be read, so
                                     it has no path by construction.
-     :value-type   :string or :boolean — matches the config definition's own
-                   value-type, and drives coercion of the env var's string.
+     :value-type   :string, :boolean, or :provider-switch — matches the config
+                   definition's own value-type, and drives coercion of the env
+                   var's string. :provider-switch reads a boolean string as a
+                   provider choice (true -> :azure, else :openai-compatible) for
+                   the legacy AZURE_OPENAI_USE_AZURE spelling.
      :tier         :boot (the server refuses to start without it), :query (it
                    boots, but a real query needs it) or :optional. The same
                    three groups `.env.example` already uses. `:boot` is
@@ -159,17 +162,20 @@
     :destination :config-db :value-type :string :tier :query :secret? false
     :what "Deployment name to call."}
 
-   {:env-var "AZURE_OPENAI_MODEL_NAME" :path "services.azure-openai.model-name" :service :azure-openai :provider :openai-compatible
+   {:env-var "AZURE_OPENAI_MODEL_NAME" :path "services.llm.model" :service :azure-openai :provider :openai-compatible
     :destination :config-db :value-type :string :tier :query :secret? false
-    :what "Model name sent in the request body."}
+    :what "The model name for the OpenAI-compatible provider. Seeds services.llm.model (Phase 4 of the provider-resolver change; the variable name is the legacy spelling). services.azure-openai.model-name is still read as the fallback until its values are migrated."}
 
    {:env-var "AZURE_OPENAI_API_VERSION" :path "services.azure-openai.api-version" :service :azure-openai :provider :azure
     :destination :config-db :value-type :string :tier :query :secret? false
     :what "Azure OpenAI API version."}
 
-   {:env-var "AZURE_OPENAI_USE_AZURE" :path "services.azure-openai.use-azure-openai-api" :service :azure-openai
-    :destination :config-db :value-type :boolean :tier :query :secret? false
-    :what "Whether to use the Azure API shape rather than the OpenAI one."}
+   ;; LEGACY SPELLING of a provider choice: despite the name, this
+   ;; seeds `services.llm.provider` - true -> :azure, false -> :openai-compatible.
+   ;; The boolean it used to write is now only the resolver's fallback.
+   {:env-var "AZURE_OPENAI_USE_AZURE" :path "services.llm.provider" :service :azure-openai
+    :destination :config-db :value-type :provider-switch :tier :query :secret? false
+    :what "The provider: true for Azure, false for an OpenAI-compatible server. Seeds services.llm.provider (the variable name is the legacy spelling)."}
 
    ;; --- Optional services ---------------------------------------------------
    {:env-var "COLBERT_API_URL" :path "services.colbert.api-url" :service :colbert
@@ -179,22 +185,6 @@
    {:env-var "COLBERT_API_KEY" :path "services.colbert.api-key" :service :colbert
     :destination :config-db :value-type :string :tier :optional :secret? true
     :what "ColBERT reranking service API key."}
-
-   {:env-var "LMSTUDIO_API_ENDPOINT" :path "services.lmstudio.api-endpoint" :service :lmstudio
-    :destination :config-db :value-type :string :tier :optional :secret? false
-    :what "Base URL of a local OpenAI-compatible endpoint, e.g. http://localhost:1234."}
-
-   {:env-var "LMSTUDIO_API_KEY" :path "services.lmstudio.api-key" :service :lmstudio
-    :destination :config-db :value-type :string :tier :optional :secret? true
-    :what "Key for that endpoint. LM Studio accepts any non-empty string."}
-
-   {:env-var "LMSTUDIO_MODEL" :path "services.lmstudio.model" :service :lmstudio
-    :destination :config-db :value-type :string :tier :optional :secret? false
-    :what "Model name to send to that endpoint."}
-
-   {:env-var "OPENROUTER_API_KEY" :path "services.openrouter.api-key" :service :openrouter
-    :destination :config-db :value-type :string :tier :optional :secret? true
-    :what "OpenRouter API key."}
 
    {:env-var "MARKER_API_URL" :path "services.marker.api-url" :service :marker
     :destination :config-db :value-type :string :tier :optional :secret? true
@@ -208,20 +198,21 @@
     :destination :config-db :value-type :string :tier :optional :secret? true
     :what "Scaleway Transactional Email key. Only outbound email needs it."}
 
-   ;; The half of the local-model path that NO config write can reach:
-   ;; `digdir.llm.client` reads these from the environment on every call, and
-   ;; there is no `services.openai.*` definition anywhere for a value to live
-   ;; at - so unlike the two rows above there is not even an ignored config
-   ;; path to name. They are here so the one table stays the whole answer to
-   ;; "what does this system read from the environment", which is what lets
-   ;; the setup checklist be derived rather than kept in parallel. (#314)
-   {:env-var "OPENAI_API_ENDPOINT" :path nil :service :openai-compatible :provider :openai-compatible
-    :destination :environment :tier :optional :secret? false
-    :what "Base URL of an OpenAI-compatible endpoint, read per call from the environment."}
+   ;; The OpenAI-compatible path's endpoint and key. Until Phase 2 of the provider-resolver change these
+   ;; were read per call from the environment, a process-global second
+   ;; door beside the per-tenant config every other credential uses. They are
+   ;; now SEEDING inputs like the Azure rows above: the bridge writes them to
+   ;; `services.llm.*` and the production resolver reads them from there. The
+   ;; environment is read directly only by the src-dev sweep (a per-run knob
+   ;; that travels as a pair); Phase 3 of the provider-resolver change deleted search-phrases' `:lmstudio`
+   ;; arm, the last production reader.
+   {:env-var "OPENAI_API_ENDPOINT" :path "services.llm.api-endpoint" :service :openai-compatible :provider :openai-compatible
+    :destination :config-db :value-type :string :tier :optional :secret? false
+    :what "Base URL of an OpenAI-compatible endpoint."}
 
-   {:env-var "OPENAI_API_KEY" :path nil :service :openai-compatible :provider :openai-compatible
-    :destination :environment :tier :optional :secret? true
-    :what "Key for that endpoint, read per call from the environment. Must be non-empty even for a server that ignores it."}
+   {:env-var "OPENAI_API_KEY" :path "services.llm.api-key" :service :openai-compatible :provider :openai-compatible
+    :destination :config-db :value-type :string :tier :optional :secret? true
+    :what "Key for that endpoint. Must be non-empty even for a server that ignores it."}
 
    {:env-var "ADMIN_USER_EMAILS" :path "services.auth.admin-user-emails" :service :auth
     :destination :environment :tier :optional :secret? false
@@ -254,7 +245,7 @@
    Deliberately not the same set as
    `digdir.config.verify/runtime-required-service-paths`, and the difference is
    the point. That list answers a reachability question - can the runtime SEE
-   its own config - and holds the five paths read with a tenant and no
+   its own config - and holds the four paths read with a tenant and no
    tenant-config-key. This one answers a supply question: what must a NEWCOMER
    provide. `services.azure-openai.api-key` is the clearest divergence: it is
    not on the reachability list, it ships no value since #279, and without it
@@ -262,13 +253,13 @@
    a clean bill of health to an install that cannot answer a question.
 
    `wanted-provider` is :azure, :openai-compatible, or :any for the union. It
-   matters because ONE family of settings drives both paths, with
-   `services.azure-openai.use-azure-openai-api` as the switch - read at the
-   call sites in `digdir.skills.builtin.agent.loop` and `digdir.sweep.judge`:
+   matters because ONE decision drives both paths - `digdir.llm.provider`,
+   reading `services.llm.provider` with the legacy boolean as its fallback:
 
-     true  -> api-key, api-endpoint and deployment-name, from config
-     false -> model-name from config, and the endpoint and key from
-              OPENAI_API_ENDPOINT / OPENAI_API_KEY in the environment
+     :azure             -> api-key, api-endpoint and deployment-name, from config
+     :openai-compatible -> model-name from config, and the endpoint and key from
+                           `services.llm.*`, seeded from OPENAI_API_ENDPOINT /
+                           OPENAI_API_KEY
 
    Ignoring the switch would demand an AZURE_OPENAI_API_KEY from someone who
    deliberately chose the local path and must not set one. A checklist that
@@ -293,9 +284,8 @@
    variable name they will search for and never find."
   [path]
   ;; `some?` guards the rows that have no config path at all (the bootstrap
-  ;; secrets, and the OPENAI_* pair the client reads per call). Without it a
-  ;; nil argument would match the first of them and confidently name the wrong
-  ;; variable.
+  ;; secrets and the database pointer). Without it a nil argument would match
+  ;; the first of them and confidently name the wrong variable.
   (when (some? path)
     (first (filter #(= path (:path %)) env-config-bindings))))
 
@@ -312,11 +302,11 @@
 
 (defn- binding-for-id
   "The binding a FINDING identifies. Findings key on the config path where
-   there is one and on the variable name where there is not - the OPENAI_*
-   pair has no config path at all - so both have to resolve here. Looking up
-   only by path told a reader that OPENAI_API_ENDPOINT was supplied by no
-   environment variable and should be set with `bb config-set`, which is wrong
-   in both halves of one sentence."
+   there is one and on the variable name where there is not, so both have to
+   resolve here. Looking up only by path once told a reader that
+   OPENAI_API_ENDPOINT - pathless until Phase 2 of the provider-resolver change - was supplied by no
+   environment variable and should be set with `bb config-set`, which was
+   wrong in both halves of one sentence."
   [id]
   (or (binding-for-path id) (binding-for-env-var id)))
 
@@ -439,8 +429,9 @@
    transcription accident and produces an authentication failure one layer
    away from its cause."
   [{:keys [value-type]} raw]
-  (if (= :boolean value-type)
-    (parse-bool raw)
+  (case value-type
+    :boolean (parse-bool raw)
+    :provider-switch (if (parse-bool raw) :azure :openai-compatible)
     (str/trim raw)))
 
 (defn env-var-present?
@@ -473,7 +464,8 @@
     (cond
       (nil? env-var)
       (str id " — no environment variable supplies this; set it with "
-           "`bb config-set " id " <value> <tenant> platform default`")
+           "`bb config-set " id " <edn-value> <tenant> platform default` "
+           "(a text value keeps its quotes: '\"text\"')")
 
       (= :environment destination)
       (str env-var " — " what)
@@ -488,9 +480,9 @@
    already sorted boot → query → optional."
   [ids]
   (let [wanted (set ids)
-        ;; A binding is matched by EITHER key, so the OPENAI_* rows - which
-        ;; have no path - keep their place in the table order instead of being
-        ;; swept into the unknown tail.
+        ;; A binding is matched by EITHER key, so a pathless row identified by
+        ;; its variable name keeps its place in the table order instead of
+        ;; being swept into the unknown tail.
         known (->> env-config-bindings
                    (keep (fn [b] (first (filter wanted [(:path b) (:env-var b)]))))
                    distinct)
