@@ -39,6 +39,7 @@
             [clojure.edn :as edn]
             [clojure.string :as str]
             [digdir.llm.model-params :as model-params]
+            [digdir.llm.provenance :as provenance]
             [digdir.secrets :as secrets]
             [taoensso.telemere :as t]
             [wkok.openai-clojure.api :as wkok]))
@@ -101,25 +102,32 @@
    `OPENAI_DISABLE_THINKING=true` appends a closed-`<think>` assistant turn to force
    non-thinking mode on models where the `enable_thinking` flag is a no-op (Qwen3.6
    GGUF in LM Studio) — single-turn callers only (e.g. the judge), not the agent."
-  [params {:keys [api-key api-endpoint]}]
-  (let [endpoint (or api-endpoint
-                     (System/getenv "OPENAI_API_ENDPOINT")
-                     default-openai-endpoint)
+  [params {:keys [api-key api-endpoint] :as opts}]
+  (let [env-endpoint (System/getenv "OPENAI_API_ENDPOINT")
+        endpoint (or api-endpoint env-endpoint default-openai-endpoint)
+        opt-key? (some? api-key)
         ;; Was `(System/getenv "OPENAI_API_KEY")`, which yielded nil when unset
         ;; and sent a keyless request — the provider then failed to authenticate,
         ;; one layer away from the actual cause. Now it fails here, naming the
         ;; secret (#22). An explicit `:api-key` in opts still wins.
         api-key  (or api-key (secrets/get! :openai-api-key))
         effort   (System/getenv "OPENAI_REASONING_EFFORT")
-        body     (cond-> (merge params (env-inference-overrides))
-                   (env-flag? "OPENAI_DISABLE_THINKING")
+        overrides (env-inference-overrides)
+        disable-thinking? (env-flag? "OPENAI_DISABLE_THINKING")
+        preserve-thinking? (env-flag? "OPENAI_PRESERVE_THINKING")
+        thinking-off? (= "false" (some-> (System/getenv "OPENAI_ENABLE_THINKING")
+                                         str/trim str/lower-case))
+        inject-effort? (and effort
+                            (not (contains? params :reasoning_effort)))
+        merged   (cond-> (merge params overrides)
+                   disable-thinking?
                    (update :messages (fnil conj []) no-think-prefill)
                    ;; `OPENAI_PRESERVE_THINKING=true` keeps prior-turn reasoning in
                    ;; context across the multi-turn agent loop (Qwen3.6 card: improves
                    ;; decision consistency + reduces redundant reasoning). Merged into
                    ;; `chat_template_kwargs` so a caller-supplied map isn't clobbered,
                    ;; and the client passes it through verbatim (never strips it).
-                   (env-flag? "OPENAI_PRESERVE_THINKING")
+                   preserve-thinking?
                    (update :chat_template_kwargs (fnil assoc {}) :preserve_thinking true)
                    ;; `OPENAI_ENABLE_THINKING=false` turns OFF the model's reasoning
                    ;; channel for the multi-turn agent loop by setting `enable_thinking`
@@ -129,17 +137,32 @@
                    ;; the bandwidth-bound dense arms tractable on GB10 (thinking generates
                    ;; ~2000 tok/call at ~8 tok/s) — applied to ALL arms for a controlled
                    ;; non-thinking comparison.
-                   (= "false" (some-> (System/getenv "OPENAI_ENABLE_THINKING")
-                                      str/trim str/lower-case))
+                   thinking-off?
                    (update :chat_template_kwargs (fnil assoc {}) :enable_thinking false)
-                   (and effort
-                        (not (contains? params :reasoning_effort)))
-                   (assoc :reasoning_effort effort)
-                   ;; Last step: rename/drop params the target model family
-                   ;; rejects (GPT-5 wants `max_completion_tokens`, not
-                   ;; `max_tokens`). Runs AFTER the env merge above so an
-                   ;; `OPENAI_MAX_TOKENS`-injected cap is normalized too.
-                   :always model-params/normalize-request)]
+                   inject-effort?
+                   (assoc :reasoning_effort effort))
+        ;; Last step: rename/drop params the target model family
+        ;; rejects (GPT-5 wants `max_completion_tokens`, not
+        ;; `max_tokens`). Runs AFTER the env merge above so an
+        ;; `OPENAI_MAX_TOKENS`-injected cap is normalized too.
+        body     (model-params/normalize-request merged)]
+    (provenance/record-call!
+     {:path :blocking
+      :branch :openai
+      :endpoint endpoint
+      :endpoint-from (cond api-endpoint :opts env-endpoint :env :else :default)
+      :endpoint-rederived? false
+      :key-present? (not (str/blank? api-key))
+      :key-from (if opt-key? :opts :secret)
+      :key-rederived? false
+      :caller params
+      :pre-normalize merged
+      :sent body
+      :source (:provider/source opts)
+      :env-applied (cond-> (set (keys overrides))
+                     disable-thinking? (conj :messages)
+                     (or preserve-thinking? thinking-off?) (conj :chat_template_kwargs)
+                     inject-effort? (conj :reasoning_effort))})
     (:body (http/post (str endpoint "/chat/completions")
                       (cond-> {:content-type :json
                                :body (json/encode body)
@@ -322,5 +345,11 @@
        {:model (:model params) :impl (or (:impl opts) :openai)}
        (fn []
          (if (= :azure (:impl opts))
-           (wkok/create-chat-completion (model-params/normalize-request params) opts)
+           (let [sent (model-params/normalize-request params)]
+             (provenance/record-call!
+              (merge (provenance/wkok-destination :azure opts)
+                     {:path :blocking :branch :azure
+                      :caller params :sent sent :env-applied #{}
+                      :source (:provider/source opts)}))
+             (wkok/create-chat-completion sent opts))
            (openai-compat-completion params opts)))))))

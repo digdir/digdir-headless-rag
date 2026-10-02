@@ -33,13 +33,19 @@
 (defn- with-config
   "Run `f` with platform resolution stubbed to `tenant->path->value`.
 
-   Stubs `accessor/get-platform-value`, which is the function the production
-   code calls and the same one the RUNTIME resolves this switch through — a stub
-   on a different door would prove nothing about this one."
+   Stubs the two doors the production code reads through: the credentials via
+   `accessor/get-platform-value`, and the switch via `accessor/get` — which is
+   what `digdir.llm.provider/switch-value`, the ONE read of the switch that the
+   runtime routes by too, calls. A stub on a different door would prove
+   nothing about this one."
   [tenant->path->value f]
-  (with-redefs [accessor/get-platform-value
-                (fn [path {:keys [tenant]}] (get-in tenant->path->value [tenant path]))]
-    (f)))
+  (let [lookup (fn [tenant path] (get-in tenant->path->value [tenant path]))]
+    (with-redefs [accessor/get-platform-value
+                  (fn [path {:keys [tenant]}] (lookup tenant path))
+                  accessor/get
+                  (fn [{:keys [tenant]} & parts]
+                    (lookup tenant (str/join "." (map name parts))))]
+      (f))))
 
 (def ^:private azure-credentials
   {key-path "a-key" endpoint-path "https://example.invalid" deployment-path "a-deployment"})

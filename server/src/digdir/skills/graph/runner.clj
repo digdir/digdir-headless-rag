@@ -8,6 +8,7 @@
    4. Collecting outputs"
   (:require [digdir.skills.graph.schema :as schema]
             [digdir.skills.graph.trace :as graph-trace]
+            [digdir.llm.provenance :as provenance]
             [digdir.skills.templates.core :as templates]
             [digdir.rag.skills.core :as skills]
             [digdir.skills.context :as ctx]
@@ -136,19 +137,92 @@
 ;; Step Execution
 ;; =============================================================================
 
+(def ^:private traced-llm-params
+  "Traced for every step whether or not any layer sets them: the parameters a
+   skill's own fallback supplies when no layer does — the provider default
+   model, the skill's default temperature."
+  [:model :temperature :max-tokens])
+
+(defn resolve-step-parameters-with-trace
+  "Resolve parameters for a step, recording which layer supplied each one.
+
+   Returns:
+   {:value <exactly what `resolve-step-parameters` returns>
+    :trace {param {:winning-layer layer-or-nil
+                   :layers        [every layer containing param, low → high]}}}
+
+   Layers, low → high precedence (the order of the merge):
+     :graph-step              — the step's own `:parameters`
+     :skill-params/common     — `:model :temperature :max-tokens :prompt` of skill-params
+     :skill-params/per-skill  — skill-params under the step's skill id
+     :execution-override      — the same four keys on execution-opts
+
+   The winner is the highest layer that CONTAINS the key, exactly as `merge`
+   decides it — so an explicit nil wins, and the skill's own fallback then
+   supplies the value below the runner. `traced-llm-params` are always
+   traced; `:winning-layer nil` means no layer set it. The trace carries layer
+   names only, never values (prompts are large)."
+  [step execution-opts]
+  (let [skill-params (:skill-params execution-opts)
+        layers [[:graph-step (:parameters step)]
+                [:skill-params/common (select-keys skill-params [:model :temperature :max-tokens :prompt])]
+                [:skill-params/per-skill (get skill-params (:skill step))]
+                [:execution-override (select-keys execution-opts [:model :temperature :max-tokens :prompt])]]
+        value (apply merge (map second layers))]
+    {:value value
+     :trace (into {}
+                  (for [k (distinct (concat traced-llm-params (keys value)))
+                        :let [present (into [] (keep (fn [[layer params]]
+                                                       (when (contains? params k) layer)))
+                                            layers)]]
+                    [k {:winning-layer (peek present) :layers present}]))}))
+
 (defn resolve-step-parameters
   "Resolve parameters for a step from skill graph defaults, skill params, and execution overrides."
   [step execution-opts]
-  (let [skill-id (:skill step)
-        skill-params (:skill-params execution-opts)
-        common-params (select-keys skill-params [:model :temperature :max-tokens :prompt])
-        per-skill-params (get skill-params skill-id)
-        execution-overrides (select-keys execution-opts [:model :temperature :max-tokens :prompt])]
-    (merge
-      (:parameters step)
-      common-params
-      per-skill-params
-      execution-overrides)))
+  (:value (resolve-step-parameters-with-trace step execution-opts)))
+
+(defn- index-calls
+  "Number the :llm-call events of one step 0, 1, 2 … in the order they were
+   made, leaving other events untouched. With a stubbed LLM the order is
+   deterministic, so `(step-id, :call-index)` identifies a call across runs."
+  [events]
+  (first (reduce (fn [[acc n] e]
+                   (if (= :llm-call (:event e))
+                     [(conj acc (assoc e :call-index n)) (inc n)]
+                     [(conj acc e) n]))
+                 [[] 0]
+                 events)))
+
+(defn- provenance-trace-section
+  "The run's per-step provenance record as a trace-file section: one EDN line
+   per event, prefixed with its step id — for reading and grep. The data
+   itself reaches a caller only through `report-graph-provenance!`."
+  [llm-provenance]
+  {:title "LLM PROVENANCE"
+   :lines (for [[step-id step-events] llm-provenance
+                e step-events]
+            (str step-id " " (pr-str e)))})
+
+(defn- report-graph-provenance!
+  "Hand this run's per-step record UP to whoever is capturing around it, as
+   one `:graph` event.
+
+   Deliberately NOT on the returned result: `:execution-metadata` is
+   forwarded wholesale to MCP clients (`mcp/tools.clj`) and persisted with the
+   message, so a record carrying endpoint hosts must not ride on it.
+
+   Reporting up rather than returning is also what makes NESTED runs visible:
+   a sub-graph step, and the agent skill's own internal graph
+   (`agent/core.clj`), both call `run-graph` from inside a step and keep only
+   what they need of its result. Without this their calls would be captured
+   by the inner run and dropped. With it, a nested run's record lands under
+   the step that ran it, through whichever door it was reached."
+  [graph status llm-provenance]
+  (provenance/record! {:event :graph
+                       :graph-id (:id graph)
+                       :status status
+                       :child llm-provenance}))
 
 (defn- skill-id->stage
   [skill-id]
@@ -198,7 +272,11 @@
    Returns: Skill execution result"
   [step resolved-inputs execution-opts]
   (let [skill-id (:skill step)
-        parameters (resolve-step-parameters step execution-opts)
+        {parameters :value parameter-trace :trace} (resolve-step-parameters-with-trace step execution-opts)
+        _ (provenance/record! {:event :parameters
+                               :skill-id skill-id
+                               :value (select-keys parameters traced-llm-params)
+                               :trace parameter-trace})
         ctx (ctx/build-execution-context
               skill-id
               resolved-inputs
@@ -703,25 +781,28 @@
                            {}
                            (keys step-outputs)))
         suppress-trace? (::suppress-graph-trace? opts)
-        emit-trace! (fn [status step-outputs step-timings duration-ms error]
+        emit-trace! (fn [status step-outputs step-timings duration-ms error llm-provenance]
                       (when-not suppress-trace?
                         (graph-trace/write-trace-file!
-                         {:graph-id (:id graph)
-                          :inputs inputs
-                          :opts opts
-                          :run-status status
-                          :duration-ms duration-ms
-                          :step-defs (:steps graph)
-                          :step-timings step-timings
-                          :step-results step-outputs
-                          :outputs (collect-outputs step-outputs)
-                          :error error})))]
+                         (cond-> {:graph-id (:id graph)
+                                  :inputs inputs
+                                  :opts opts
+                                  :run-status status
+                                  :duration-ms duration-ms
+                                  :step-defs (:steps graph)
+                                  :step-timings step-timings
+                                  :step-results step-outputs
+                                  :outputs (collect-outputs step-outputs)
+                                  :error error}
+                           (seq llm-provenance)
+                           (assoc :extra-sections [(provenance-trace-section llm-provenance)])))))]
 
     ;; Execute steps in order
     (loop [remaining execution-order
            step-outputs {}
            step-timings {}
-           stage-timings []]
+           stage-timings []
+           llm-provenance {}]
       (if (empty? remaining)
         ;; Collect final outputs
         (let [graph-end (System/currentTimeMillis)
@@ -730,7 +811,8 @@
           (events/emit-progress! progress-fn
                                  (events/graph-completed (count execution-order)
                                                          total-duration))
-          (emit-trace! :ok step-outputs step-timings total-duration nil)
+          (emit-trace! :ok step-outputs step-timings total-duration nil llm-provenance)
+          (report-graph-provenance! graph :ok llm-provenance)
           {:outputs final-outputs
            :step-results step-outputs
            :execution-metadata {:total-duration-ms total-duration
@@ -750,7 +832,8 @@
                      (assoc step-outputs step-id
                             (skills/success-result {} {:skipped true}))
                      (assoc step-timings step-id (build-step-timing step-id step 0 :skipped))
-                     (conj stage-timings (build-step-timing step-id step 0 :skipped))))
+                     (conj stage-timings (build-step-timing step-id step 0 :skipped))
+                     llm-provenance))
 
             ;; Execute step (regular, foreach, sub-graph, loop, select, or dispatch-by-name)
             (let [foreach? (schema/foreach-step? step)
@@ -774,26 +857,33 @@
                                                   {}
                                                   inputs-decl))
                                     :else (resolve-step-inputs step inputs step-outputs))
-                  result (cond
-                           foreach?
-                           (let [over-ref (-> step :foreach :over)
-                                 over-coll (resolve-input-ref over-ref inputs step-outputs)]
-                             (execute-foreach-step step over-coll inputs step-outputs opts))
+                  ;; Every :parameters and :llm-call event recorded while this
+                  ;; step runs — including foreach/loop iterations — is
+                  ;; attributed to it.
+                  {result :result step-events :events}
+                  (provenance/capture
+                   (fn []
+                     (cond
+                       foreach?
+                       (let [over-ref (-> step :foreach :over)
+                             over-coll (resolve-input-ref over-ref inputs step-outputs)]
+                         (execute-foreach-step step over-coll inputs step-outputs opts))
 
-                           sub-graph?
-                           (execute-sub-graph-step step resolved-inputs opts)
+                       sub-graph?
+                       (execute-sub-graph-step step resolved-inputs opts)
 
-                           loop?
-                           (execute-loop-step step inputs step-outputs opts)
+                       loop?
+                       (execute-loop-step step inputs step-outputs opts)
 
-                           select?
-                           (execute-select-step step inputs step-outputs opts)
+                       select?
+                       (execute-select-step step inputs step-outputs opts)
 
-                           dispatch?
-                           (execute-dispatch-by-name-step step inputs step-outputs opts)
+                       dispatch?
+                       (execute-dispatch-by-name-step step inputs step-outputs opts)
 
-                           :else
-                           (execute-step step resolved-inputs opts))
+                       :else
+                       (execute-step step resolved-inputs opts))))
+                  llm-provenance (assoc llm-provenance step-id (index-calls step-events))
                   step-end (System/currentTimeMillis)
                   step-duration (- step-end step-start)]
               (if (and (skills/result-error? result)
@@ -810,7 +900,8 @@
                                 (assoc step-outputs step-id
                                        (skills/success-result {} {:defaulted true :error result}))
                                 (assoc step-timings step-id (build-step-timing step-id step step-duration :defaulted))
-                                (conj stage-timings (build-step-timing step-id step step-duration :defaulted))))
+                                (conj stage-timings (build-step-timing step-id step step-duration :defaulted))
+                                llm-provenance))
                   ;; Fail
                   (let [step-outputs-with-failure (assoc step-outputs step-id result)
                         step-timings-with-failure (assoc step-timings step-id
@@ -824,7 +915,9 @@
                                  step-outputs-with-failure
                                  step-timings-with-failure
                                  (- (System/currentTimeMillis) graph-start)
-                                 {:step-id step-id :error result})
+                                 {:step-id step-id :error result}
+                                 llm-provenance)
+                    (report-graph-provenance! graph :error llm-provenance)
                     (throw (ex-info "Step execution failed"
                                     {:step-id step-id
                                      :error result}))))
@@ -843,7 +936,8 @@
                   (recur (rest remaining)
                          (assoc step-outputs step-id result)
                          (assoc step-timings step-id (build-step-timing step-id step step-duration :ok))
-                         (conj stage-timings (build-step-timing step-id step step-duration :ok))))))))))))
+                         (conj stage-timings (build-step-timing step-id step step-duration :ok))
+                         llm-provenance))))))))))
 
 (defn run-graph-async
   "Execute a skill graph asynchronously using Missionary.

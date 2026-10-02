@@ -9,7 +9,7 @@
             #?(:clj [digdir.config.core])
             #?(:clj [digdir.config.db])
             #?(:clj [digdir.data.db :as db])
-            #?(:clj [digdir.llm.openai :as llm])
+            #?(:clj [digdir.llm.provider :as provider])
             #?(:clj [nano-id.core :refer [nano-id]])
             #?(:clj [taoensso.telemere :as t])
             #?(:clj [digdir.skills.api :as skills-api])
@@ -850,7 +850,7 @@
                              ;; carries something — it doesn't drive opts.model.
                              :user-model            (when-let [m (:model config)]
                                                       (when-not (clojure.string/blank? m) m))
-                             :selected-model        (if (llm/use-azure-openai effective-tenant)
+                             :selected-model        (if (= :azure (provider/selected-provider effective-tenant))
                                                     (cfg/get {:tenant effective-tenant} :services :azure-openai :deployment-name)
                                                     (or (:model config)
                                                         (:synthesis-model dataset-config)

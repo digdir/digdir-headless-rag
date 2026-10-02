@@ -3,8 +3,7 @@
   (:require
    [clojure.data.json :as json]
    [clojure.string :as str]
-   [digdir.config.accessor :as cfg]
-   [digdir.llm.openai :as llm]
+   [digdir.llm.provider :as provider]
    [digdir.llm.structured-eval :as se]
    [digdir.llm.client :as openai]))
 
@@ -145,26 +144,14 @@
      :degraded-reason (or reason :local-evaluator-failed)
      :evaluation-mode :degraded-fallback}))
 
-(defn- selected-model
-  [tenant model]
-  (or model
-      (if (llm/use-azure-openai tenant)
-        (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-        (cfg/get {:tenant tenant} :services :azure-openai :model-name))))
-
 (defn default-llm-fn
   "Default chat-completion implementation for read-time local evaluation."
   [tenant messages _tools model temperature]
-  (let [params {:model (selected-model tenant model)
+  (let [spec (provider/resolve tenant {:model model})
+        params {:model (:model spec)
                 :messages messages
                 :temperature (or temperature 0.0)}]
-    (if (llm/use-azure-openai tenant)
-      (openai/create-chat-completion
-       params
-       {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-        :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-        :impl :azure})
-      (openai/create-chat-completion params))))
+    (openai/create-chat-completion params spec)))
 
 (defn- chunk-title
   [chunk]

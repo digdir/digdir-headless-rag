@@ -653,7 +653,19 @@
                    ;;           #_(println "Request:" request)
                    ;;           (println "Response:" response))
                    }
-    :openrouter {:api-key (cfg/get {:tenant tenant} :services :openrouter :api-key)
+    ;; a nil key here is not a failure but a disclosure - the client
+    ;; fills a nil `:api-key` from the OPENAI_API_KEY secret, which sent the
+    ;; process-global OpenAI-compatible key to openrouter.ai whenever the
+    ;; `:search-phrases/fallback-model` arm ran with this path unset. Refuse,
+    ;; naming the path; never pass nil on.
+    :openrouter {:api-key (let [k (cfg/get {:tenant tenant} :services :openrouter :api-key)]
+                            (if (str/blank? (some-> k str))
+                              (throw (ex-info (str "services.openrouter.api-key is unset for tenant "
+                                                   (pr-str tenant) ", so the loader cannot call OpenRouter."
+                                                   " Set it with `bb config-set services.openrouter.api-key"
+                                                   " <value> " tenant " platform default`.")
+                                              {:path "services.openrouter.api-key" :tenant tenant}))
+                              k))
                  :api-endpoint "https://openrouter.ai/api/v1"
                  :request {:timeout 30000}}
     (throw (ex-info "Unknown OpenAI implementation" {:impl impl}))))

@@ -199,3 +199,38 @@
                    (required-env/check!
                      (env-fn {required-env/override-env-var v})))
           (str "override value " (pr-str v) " should not disable the check")))))
+
+;; ---------------------------------------------------------------------------
+;; The membership itself
+;; ---------------------------------------------------------------------------
+
+(deftest the-boot-tier-is-exactly-the-six-bootstrap-variables
+  (testing "A small hardening of the guards above, not a new guard. They already go
+            red on a seventh FLAT :boot row or a new alternative group. What they
+            cannot see is a change INSIDE the :database group: a row added to it under
+            a new :service, or a database row demoted off :boot, passes every one of
+            them. This pins the membership, so no LLM variable can become
+            boot-required by any route — the provider-resolver change is about to add LLM configuration."
+    (let [boot (env-bridge/bindings-for-tier :boot)]
+      (is (= #{"DATAHIKE_FILE_PATH" "ADH_POSTGRES_URL" "ADH_POSTGRES_USER" "ADH_POSTGRES_PWD"
+               "CONFIG_MASTER_KEY" "JWT_SECRET"}
+             (set (map :env-var boot))))
+      (is (= {:database {:database-file #{"DATAHIKE_FILE_PATH"}
+                         :database-postgres #{"ADH_POSTGRES_URL" "ADH_POSTGRES_USER" "ADH_POSTGRES_PWD"}}
+              nil {:bootstrap #{"CONFIG_MASTER_KEY"}
+                   :auth #{"JWT_SECRET"}}}
+             (reduce (fn [acc {:keys [alternative-group service env-var]}]
+                       (update-in acc [alternative-group service] (fnil conj #{}) env-var))
+                     {} boot))
+          "and which group and service each belongs to"))))
+
+(deftest boot-requirements-known-answers
+  (testing "Two answers known from outside the check. A complete file-backend
+            environment with no LLM variable at all satisfies boot; an empty one
+            misses exactly the two flat variables and the database choice."
+    (is (= {:checked 6 :missing [] :unsatisfied-groups []}
+           (env-bridge/boot-requirements (env-fn file-backend-env))))
+    (let [{:keys [checked missing unsatisfied-groups]} (env-bridge/boot-requirements (env-fn {}))]
+      (is (= 6 checked))
+      (is (= ["CONFIG_MASTER_KEY" "JWT_SECRET"] missing))
+      (is (= [:database] (mapv :group unsatisfied-groups))))))

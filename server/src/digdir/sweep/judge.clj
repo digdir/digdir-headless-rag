@@ -13,7 +13,8 @@
   (:require [clojure.string :as str]
             [clojure.data.json :as json]
             [digdir.config.accessor :as cfg]
-            [digdir.llm.client :as api]))
+            [digdir.llm.client :as api]
+            [digdir.llm.provider :as provider]))
 
 (def default-judge-model "gpt-5.5")
 
@@ -84,14 +85,12 @@ incorrect = wrong, contradicts the reference, or fails to answer (< 0.3).")
    reasoning-class models reject any non-default temperature (400), and they are
    stable enough without it; non-reasoning models fall back to their default."
   [tenant messages model]
-  (if (cfg/get {:tenant tenant} :services :azure-openai :use-azure-openai-api)
+  (let [spec (provider/resolve tenant {:model model})]
     (api/create-chat-completion
-     {:model model :messages messages}
-     {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-      :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-      :impl :azure})
-    (api/create-chat-completion
-     {:model model :messages messages :stream false})))
+     (cond-> {:model model :messages messages}
+       ;; Only the generic-OpenAI arm ever sent it; kept byte-for-byte.
+       (= :openai-compatible (:provider spec)) (assoc :stream false))
+     spec)))
 
 (defn- parse-verdict [content]
   (let [content (str content)

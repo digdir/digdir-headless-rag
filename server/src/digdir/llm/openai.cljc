@@ -2,8 +2,8 @@
   #?(:clj (:require [clojure.core.async :as async]
                     [clojure.core.async.impl.protocols :as async-protocols]
                     [digdir.data.db :refer [transact-assistant-msg] :as db]
-                    [digdir.config.accessor :as cfg]
                     [digdir.llm.model-params :as model-params]
+                    [digdir.llm.provenance :as provenance]
                     [wkok.openai-clojure.api :as api])))
 
 #?(:clj (defn process-chunk [!stream-msgs]
@@ -39,28 +39,6 @@
             (transact-assistant-msg (db/get-conn) convo-id resp)
             (reset! !wait? false)
             (println "reset wait to false"))))
-
-#?(:clj
-   (defn use-azure-openai
-     "Delegates to `cfg/use-azure-openai?` — the ONE read of this switch (#500)."
-     [tenant]
-     (cfg/use-azure-openai? tenant)))
-
-#?(:clj
-   (defn create-chat-completion [tenant messages]
-     (if (use-azure-openai tenant)
-       (api/create-chat-completion
-        {:model (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-         :messages messages
-         :temperature 0.1}
-        {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-         :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-         :impl :azure})
-       (api/create-chat-completion
-        {:model (cfg/get {:tenant tenant} :services :azure-openai :model-name)
-         :messages messages
-         :temperature 0.1
-         :stream false}))))
 
 #?(:clj
    (defn- merge-tool-call-delta
@@ -212,6 +190,12 @@
                                 (not= :azure (:impl wkok-opts))
                                 (assoc :stream/close? true))
                               model-params/normalize-request)
+            branch (if (= :azure (:impl wkok-opts)) :azure :openai)
+            _ (provenance/record-call!
+               (merge (provenance/wkok-destination branch wkok-opts)
+                      {:path :streaming :branch branch
+                       :caller params :sent stream-params :env-applied #{}
+                       :source (:provider/source wkok-opts)}))
             resp (if (seq wkok-opts)
                    (api/create-chat-completion stream-params wkok-opts)
                    (api/create-chat-completion stream-params))

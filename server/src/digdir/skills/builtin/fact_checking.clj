@@ -4,8 +4,7 @@
    Uses LLM to analyze claims and determine if they are
    supported, refuted, or uncertain based on provided evidence."
   (:require [digdir.rag.skills.core :as skills]
-            [digdir.config.accessor :as cfg]
-            [digdir.llm.openai :as llm]
+            [digdir.llm.provider :as provider]
             [digdir.llm.client :as openai]
             [clojure.data.json :as json]
             [clojure.string :as str]))
@@ -120,31 +119,20 @@
         {:keys [model temperature]} parameters
         tenant (:tenant skill-params)
 
-        selected-model (or model
-                          (if (llm/use-azure-openai tenant)
-                            (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-                            (cfg/get {:tenant tenant} :services :azure-openai :model-name)))
+        spec (provider/resolve tenant {:model model})
+        selected-model (:model spec)
 
         prompt (build-verification-prompt claim evidence)
 
         ;; Call LLM with tool forcing
         response
-        (if (llm/use-azure-openai tenant)
-          (openai/create-chat-completion
-            {:model selected-model
-             :messages [{:role "user" :content prompt}]
-             :tools verification-tools
-             :tool_choice {:type "function" :function {:name "verifyFact"}}
-             :temperature (or temperature 0.1)}
-            {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-             :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-             :impl :azure})
-          (openai/create-chat-completion
-            {:model selected-model
-             :messages [{:role "user" :content prompt}]
-             :tools verification-tools
-             :tool_choice {:type "function" :function {:name "verifyFact"}}
-             :temperature (or temperature 0.1)}))
+        (openai/create-chat-completion
+          {:model selected-model
+           :messages [{:role "user" :content prompt}]
+           :tools verification-tools
+           :tool_choice {:type "function" :function {:name "verifyFact"}}
+           :temperature (or temperature 0.1)}
+          spec)
 
         ;; Extract verification from tool call
         tool-call (-> response :choices first :message :tool_calls first)

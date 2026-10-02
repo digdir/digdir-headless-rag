@@ -5,8 +5,7 @@
    skill graph definition that can be validated and executed."
   (:require [digdir.rag.skills.core :as skills]
             [digdir.skills.graph.schema :as schema]
-            [digdir.config.accessor :as cfg]
-            [digdir.llm.openai :as llm]
+            [digdir.llm.provider :as provider]
             [digdir.llm.client :as openai]
             [clojure.data.json :as json]
             [clojure.string :as str]
@@ -208,32 +207,20 @@
         {:keys [model temperature validate]} parameters
         tenant (:tenant skill-params)
 
-        selected-model (or model
-                          (if (llm/use-azure-openai tenant)
-                            (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-                            (cfg/get {:tenant tenant} :services :azure-openai :model-name)))
+        spec (provider/resolve tenant {:model model})
+        selected-model (:model spec)
 
         prompt (build-graph-prompt task-description available-skills)
 
         response
-        (if (llm/use-azure-openai tenant)
-          (openai/create-chat-completion
-            {:model selected-model
-             :messages [{:role "system" :content "You are a skill graph architect. Create efficient, well-structured skill graphs."}
-                        {:role "user" :content prompt}]
-             :tools graph-builder-tools
-             :tool_choice {:type "function" :function {:name "createSkillGraph"}}
-             :temperature (or temperature 0.2)}
-            {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-             :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-             :impl :azure})
-          (openai/create-chat-completion
-            {:model selected-model
-             :messages [{:role "system" :content "You are a skill graph architect. Create efficient, well-structured skill graphs."}
-                        {:role "user" :content prompt}]
-             :tools graph-builder-tools
-             :tool_choice {:type "function" :function {:name "createSkillGraph"}}
-             :temperature (or temperature 0.2)}))
+        (openai/create-chat-completion
+          {:model selected-model
+           :messages [{:role "system" :content "You are a skill graph architect. Create efficient, well-structured skill graphs."}
+                      {:role "user" :content prompt}]
+           :tools graph-builder-tools
+           :tool_choice {:type "function" :function {:name "createSkillGraph"}}
+           :temperature (or temperature 0.2)}
+          spec)
 
         tool-call (-> response :choices first :message :tool_calls first)
         graph (parse-graph-response tool-call)]

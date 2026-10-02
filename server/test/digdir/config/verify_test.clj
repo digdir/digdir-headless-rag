@@ -377,7 +377,7 @@
   ;; is worse than no verifier: it turns "I checked" into false confidence, and it
   ;; did exactly that here once already.
   ;;
-  ;; Both now read through `accessor/use-azure-openai?`, so the question is not
+  ;; Both now read through `digdir.llm.provider/selected-provider`, so the question is not
   ;; "which default is nicer" but "there is one answer". If the product wants
   ;; absent to mean Azure, that changes in ONE place and this test moves with it.
   (with-config {}

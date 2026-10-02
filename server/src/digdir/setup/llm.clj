@@ -6,10 +6,10 @@
    There is one family of settings — `services.azure-openai.*` — and it drives
    BOTH providers. `services.azure-openai.use-azure-openai-api` is the switch:
 
-     true  → `digdir.skills.builtin.agent.loop/llm-opts` builds Azure options
+     true  → `digdir.llm.provider/resolve` builds an Azure call spec
              (`:impl :azure`) and the call is delegated to wkok's Azure client,
              reading `services.azure-openai.{api-key,api-endpoint,deployment-name}`.
-     false → no options are built at all, and `digdir.llm.client` POSTs to a
+     false → the spec carries no credentials, and `digdir.llm.client` POSTs to a
              plain OpenAI-compatible `/chat/completions`, taking the model from
              `services.azure-openai.model-name` and the endpoint and key from
              the `OPENAI_API_ENDPOINT` / `OPENAI_API_KEY` environment variables.

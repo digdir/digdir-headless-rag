@@ -7,7 +7,7 @@
             [digdir.config.core :as config-core]
             [digdir.config.db :as config-db]
             [digdir.data.db :as db]
-            [digdir.llm.openai :as llm]
+            [digdir.llm.provider :as provider]
             [digdir.playground.core :as core]
             [digdir.rag.typesense :as ts-utils]
             [digdir.skills.api :as skills-api]
@@ -252,7 +252,7 @@
                                                         (deliver assistant-saved true)
                                                         {:message/id "assistant-msg-1"
                                                          :queued? true})
-                    llm/use-azure-openai (fn [_] false)
+                    provider/selected-provider (fn [_] :openai-compatible)
                     core/execute-skill-graph (fn [_execution-id _query _all-messages rag-params _config _ts-opts]
                                                    (reset! captured-rag-params rag-params)
                                                    (deliver skills-called true)
@@ -310,7 +310,7 @@
                   db/create-playground-conversation (tu/recording-fn {:conversation-id "convo-1"})
                   db/transact-playground-user-msg (fn [& _] {:message/id "user-msg-1"})
                   db/get-message-lineage (fn [& _] nil)
-                  llm/use-azure-openai (fn [_] false)
+                  provider/selected-provider (fn [_] :openai-compatible)
                   core/execute-skill-graph (fn [_execution-id _query _all-messages rag-params _config _ts-opts]
                                                  (throw (ex-info "skills pipeline should not execute"
                                                                  {:rag-params rag-params})))]
@@ -464,7 +464,7 @@
                     db/transact-playground-user-msg (fn [& _] {:message/id "user-msg-1"})
                     db/get-message-lineage (fn [& _] nil)
                     db/queue-playground-assistant-msg! (tu/recording-fn {:message/id "assistant-msg-1" :queued? true})
-                    llm/use-azure-openai (fn [_] false)
+                    provider/selected-provider (fn [_] :openai-compatible)
                     core/execute-skill-graph (fn [_execution-id _query _all-messages rag-params _config _ts-opts]
                                                 (reset! captured-rag-params rag-params)
                                                 (deliver skills-called true)
@@ -515,7 +515,7 @@
                     db/transact-playground-user-msg (fn [& _] {:message/id "user-msg-1"})
                     db/get-message-lineage (fn [& _] nil)
                     db/queue-playground-assistant-msg! (tu/recording-fn {:message/id "assistant-msg-1" :queued? true})
-                    llm/use-azure-openai (fn [_] false)
+                    provider/selected-provider (fn [_] :openai-compatible)
                     core/execute-skill-graph (fn [_eid _q _msgs rag-params _cfg _ts]
                                                 (reset! captured-rag-params rag-params)
                                                 (deliver skills-called true)

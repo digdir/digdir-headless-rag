@@ -35,6 +35,7 @@
             [digdir.agents.db :as agents-db]
             [digdir.api.util :as api-util]
             [digdir.config.accessor :as cfg]
+            [digdir.llm.provider :as provider]
             [digdir.config.core :as cfg-core]
             [digdir.config.db :as cfg-db]
             [digdir.rag.typesense :as ts]
@@ -1383,7 +1384,8 @@
   [tenant]
   (let [cfgv (fn [& path] (try (apply cfg/get {:tenant tenant} path)
                                (catch Exception _ nil)))
-        use-azure? (boolean (cfgv :services :azure-openai :use-azure-openai-api))
+        use-azure? (try (= :azure (provider/selected-provider tenant))
+                        (catch Exception _ false))
         endpoint (System/getenv "OPENAI_API_ENDPOINT")
         lm-models (when-not use-azure? (fetch-lmstudio-models endpoint))
         lm-record (fn [model-id] (get lm-models model-id))

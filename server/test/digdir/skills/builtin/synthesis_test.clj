@@ -1,7 +1,7 @@
 (ns digdir.skills.builtin.synthesis-test
   (:require [clojure.test :refer [deftest testing is]]
             [digdir.llm.client :as llm-client]
-            [digdir.llm.openai :as llm]
+            [digdir.llm.provider :as provider]
             [digdir.skills.builtin.synthesis :as synthesis]))
 
 (deftest test-detect-insufficient-context-english
@@ -138,7 +138,7 @@
     ;; which only delegates to wkok on the `:impl :azure` path — the non-Azure
     ;; default is a direct clj-http POST. Stubbing wkok here therefore
     ;; intercepted nothing and the test issued a real request.
-    (with-redefs [llm/use-azure-openai (fn [_] false)
+    (with-redefs [provider/selected-provider (fn [_] :openai-compatible)
                   llm-client/create-chat-completion
                   (fn [& _]
                     {:choices [{:message {:content "Svar [3]."}}]})]
