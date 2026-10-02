@@ -31,8 +31,10 @@
    having no `:ownership` on its definition — in the `__platform-defaults__`
    seed tree. That tree is copied into a tenant only by
    `bootstrap-tenant-platform-tree!`, so a write there does not change what an
-   ALREADY-BOOTSTRAPPED tenant resolves, and the documented first run imports a
-   snapshot whose tenants are already bootstrapped.
+   ALREADY-BOOTSTRAPPED tenant resolves, and on the documented first run the
+   demo tenant (`bb demo-tenant`, in onboarding's first-queryable-dataset
+   recipe, which comes before its local-model section) is already bootstrapped
+   by the time this runs. The shipped snapshot carries no tenant.
 
    Measured rather than reasoned: writing
    `services.azure-openai.model-name` to a sentinel string
@@ -156,8 +158,8 @@
   (println "demo tenant's `bb demo-tenant`, an import, or the E2E boot seed; LLM calls no longer read the environment.)"))
 
 (defn- choose-tenants
-  "Which tenants to write to. Defaults to all of them, because the snapshot
-   ships two and configuring only one leaves the other quietly on Azure."
+  "Which tenants to write to. Defaults to all of them, because configuring only
+   some leaves the rest quietly on Azure."
   [tenants]
   (println "")
   (println "Tenants that will be pointed at this provider:")
@@ -256,7 +258,7 @@
       (println "  Left unchanged.")
 
       (empty? tenants)
-      (println "  No tenants exist yet — import a config snapshot or create a tenant first.")
+      (println "  No tenants exist yet — run `bb demo-tenant` (docs/onboarding.md, \"First queryable dataset\") or create a tenant first.")
 
       (= "1" choice)
       (let [local (choose-local-model)

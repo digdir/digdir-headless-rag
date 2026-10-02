@@ -1,4 +1,4 @@
-name: E2E — MCP + Open WebUI stack
+name: E2E — MCP / Open WebUI chain, and a real ingest against a STUB LLM (no cloud LLM call)
 
 # WHY THIS IS A SEPARATE WORKFLOW.
 #
@@ -22,6 +22,43 @@ name: E2E — MCP + Open WebUI stack
 # invoked by anything: `bb e2e:*` is outside `bb test`, and the nightly job the
 # e2e README pointed at was still written in the conditional. **The defect was
 # an uninvoked detector, not a missing one.** This file invokes it.
+#
+# WHAT A GREEN RUN DOES AND DOES NOT PROVE - read this before reading a green
+# result as "the stack works". Two jobs, and they prove different things.
+#
+# `e2e-stack`: the MCP / Open WebUI stack BOOTS and the chain answers.
+# It ingests nothing and makes no LLM call:
+#   - server/e2e/docker-compose.e2e.yml has no Typesense and mounts no corpus;
+#   - its tracked .env.example ships AZURE_OPENAI_API_KEY empty and this workflow
+#     injects no secret, so the one spec that calls an LLM, 10-tool-invocation,
+#     skips itself.
+#
+# `e2e-ingest`: a REAL ingest, in the SHIPPED newcomer compose plus
+# server/e2e/ingest/compose.override.yml. That override is only the COMPOSE
+# half of how it differs from a newcomer; the complete list (the debug and
+# login flags in ingest.env, the embedding-model download issue pre-warm, the HTTP login and trigger) is
+# in server/e2e/README.md. It asserts:
+#   - an exact document count, read twice (the product's report and Typesense's);
+#   - what the LLM stub was actually sent - model, json_schema and the
+#     CONFIGURED key by hash (Phase 3 of the provider-resolver change's routing, openai-compatible branch);
+#   - a cache re-run with zero calls, with a positive control that re-asks once
+#     the run's cache is wiped;
+#   - retrieval relevance at TOP-1: two queries, each with one right answer,
+#     each ranking its own document first;
+#   - the documented no-key Azure refusal;
+#   - the STAGED STORE, the mission's done-condition: "A REAL migration,
+#     run against a STAGED store, exported and restored into a fresh install,
+#     with a query working afterwards." The migration, the export and the import
+#     are real; THE STARTING STATE IS CONSTRUCTED BY US.
+# It does NOT prove: any real model's behaviour, the Azure happy path, ranking
+# beyond top-1 on four documents, the demo corpus or its committed warm cache,
+# the agent loop, MCP, the admin UI's own door (it drives the console HTTP
+# route to the same executor), upgrades, that a REAL deployment's backup
+# restores (the staged store tests the failure we know about, on a store we
+# built to contain it), a restore under another master key, or a restore that
+# fails half-way.
+#
+# Neither job makes a CLOUD LLM call. That is what the name's last clause says.
 #
 # ⚠️ NOT REQUIRED FOR MERGE, deliberately, and NOT `continue-on-error` —
 # the same reasoning `ci.yml` records for `build-client`. Branch protection
@@ -48,12 +85,44 @@ on:
       - 'server/src/digdir/api/routes/endpoints.clj'
       - 'server/e2e/**'
       - 'docker-compose.newcomer.yml'
+      # The ingest check covers these too: the loader, the pipeline,
+      # phrase generation and its cache, LLM routing, config and its env bridge,
+      # the setup mains the README runs, the boot, and the committed warm cache.
+      # Both jobs run on any of them - a path filter is per workflow.
+      - 'server/src/digdir/docs/**'
+      - 'server/src/digdir/pipeline/**'
+      - 'server/src/digdir/llm/**'
+      - 'server/src/digdir/config/**'
+      - 'server/src/digdir/setup/**'
+      - 'server/src/digdir/boot/**'
+      - 'server/src-prod/**'
+      - 'server/resources/demo-corpus/**'
+      # ...and the code the ingest job's LOGIN, TRIGGER and QUERY drive, which
+      # a retrieval or dependency PR would otherwise meet only in the nightly
+      # run (checked with a path matcher).
+      - 'server/src/digdir/rag/**'
+      - 'server/src/digdir/skills/builtin/retrieval.clj'
+      - 'server/src/digdir/skills/builtin/query_planner.clj'
+      - 'server/src/digdir/api/routes.clj'
+      - 'server/src/digdir/api/routes/endpoints/debug.clj'
+      - 'server/src/digdir/api/http.clj'
+      - 'server/src/digdir/auth/**'
+      - 'server/deps.edn'
+      # ...and what the staged store drives: the real export and import,
+      # boot's prepare-store!, and the round-trip audit it mounts from the tests.
+      - 'server/src/digdir/import_export/**'
+      - 'server/src/digdir/data/**'
+      - 'server/test/digdir/config/round_trip.clj'
       - 'server.Dockerfile'
       - '.github/workflows/e2e-mcp.yml'
 
 concurrency:
   group: e2e-mcp-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+# Least privilege: the jobs check out code and upload artifacts, which need no write access.
+permissions:
+  contents: read
 
 jobs:
   e2e-stack:
@@ -68,7 +137,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install mise-pinned toolchain
-        uses: jdx/mise-action@v4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
 
       # server/e2e/.env is gitignored and is the single definition of this
       # stack: digdir-rag reads it via env_file, MCPO substitutes E2E_API_KEY
@@ -119,3 +188,62 @@ jobs:
       - name: Tear the stack down
         if: always()
         run: bb e2e:down
+
+  e2e-ingest:
+    runs-on: ubuntu-latest
+    # The harness makes the compose project unique per run unless it is pinned.
+    # Pinned here so the teardown step below can name it; a runner is one job,
+    # so there is nothing to collide with.
+    env:
+      INGEST_PROJECT: digdir-rag-ingest-ci
+    # Cold: an uberjar build, two image pulls and Typesense's 128 MB embedding
+    # model download, then three scenarios on fresh volumes each (the staged
+    # store brings up two stacks in turn). Generous for the same reason as
+    # e2e-stack: a timeout reads as a product failure.
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install mise-pinned toolchain
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+
+      # Everything is in the harness: build, all three scenarios, their assertions,
+      # and - on failure - the container logs, printed BEFORE teardown, because
+      # the harness tears each scenario's stack down itself. No .env step: the
+      # stack reads server/e2e/ingest/ingest.env (test values), never a root .env.
+      - name: Run the ingest check
+        run: bb e2e:ingest
+
+      # Every scenario's FULL server log, pass or fail. The harness counts
+      # known ERROR-level signals in them, and a count is only evidence
+      # because the whole log is kept.
+      #
+      # ⚠️ Both settings below are load-bearing, and the first CI run
+      # shipped without them: `.logs` is a hidden directory, upload-artifact@v4
+      # skips hidden files by default, and its default `if-no-files-found: warn`
+      # left the step GREEN while it uploaded nothing. `error` makes a missing
+      # upload a red step instead of a warning nobody reads.
+      - name: Upload the ingest server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-ingest-server-logs
+          path: server/e2e/ingest/.logs/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+      # Belt and braces: the harness downs each stack, but a cancelled run or a
+      # harness crash could leave one up on a reused runner.
+      - name: Tear the ingest stack down
+        if: always()
+        run: >-
+          docker compose -p "$INGEST_PROJECT"
+          --env-file server/e2e/ingest/ingest.env
+          -f docker-compose.newcomer.yml
+          -f server/e2e/ingest/compose.override.yml
+          down -v --remove-orphans || true
+        env:
+          INGEST_AZURE_OPENAI_USE_AZURE: "false"

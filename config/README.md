@@ -1,16 +1,33 @@
-# `config/` — the committed system snapshot
+# `config/` — the committed config snapshot, kept as a TEST FIXTURE
 
-`system-import.normalized.20260821.json` is the config snapshot that
-`docs/onboarding.md` §4 step 2 imports to turn an empty database into a
-queryable one:
+`system-import.normalized.20260821.json` is a **test fixture, not a setup
+input**. The documented cold start (`docs/onboarding.md`, "First queryable
+dataset") does not import it, and nothing automated imports it into an install.
+Tests read it:
 
-```sh
-bb migration-import config/system-import.normalized.20260821.json
-```
+- `deployment-specific-test`, `llm-namespace-test`, `read-paths-seeded-test`,
+  `removed-definitions-test` and `snapshot-tenants-test` name it by path.
+  `removed-definitions-test` imports it into a test store.
+- `digdir.llm.provider-fixtures` finds it by regex over `config/`, and throws
+  unless exactly one file matches `system-import.normalized.<digits>.json`.
+  `provider-selector-pins-test` reads it that way.
 
-It carries config definitions, config nodes and their values, the `kudos` and
-`public-docs` datasets, their three dataset-pipelines, one admin user, and the
-production builtin agents. It deliberately carries **no secret values** — see
+So keep it, and keep it the only file of that shape: deleting it, or adding a
+second one, breaks those tests.
+
+It carries 119 config definitions, one config node (`__global__/runtime/default`)
+with its 10 values, and two agent rows (`builtin/agent-rag-agent` and
+`builtin/fact-checker-agent`), which overwrite those two seeded built-ins'
+guardrails when imported, until `init-config-db!` and boot run again and restore
+the seeded ones. It carries **no tenant, no dataset, no pipeline, no
+user and no API key**, so importing it makes nothing queryable by itself. On a
+store that has booted, boot already holds its node and values, and its
+definitions add nothing boot does not register, apart from 17 that boot
+deliberately retracts and the import brings back. That is why the cold
+start no longer imports it. The sections below
+dated 2026-08-21 and 2026-08-25 describe the file as it was then; the counts in
+this paragraph are the current ones, measured from the file. It deliberately
+carries **no secret values** — see
 [Why it carries no secrets](#why-it-carries-no-secrets-279) for where each of
 the five it used to carry comes from instead.
 
@@ -54,9 +71,12 @@ changed is that the file no longer claims to supply their values.
 | `services.scaleway-tem.api-key` | `bb setup` | `setup-email-config` prompts for it. Without it, dev login falls back to printing the confirmation code into the `bb dev` log. |
 
 Of the five, only `services.typesense.api-key-admin` is one of the paths the
-runtime treats as required, so it is the only one whose absence a fresh import
-reports — as plainly absent, which is the point. (The check that reports it,
-`digdir.config.verify`, arrives with #275/#302; it is not on this branch yet.)
+runtime treats as required, so it is the only one whose absence an import
+reports, as plainly absent, for each tenant the imported file carries. The check
+is `digdir.config.verify`. The file now carries no tenant, so importing it
+reports no such absence (measured); on the documented path the value comes
+from `bb demo-tenant`'s
+environment bridge or `bb config-set`.
 
 
 ## Why it was regenerated (2026-08-21)
@@ -122,10 +142,14 @@ All three came back, none of them as a restoration:
 | `builtin/ai-overview-agent` | `builtin/ai-overview` | **New**, not a restoration. Replaces `simple-qa` with a Google-AI-Overviews-shaped answer: short, fully cited, and declining rather than answering on thin retrieval. See `digdir.skills.builtin.overview`. |
 
 **This file has NOT been regenerated for that change, and does not need to be
-for the system to work.** Importing it still yields the three agents listed in
-the table above it; the other three are seeded from
-`digdir.agents.core/production-agent-definitions` by
-`digdir.agents.db/seed-builtin-agents!` on the next boot, on any classpath.
+for the system to work.** Today it carries two agent rows,
+`builtin/agent-rag-agent` and `builtin/fact-checker-agent`. The built-in agents
+themselves come from `digdir.agents.core/production-agent-definitions`, seeded
+by `digdir.agents.db/seed-builtin-agents!`, and boot alone seeds none (measured).
+They are seeded by `init-config-db!`, which the import runs before
+importing anything and which `digdir.setup.first-admin` runs too (both measured;
+`bb setup`'s admin step reaches it as well, by reading), and by the E2E boot seed
+(measured). The file's two rows then overwrite those two agents' guardrails.
 The staleness is a count, not a breakage — nothing in here names a graph that
 does not exist, which was #81's actual defect.
 

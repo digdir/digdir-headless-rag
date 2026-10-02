@@ -2180,6 +2180,11 @@
                           "-f" "docker-compose.host.yml"
                           "down" "-v")}
 
+         e2e:ingest
+         {:doc "A REAL ingest in the shipped newcomer stack: a fixture corpus, an OpenAI-compatible stub, an exact document count read twice, the stub's log of what was sent (model, schema, the key by hash), a cache re-run with a positive control, two top-1 retrieval probes, and the documented no-key Azure refusal. Each run gets its own compose project and ports; the image tag hashes the Dockerfile, the ignore files and every entry under its COPY sources (type, mode, bytes, link target), and refuses every other build input it can see, and an image not built for the daemon's own platform; compose sees only the daemon-location variables of the caller's environment. Builds the image unless --no-build, which refuses when this tree's image does not exist. Scenarios: stub, azure-no-key, staged-store (a REAL migration on a STAGED store, exported and restored into a fresh install, then queried; the starting state is ours) (default all three). --keep leaves the last stack up; --keep-going records every failed check and runs every scenario. What a green run does NOT prove: server/e2e/README.md. (usage: bb e2e:ingest [--no-build] [--keep] [--keep-going] [stub|azure-no-key|staged-store ...])"
+          :task (do (load-file "server/e2e/ingest/harness.clj")
+                    ((resolve 'ingest-harness/-main) (compose-cmd) *command-line-args*))}
+
          e2e:install-browsers
          {:doc "Install Playwright's Chromium binary (run once)"
           :task (shell {:dir "server/e2e/playwright"}

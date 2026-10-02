@@ -328,8 +328,9 @@ Datahike backends are supported for the bootstrap connection:
   spelling) seeds the new key. **Both paths still take the model name from the
   `services.azure-openai.*` family**; the name is historical, not a scope.
   Credentials are read from config, never from the environment: the variables
-  below are **seeding inputs**, written into config by `bb migration-import`,
-  `bb demo-tenant` (also run by `bb setup`) and the E2E boot seed:
+  below are **seeding inputs**, written into config by `bb demo-tenant` (also run
+  by `bb setup`), the E2E boot seed, and `bb migration-import` for each tenant the
+  imported file carries (the shipped snapshot carries none):
   - **Azure OpenAI** (`:azure` — you must SET this; there is no shipped
     default, and **unset means NOT Azure**) — `AZURE_OPENAI_API_KEY` →
     `services.azure-openai.api-key`
@@ -347,9 +348,11 @@ Datahike backends are supported for the bootstrap connection:
 
 The running server reads Typesense connection details (host, TLS, admin key) from
 DB-backed config (`server/src/digdir/rag/typesense.clj`), never from the environment
-directly. `TYPESENSE_API_KEY_ADMIN` still gets you there: `bb migration-import` writes it
-into each imported tenant's config, so setting it before the import is enough
-(`server/src/digdir/config/env_bridge.clj`). `TYPESENSE_API_KEY` is read by nothing.
+directly. `TYPESENSE_API_KEY_ADMIN` still gets you there: `bb demo-tenant` writes it
+into the demo tenant's config, so setting it before `bb demo-tenant` is enough
+(`server/src/digdir/config/env_bridge.clj`). `bb migration-import` does the same for
+each tenant an imported file carries; the shipped snapshot carries none.
+`TYPESENSE_API_KEY` is read by nothing.
 
 ### 2) Run the server (dev)
 

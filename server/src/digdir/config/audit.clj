@@ -4,6 +4,7 @@
    Records who changed what, when, with before/after values.
    Encrypted values are redacted in audit logs."
   (:require [datahike.api :as d]
+            [digdir.config.db :as config-db]
             [nano-id.core :refer [nano-id]]))
 
 ;; =============================================================================
@@ -124,7 +125,8 @@
   "Log a global-edit, pin, or unpin event. Executes a separate transaction."
   [conn opts]
   (let [tx-data (global-change-tx-data opts)]
-    (d/transact conn {:tx-data [tx-data]})
+    ;; `transact!`: a promotion logs this against a speculation.
+    (config-db/transact! conn {:tx-data [tx-data]})
     (:audit/id tx-data)))
 
 (defn get-api-key-audit-history

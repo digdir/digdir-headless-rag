@@ -1,0 +1,86 @@
+# The ingest e2e: the SHIPPED newcomer compose, and this file.
+#
+#   docker compose -p digdir-rag-ingest \
+#     --env-file server/e2e/ingest/ingest.env \
+#     -f docker-compose.newcomer.yml -f server/e2e/ingest/compose.override.yml ...
+#
+# Run it through `bb e2e:ingest`, which supplies the INGEST_* variables below.
+#
+# ⚠️ THIS FILE IS THE COMPOSE-LEVEL HALF OF HOW THE INSTRUMENT DIFFERS FROM
+# WHAT A NEWCOMER RUNS - NOT ALL OF IT. It used to claim to be the complete
+# list, and that was false: ingest.env turns on two things a
+# newcomer does not have (the confirmation code on the login page, and the
+# debug retrieve endpoint), and the harness adds steps of its own (the embedding-model download issue
+# pre-warm, a login and trigger over HTTP). The COMPLETE list is in
+# server/e2e/README.md, "How the check differs from what a newcomer runs".
+# Keep the two in step: a line added here is a line a green run stops covering.
+# Deliberately NOT a bespoke stack: a first-run claim has to be measured against
+# the shipped artefact, or it answers a question nobody asked.
+#
+# Not started, so not covered at all: `open-webui` (the MCP / Open WebUI chain
+# is `e2e-stack`'s job) and `corpus-fetch` (the live Wikipedia fetch; the
+# fixture corpus below replaces it).
+
+services:
+  typesense:
+    # ⚠️ NAMES AND PORTS ARE PER RUN, so two runs on one machine cannot collide.
+    # A fixed project name, fixed container names and fixed host ports DID
+    # collide: two lanes' runs killed each other's stacks twice in one day.
+    # The harness supplies INGEST_PROJECT (unique per run unless the
+    # caller pins it, as CI does), and every host port is EPHEMERAL - the
+    # harness asks compose which port it got.
+    container_name: ${INGEST_PROJECT:?set by bb e2e:ingest}-typesense
+    # Published to the host, loopback only, so the harness can pre-warm the
+    # embedding model and count documents INDEPENDENTLY of the
+    # product's own report. The newcomer compose publishes nothing here.
+    ports:
+      - "127.0.0.1::8108"
+
+  digdir-rag:
+    container_name: ${INGEST_PROJECT:?set by bb e2e:ingest}-server
+    # REPLACES the repo-root `.env`, which on a laptop holds real LLM keys. A
+    # real AZURE_OPENAI_API_KEY leaking in would silently void the no-key Azure
+    # scenario. The file holds test values only.
+    env_file: !override
+      - server/e2e/ingest/ingest.env
+    # The LLM target differs per scenario, so the harness supplies it. `:?`
+    # fails the compose call itself when a scenario forgot to set it, rather
+    # than booting with whatever the default happens to be.
+    environment:
+      AZURE_OPENAI_USE_AZURE: ${INGEST_AZURE_OPENAI_USE_AZURE:?set by bb e2e:ingest}
+      AZURE_OPENAI_API_KEY: ""
+      AZURE_OPENAI_API_ENDPOINT: ${INGEST_AZURE_OPENAI_API_ENDPOINT:-}
+      AZURE_OPENAI_DEPLOYMENT_NAME: ${INGEST_AZURE_OPENAI_DEPLOYMENT_NAME:-}
+      AZURE_OPENAI_MODEL_NAME: ${INGEST_LLM_MODEL:-}
+      OPENAI_API_ENDPOINT: ${INGEST_OPENAI_API_ENDPOINT:-}
+      OPENAI_API_KEY: ${INGEST_OPENAI_API_KEY:-}
+    # An EPHEMERAL host port, loopback only, so neither a developer's own
+    # server on 8080 nor another run of this check can collide.
+    ports: !override
+      - "127.0.0.1::8080"
+    # The FIXTURE corpus replaces the fetched demo corpus at the path the
+    # dataset reads. DEMO_CORPUS_DIR is deliberately NOT set inside the
+    # container: it does double duty as a host path and a container path,
+    # and leaving it unset makes the seeder record the default
+    # `./demo-corpus`, which resolves to exactly this mount.
+    volumes: !override
+      - digdir-db:/var/lib/digdir
+      - digdir-cache:/app/cache
+      - ./server/e2e/ingest/corpus:/app/demo-corpus:ro
+
+  # Not in the newcomer stack at all. An OpenAI-compatible stub that answers
+  # phrase generation deterministically and LOGS what it was sent, so the
+  # harness can assert the routing rather than assume it. No cloud credential.
+  llm-stub:
+    image: python:3.12-slim
+    container_name: ${INGEST_PROJECT:?set by bb e2e:ingest}-llm-stub
+    command: ["python", "-u", "/stub/stub.py"]
+    volumes:
+      - ./server/e2e/ingest/llm-stub:/stub:ro
+    ports:
+      - "127.0.0.1::8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

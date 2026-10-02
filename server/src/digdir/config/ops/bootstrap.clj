@@ -1,6 +1,5 @@
 (ns digdir.config.ops.bootstrap
   (:require [clojure.string :as str]
-            [datahike.api :as d]
             [digdir.config.core :as config-core]
             [digdir.config.db :as config-db]
             [digdir.config.structure :as structure]))
@@ -274,7 +273,7 @@
             :parent-id parent-id})
 
           (and (nil? parent-id) current-parent-id)
-          (d/transact
+          (config-db/transact!
            conn
            {:tx-data [[:db/retract
                        [:config.node/id node-id]

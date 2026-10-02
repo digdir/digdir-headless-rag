@@ -334,17 +334,21 @@
        :attributes - ABAC attribute map {:service :* :sensitivity #{:public} ...}
        :tenants - Tenant access (:* or #{\"ka\" \"altinn\"})
        :tenant-config-keys - tenant-config-key access (:* or #{\"prod\" \"test\"})
-       :actions - Allowed actions (#{:read} or #{:read :write})"
+       :actions - Allowed actions (#{:read} or #{:read :write})
+
+   An existing id is UPDATED (:permission/id is unique/identity), and its
+   created-at is left as it was, so it stays a creation time."
   [conn {:keys [id name description attributes tenants tenant-config-keys actions]}]
-  (let [now (System/currentTimeMillis)]
-    (d/transact conn {:tx-data [{:permission/id id
-                                 :permission/name name
-                                 :permission/description description
-                                 :permission/attributes (pr-str attributes)
-                                 :permission/tenants (pr-str tenants)
-                                 :permission/tenant-config-keys (pr-str tenant-config-keys)
-                                 :permission/actions (pr-str actions)
-                                 :permission/created-at now}]})))
+  (let [now (System/currentTimeMillis)
+        exists? (some? (d/q '[:find ?e . :in $ ?id :where [?e :permission/id ?id]] @conn id))]
+    (d/transact conn {:tx-data [(cond-> {:permission/id id
+                                         :permission/name name
+                                         :permission/description description
+                                         :permission/attributes (pr-str attributes)
+                                         :permission/tenants (pr-str tenants)
+                                         :permission/tenant-config-keys (pr-str tenant-config-keys)
+                                         :permission/actions (pr-str actions)}
+                                  (not exists?) (assoc :permission/created-at now))]})))
 
 (defn get-all-permissions
   "Get all permission definitions."
