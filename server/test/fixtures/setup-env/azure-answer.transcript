@@ -1,0 +1,58 @@
+
+digdir — first-run setup (host half)
+====================================
+
+  Generating secrets that can be generated:
+      CONFIG_MASTER_KEY  generated
+      JWT_SECRET  generated
+      TYPESENSE_API_KEY_ADMIN  generated
+
+  Values that cannot be invented:
+      AZURE_OPENAI_API_KEY  SKIPPED — still needs a value before the LLM path works
+      AZURE_OPENAI_API_ENDPOINT  SKIPPED — still needs a value before the LLM path works
+      AZURE_OPENAI_DEPLOYMENT_NAME  SKIPPED — still needs a value before the LLM path works
+
+  Optional services — blank is a fine answer:
+      COLBERT_API_URL  skipped — reranking stays off. Answers keep retrieval
+                            order: slightly worse ORDERING, not fewer
+                            or wrong answers.
+      COLBERT_API_KEY  skipped — reranking stays off. Answers keep retrieval
+                            order: slightly worse ORDERING, not fewer
+                            or wrong answers.
+
+  Which LLM provider should this instance use?
+    true  = Azure OpenAI, using the three values above.
+    false = any OpenAI-compatible server, including a local one.
+      AZURE_OPENAI_USE_AZURE  already set, left alone
+
+  Who may administer this instance:
+      ADMIN_USER_EMAILS  SKIPPED — no admin will exist and every login will be refused
+
+  3 generated, 0 left alone.
+
+  ⚠ Still placeholder or empty: AZURE_OPENAI_API_KEY AZURE_OPENAI_API_ENDPOINT AZURE_OPENAI_DEPLOYMENT_NAME
+    The server will refuse to start until these are real values.
+
+  ⚠ Still unset: ADMIN_USER_EMAILS
+    The stack will start and refuse every login, with nothing saying why.
+    Set it in .env (uncommented) and re-run the database half.
+
+  Next: seed the database, BEFORE starting the server —
+
+      docker compose -f docker-compose.newcomer.yml run --rm digdir-rag \
+        java -cp /app/app.jar clojure.main -m digdir.setup.bootstrap
+
+  Then create the admin account named above. Seeding does NOT create it:
+
+      docker compose -f docker-compose.newcomer.yml run --rm digdir-rag \
+        java -cp /app/app.jar clojure.main -m digdir.setup.first-admin
+
+  Only now start the server. There is NO restart step:
+
+      docker compose -f docker-compose.newcomer.yml up -d
+
+  Seeded with nothing running, the account persists and login works on the
+  FIRST attempt. Seeded against a running server it silently does not, and
+  restarting afterwards does not recover it. docs/onboarding.md carries the
+  measurements (#526, #537, #538).
+

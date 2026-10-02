@@ -84,35 +84,152 @@ covering a broader corpus than it does.
 ## The warm phrase cache
 
 `server/resources/demo-corpus/phrase-cache-folder-v2.edn.gz` — 7,149 pre-generated
-phrase sets, 1.40 MB compressed, unpacked on first run by
-`digdir.boot.phrase-cache/warm!` into `cache/folder-search-phrases/`, which is
-inside the `digdir-cache` volume mounted at `/app/cache` (#495).
+phrase sets, 1.40 MB compressed — and beside it
+`phrase-cache-folder-v2.identity.edn`, which **declares who generated them**.
 
-Without it, a newcomer's first materialisation of the demo corpus pays one LLM
-call per uncached chunk. With it, the chunks it covers cost nothing.
+At boot, `digdir.boot.phrase-cache/warm!` unpacks the archive into
+`cache/folder-search-phrases-declared/`, inside the `digdir-cache` volume mounted
+at `/app/cache`. That directory is the archive's alone: a run never writes
+there. A run's own entries go to `cache/folder-search-phrases/`.
 
-### Which key version this archive was built under
+Without the archive, a newcomer's first materialisation of the demo corpus pays
+one LLM call per uncached chunk. With it, the chunks it covers cost nothing,
+**whatever provider and model the newcomer runs**, provided the phrase prompt and
+parser version are the shipped ones. A changed prompt misses, as it should. So
+does changed chunk text: the corpus is fetched live, so the archive covers less
+as the articles are edited (see *Coverage* below).
 
-| segment | value | source |
+### How the archive is reached: a declared generator
+
+The cache key names the provider that answers and the model actually sent:
+
+`<chunk text>-<provider>-<model SENT>-<prompt>-<parser-version>`
+
+Both are deployment-specific, so no installation's own key for a chunk is the
+archive's. Rather than weaken the key, the archive declares whose output it is,
+and a lookup has two tiers:
+
+1. **local:** `cache/folder-search-phrases/`, under this installation's own
+   provider and model;
+2. **declared:** `cache/folder-search-phrases-declared/`, under the declared
+   provider and model, combined with *this* installation's prompt and parser
+   version, and in the key grammar the archive was built in. The unpack copies
+   the archive AS SHIPPED, so the committed archive is looked up under `main`'s
+   four-segment key (content, declared model, prompt, version).
+
+Three rules, each one a test:
+
+- **Precedence:** a local positive, then the declared positive, then a local
+  negative. A mis-loaded local model is what writes negatives, so if a local
+  negative came first, the archive would stop helping exactly when the local
+  model breaks.
+- **Read-only:** nothing is written into the declared directory, and a declared hit
+  is never copied into the local one. Either would put one generator's output
+  under another's name. **The separate directory is what makes this hold.** An
+  identity is two names, so an `azure` installation whose deployment is called
+  `gpt-4o` computes exactly the declared key. No key shape can tell those two
+  apart. Separate storage does not tell them apart either; what it does is keep
+  that installation's output out of the archive. A mis-loaded model can
+  still write junk under its own correct-looking name, in its own local cache
+- **Positive-only:** a declared "this chunk has no phrases" is ignored.
+
+### What the unpack checks, and what it only declares
+
+The committed archive predates the current key. Its keys have four segments and
+no provider:
+
+| segment | the archive was built under | now |
 |---|---|---|
-| model | `gpt-4o` → `a2a69af70d1b` | `digdir.setup.demo-dataset/dataset-values` |
-| prompt | → `871d369894de` | `search-phrases/default-search-phrases-prompt` |
-| parser version | `v2` | `search-phrases/parser-version` |
+| provider | *(absent)*, and it **stays absent**: the unpack copies the archive as shipped | the provider that answers, from `provider/selected-provider` |
+| model | `gpt-4o` → `a2a69af70d1b`, the CONFIGURED value | the model actually sent, from `provider/model-for` |
+| prompt | → `871d369894de` | unchanged, `search-phrases/default-search-phrases-prompt` |
+| parser version | `v2` | unchanged, `search-phrases/parser-version` |
 
-Verified **inside the runtime image**, not by inspection: the shipped model and
-prompt hash to exactly the segments the committed keys carry.
+So for this archive the unpack **checks the model** against the keys and only
+**declares the provider**. The model check is all-or-nothing: if one key does not
+match, the whole archive is refused. The boot log says what was checked:
+`:verified #{:configured-model}`, because `main`'s model segment hashed the
+CONFIGURED value, which the request overwrote. So the check shows that the
+declaration matches what the generating run was configured with, not what
+reached the wire. That gap is why the key changed.
 
-**The key is not promised to be stable.** A change to the chunker, the prompt,
-the model constant or `parser-version` orphans every entry — they are simply
-never read again, which is inert rather than wrong. Nothing is designed around
-the key holding. When it changes, re-run a materialisation and rebuild:
+An archive rebuilt under the current key has five segments, and the unpack
+checks **both**: `:verified #{:provider :model}`.
 
-```sh
-bb phrase-cache-archive <cache-dir>
-```
+**What either check establishes, and on which axis.** It shows that the
+declaration and each entry's own key agree, on the segments the key has. It
+cannot show which model actually wrote an entry. A key holds names, so two
+generators that share a provider and model name share a key.
 
-That script reproduces the committed archive byte-for-byte from the same input,
-so a diff shows what changed rather than reordering noise.
+**The invariant that makes that record mean anything: a key segment is
+evidence only of the run that generated the entry, so nothing downstream of
+generation writes one.** The unpack and the builder copy keys; they never
+compose them. `:verified` therefore names exactly the identity segments the keys
+carry, with no special case per path. The unpack used to ADD a provider segment
+to four-segment keys, copied from the declaration. Packing that directory then
+"verified" the provider against the declaration it had been copied from.
+
+⛔ **Four-segment keys are accepted from ONE archive only: the committed one,
+pinned by the SHA-256 of its content** in `digdir.boot.phrase-cache`. The
+old key cannot tell its generators apart, because on `main` every demo install
+keyed on the *configured* `gpt-4o`, whatever it sent. So accepting the key SHAPE
+would unpack any directory of entries from before the phrase negative-cache issue under the declared name, foreign
+ones included, and it did, until this pin. A rebuild cannot obtain the pin:
+- the builder refuses any key that is not five segments;
+- an archive assembled without the builder matches only if its content is
+  byte-identical to the committed archive;
+- the pin lives in the unpack's source, not in the identity resource that a
+  rebuild edits.
+
+The unpack also refuses an archive that mixes four- and five-segment keys, and a
+five-segment archive whose keys name more than one provider/model identity.
+
+### Rebuilding it
+
+**The key is not promised to be stable.** A change to the chunker, the phrase
+prompt or `parser-version` orphans every archived entry. Orphaned entries are
+never read again, which is inert rather than wrong. A change to an
+installation's *own* model does not orphan them, because the archive is looked up
+under the declared identity. When a rebuild is needed:
+
+1. **Materialise the demo corpus into an EMPTY `cache/folder-search-phrases/`, with
+   NO `cache/folder-search-phrases-declared/` present.** The builder packs the
+   whole directory, so anything already in it ships as the declared generator's
+   output. Entries from before the phrase negative-cache issue make the builder refuse. Another model's
+   entries under a different name make `bb test` refuse (step 4). Another
+   model's entries **under the same provider and model names are not detected
+   anywhere**, because their keys are identical. Emptying the directory
+   is the only protection against that case. And while
+   the old archive is unpacked, any chunk it answers is never written locally,
+   so the rebuild would be missing those chunks. A dev boot does not unpack the
+   archive; a production boot does, so remove the declared directory after the
+   boot. **Packing the declared directory is not a rebuild.** For the committed
+   archive it holds four-segment keys, which the builder refuses. For a rebuilt
+   archive it repacks the same record it already had.
+2. Build:
+
+   ```sh
+   bb phrase-cache-archive <cache-dir>
+   ```
+
+   Given the same input, the builder writes a byte-identical archive, so a diff
+   shows what changed rather than reordering noise.
+3. **Update `phrase-cache-folder-v2.identity.edn`.** `:provider` and `:model`
+   become the rebuilding installation's (`provider/selected-provider`,
+   `provider/model-for`), and `:generated` becomes the rebuild date. **The
+   `:vetting` record does not carry over.** It describes the old entries, and
+   the new ones need their own.
+4. **`bb test`.** `digdir.boot.phrase-cache-test/the-archive-ships-and-is-not-empty`
+   unpacks the committed archive under the committed declaration. It fails if
+   they disagree, or if the archive's keys name more than one identity. It
+   cannot fail for a foreign model that shares the declared names. The
+   builder has already refused any key that is not five segments. A committed
+   archive with four-segment keys is refused unless it is the pinned one.
+
+⚠️ **An existing volume keeps its first unpack.** The unpack runs only when the
+declared directory is empty, so a new image carrying a rebuilt archive does not
+replace entries already unpacked. To pick up the new archive on such a volume,
+remove `cache/folder-search-phrases-declared/` from it.
 
 ### Coverage: what it actually warms
 
@@ -130,9 +247,26 @@ pinned corpus (351 documents, 7,109 chunks, 82,993 phrases):
 | chunks below the 333-character minimum, dropped before any phrase call | 135 |
 | archive entries not matching a current chunk (inert) | 40 |
 
-**A newcomer re-materialising the demo corpus now pays zero LLM calls for
-phrases.** The previous archive covered 65.6% because it was built over a
-*partial* ingest; that is no longer the case.
+That 100% was measured on 2026-09-03 under the four-segment key, before the
+declared tier existed. Coverage is by chunk text, so it should carry over:
+with the shipped prompt and parser version, a lookup under the declared identity
+computes exactly the key each entry is unpacked under. **That is by
+construction, not by measurement.** What has been checked since is narrower:
+that an `:openai-compatible` installation is served from the unpacked archive
+without a model call. Nobody has run a full materialisation through the declared
+tier, so "a newcomer pays zero LLM calls for phrases" is what the design
+predicts, not what was observed.
+
+⚠️ **The prediction holds only for chunk text that has not changed since
+2026-09-03, and it gets worse with time.** The key arithmetic covers the KEYS,
+not the TEXT. The corpus is fetched live and cannot be pinned to a revision:
+`prop=extracts` ignores `revids` and returns today's text (see
+`rehydrate_norquad.clj`). So when an article has been edited since the pin, it
+re-chunks, its changed chunks hash differently and miss, and each one costs a
+call. The rehydrator reports such articles as changed since the manifest and
+carries on. The 100% above decays as Wikipedia is edited, and the number of
+paid calls grows. The previous archive covered 65.6% because it was
+built over a *partial* ingest; that is no longer the case.
 
 ⚠️ **The 135 sub-minimum chunks are deliberately not in the denominator.** The
 pipeline drops them before it ever asks for phrases, so an archive cannot cover
@@ -141,7 +275,7 @@ earlier reading of 98.1%. Coverage is measured against chunks the pipeline
 *requests*, which is the only population an archive can serve.
 
 The 40 surplus entries are orphans carried forward from the previous key epoch.
-They are never read, which is inert rather than wrong — see the key-version note
+They are never read, which is inert rather than wrong — see *Rebuilding it*
 above.
 
 ### Licence

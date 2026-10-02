@@ -54,9 +54,23 @@
    runtime however healthy the database looks."
   [["services" "typesense" "api-host"]
    ["services" "typesense" "api-tls"]
-   ["services" "typesense" "api-key-admin"]
-   ["services" "azure-openai" "model-name"]
-   ["services" "azure-openai" "use-azure-openai-api"]])
+   ["services" "typesense" "api-key-admin"]])
+
+;; the MODEL left the list above, for the same reason the switch
+;; did. It now has two spellings - `services.llm.model` and the legacy
+;; `services.azure-openai.model-name` - and a presence check of either raw path
+;; reports a tenant that migrated to the other one unconfigured while the
+;; runtime routes it fine. It is still reported when it is genuinely missing,
+;; through the ONE read: see `unresolved-model`.
+
+;; the provider switch is NOT on the list above any more. With
+;; read-both, a tenant configured the legacy way (boolean set, new key unset)
+;; resolves through the fallback - a presence check of either raw path would
+;; report it unconfigured while the runtime routes it fine, which is the Azure-switch default mismatch at the
+;; verifier. Unset is also a legitimate state (the local path), so it is not
+;; reported; the contradictory case is `digdir.boot.provider-switch`'s job. What
+;; IS still reported is the shared-vs-default services issue's shape for the decision: see
+;; `unreachable-provider-decision`.
 
 (defn- path->string [path]
   (str/join "." (map name path)))
@@ -171,6 +185,57 @@
            vec))
     (catch Exception _ [])))
 
+(def ^:private provider-decision-paths
+  "The two paths the provider decision is read from - for the shared-vs-default services issue diagnostic
+   ONLY; the decision itself comes from `provider/configured-provider`. Each is spelled
+   exactly once: the switch-reads census counts every code mention as a read."
+  ["services.llm.provider" "services.azure-openai.use-azure-openai-api"])
+
+(defn unreachable-provider-decision
+  "The shared-vs-default services issue's shape for the provider DECISION: the runtime sees no decision
+   (`provider/configured-provider` is nil - neither path resolves) although one of the
+   two paths holds a value SOMEWHERE in the tenant's platform tree, on a node
+   the runtime does not enter.
+
+   Runtime and verifier agree on the decision - both see none - so this is not
+   a second opinion about it. It adds only: you set it where it cannot be
+   seen, so the tenant routes to the non-Azure default regardless.
+
+   Same finding shape as `unresolved-service-config`. Empty when the decision
+   resolves, when it is genuinely unset everywhere, or when it cannot be read
+   (a check that cannot answer must not answer)."
+  [db tenant]
+  (let [decided? (try (some? (provider/configured-provider tenant))
+                      (catch Exception _ true))]
+    (if decided?
+      []
+      (try
+        (let [nodes (config-db/list-config-nodes db tenant :platform)
+              nodes-by-id (into {} (map (juxt :config.node/id identity)) nodes)
+              entry (some #(when (= "default" (:config.node/tenant-config-key %)) %) nodes)
+              ;; Only nodes the runtime does NOT enter: a value on a reachable
+              ;; node that still reads as no decision is blank, i.e. unset, and
+              ;; is not "set where it cannot be seen".
+              reachable (set (ancestor-ids nodes-by-id (:config.node/id entry)))
+              paths-by-node (into {} (comp (remove #(contains? reachable (:config.node/id %)))
+                                           (map (juxt :config.node/id
+                                                      #(paths-on-node db tenant (:config.node/id %)))))
+                                  nodes)]
+          (->> provider-decision-paths
+               (keep (fn [p]
+                       (let [on (vec (sort (keep (fn [[node-id paths]] (when (contains? paths p) node-id))
+                                                 paths-by-node)))
+                             binding (env-bridge/binding-for-path p)]
+                         (when (seq on)
+                           {:path p
+                            :entry-node-id (:config.node/id entry)
+                            :defined-on on
+                            :reachable? false
+                            :env-var (:env-var binding)
+                            :supplied-by (:destination binding)}))))
+               vec))
+        (catch Exception _ [])))))
+
 (defn- selected-provider
   "Which LLM path `tenant` is configured for: :azure or :openai-compatible.
 
@@ -193,6 +258,55 @@
   (try (provider/selected-provider tenant)
        (catch Exception _ :openai-compatible)))
 
+(def model-decision-paths
+  "The two paths that can supply the model, for REPORTING ONLY; the decision
+   itself comes from `provider/configured-model`. Each is spelled exactly once:
+   the model census counts every code mention as a read."
+  ["services.llm.model" "services.azure-openai.model-name"])
+
+(defn unresolved-model
+  "The model the runtime cannot see for `tenant`, as one finding, or [].
+
+   Asked through the ONE read (`provider/configured-model`) and never by a
+   presence check of a raw path: since Phase 4 of the provider-resolver change the model has two
+   spellings, and a tenant that migrated to `services.llm.model` would
+   otherwise be reported unconfigured while the runtime routes it fine - the Azure-switch default mismatch
+   at the verifier, which is the defect this namespace exists to avoid.
+
+   The finding names `services.llm.model`, the path to SET now. `:defined-on`
+   says where a value actually is: the nodes the runtime does NOT enter that
+   hold either path (the shared-vs-default services issue's shape), or [] when it is genuinely absent - the
+   state the legacy presence check used to report.
+
+   Empty when the model resolves, and when it cannot be read: a check that
+   cannot answer must not answer."
+  [db tenant]
+  (let [resolved? (try (some? (provider/configured-model tenant))
+                       (catch Exception _ true))]
+    (if resolved?
+      []
+      (try
+        (let [nodes (config-db/list-config-nodes db tenant :platform)
+              nodes-by-id (into {} (map (juxt :config.node/id identity)) nodes)
+              entry (some #(when (= "default" (:config.node/tenant-config-key %)) %) nodes)
+              reachable (set (ancestor-ids nodes-by-id (:config.node/id entry)))
+              paths-by-node (into {} (comp (remove #(contains? reachable (:config.node/id %)))
+                                           (map (juxt :config.node/id
+                                                      #(paths-on-node db tenant (:config.node/id %)))))
+                                 nodes)
+              set-path (first model-decision-paths)
+              binding (env-bridge/binding-for-path set-path)]
+          [{:path set-path
+            :entry-node-id (:config.node/id entry)
+            :defined-on (vec (sort (keep (fn [[node-id paths]]
+                                           (when (some #(contains? paths %) model-decision-paths)
+                                             node-id))
+                                         paths-by-node)))
+            :reachable? false
+            :env-var (:env-var binding)
+            :supplied-by (:destination binding)}])
+        (catch Exception _ [])))))
+
 (defn unsupplied-first-query-config
   "Config a first real query needs for `tenant` that has no usable value.
 
@@ -200,7 +314,7 @@
    be merged by whoever reads them next to each other:
 
      unresolved-service-config   CAN THE RUNTIME SEE ITS CONFIG. Driven by
-                                 `runtime-required-service-paths`, the five
+                                 `runtime-required-service-paths`, the four
                                  paths read with a tenant and no
                                  tenant-config-key. A topology answer.
      unsupplied-first-query-config
@@ -273,7 +387,10 @@
    be decrypted\" is a diagnosis the reader cannot act on; \"set
    TYPESENSE_API_KEY_ADMIN\" is one they can, and it is the same fact."
   [db tenant]
-  (let [findings (unresolved-service-config db tenant)
+  (let [findings (-> (unresolved-service-config db tenant)
+                     (into (unreachable-provider-decision db tenant))
+                     ;; the model, through the one read
+                     (into (unresolved-model db tenant)))
         sealed (undecryptable-service-config db tenant)]
     (when (seq sealed)
       (t/log! {:level :error

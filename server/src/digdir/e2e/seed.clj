@@ -9,12 +9,13 @@
         console's seed flow).
      2. Ensures an API key with the exact plaintext from `E2E_API_KEY`
         exists in the config DB.
-     3. Writes any AZURE_OPENAI_* env vars to the platform config DB
-        so the LLM call path resolves them via the standard
-        `cfg/get {:tenant t} :services :azure-openai ...` chain. The
+     3. Writes any AZURE_OPENAI_* env vars, and the OPENAI_API_ENDPOINT /
+        OPENAI_API_KEY pair, to the platform config DB so the LLM call path
+        resolves them via the standard `cfg/get {:tenant t} :services ...`
+        chain (`services.azure-openai.*`, `services.llm.*`). The
         env-var -> config-path mapping and the write itself now live in
         `digdir.config.env-bridge`, shared with the import path; this
-        namespace supplies only the :azure-openai scoping.
+        namespace supplies only the LLM-services scoping.
 
    All three steps are idempotent. The docker-compose E2E stack stays
    self-contained: `server/e2e/.env` carries the values and both the
@@ -46,14 +47,22 @@
    Azure config definitions aren't declared `:ownership :inherit` —
    `cfg/get` only walks up to __global__ for inherit-owned paths.
 
-   The work is `digdir.config.env-bridge/seed-config-from-env!`, scoped to
-   :azure-openai. Scoped deliberately: the shared bridge writes every service
+   The work is `digdir.config.env-bridge/seed-config-from-env!`, scoped to the
+   two LLM services. Scoped deliberately: the shared bridge writes every service
    whose variable is set, and the E2E stack must keep writing exactly what it
    wrote before — its `server/e2e/.env` is the definition of that stack, not
-   whatever else happens to be exported in the shell that starts it."
+   whatever else happens to be exported in the shell that starts it.
+
+   :openai-compatible joined the scope in Phase 2 of the provider-resolver change, when the runtime stopped
+   reading OPENAI_API_ENDPOINT / OPENAI_API_KEY and they became SEEDING INPUTS
+   for `services.llm.*`. Before that they took effect by being read per call;
+   now they take the same effect only by being seeded, and a boot seed that
+   skipped them would leave them doing nothing. (The report key is still
+   `:azure-paths-written`, and now lists those paths too; the name is the provider-resolver change
+   Phase 4's.)"
   [conn tenant]
   (let [{:keys [paths-written error]}
-        (env-bridge/seed-config-from-env! conn tenant {:services #{:azure-openai}})]
+        (env-bridge/seed-config-from-env! conn tenant {:services #{:azure-openai :openai-compatible}})]
     (when error
       (throw (ex-info "Target tenant has no Platform/default node"
                       {:tenant tenant :reason error})))

@@ -158,12 +158,12 @@
           b (first (core/assign-chunk-ids "doc-147126" [(mk-chunk boilerplate)]))]
       (is (not= (:chunk_id a) (:chunk_id b))
           "precondition: the ids differ")
-      (is (= (search-phrases/cache-key a "gpt-5.5" "prompt")
-             (search-phrases/cache-key b "gpt-5.5" "prompt"))
+      (is (= (search-phrases/cache-key a {:provider :azure :model "gpt-5.5"} "prompt")
+             (search-phrases/cache-key b {:provider :azure :model "gpt-5.5"} "prompt"))
           "same text, same cache entry"))))
 
 (deftest phrase-cache-still-separates-different-text
   (testing "different content still gets its own cache entry"
     (let [[a b] (core/assign-chunk-ids "doc-1" [(mk-chunk "one") (mk-chunk "two")])]
-      (is (not= (search-phrases/cache-key a "gpt-5.5" "prompt")
-                (search-phrases/cache-key b "gpt-5.5" "prompt"))))))
+      (is (not= (search-phrases/cache-key a {:provider :azure :model "gpt-5.5"} "prompt")
+                (search-phrases/cache-key b {:provider :azure :model "gpt-5.5"} "prompt"))))))

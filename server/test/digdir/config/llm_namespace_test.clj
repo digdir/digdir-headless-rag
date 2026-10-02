@@ -2,20 +2,21 @@
   "Phase 2 of the provider-resolver change — `services.llm.*`, one config-backed home for the provider
    decision and the OpenAI-compatible credential pair.
 
-   This change lands the DEFINITIONS only. Nothing reads them until their reader lands, and the
-   OPENAI_* bridge rows deliberately stay on the environment until then: moving
-   them ahead of their reader would put `digdir.config.verify` and the
-   operator's instructions on `services.llm.*` while the runtime still reads
-   env - a verifier that reports success on a path the runtime does not take,
-   which is the Azure-switch default mismatch. The seeding tests arrive with the reader.
+   The DEFINITIONS landed first; their reader landed next and, in the same
+   change, moved the OPENAI_* bridge rows onto `services.llm.*` and made
+   AZURE_OPENAI_USE_AZURE seed `services.llm.provider`. The rows could not move
+   first: that would have put `digdir.config.verify` and the operator's
+   instructions on `services.llm.*` while the runtime still read env - a
+   verifier reporting success on a path the runtime does not take, the Azure-switch default mismatch.
 
    Two kinds of test live here, and they fail in opposite directions:
 
      BUILD  — pin what Phase 2 adds. Red before it lands.
      HOLD   — pin what Phase 2 must NOT change. Green before AND after. The
-              gate on the provider-resolver change is Phase 3's, so a Phase 2 that makes the keyword
-              selectors follow `services.llm.provider` has crossed it; the
-              HOLD tests are how that would show.
+              gate on the provider-resolver change was Phase 3's, so a Phase 2 that made the keyword
+              selectors follow `services.llm.provider` would have crossed it.
+              Phase 3 of the provider-resolver change then INVERTED that hold, deliberately:
+              `services-llm-provider-moves-the-keyword-selectors`.
 
    Values never appear here."
   (:require [cheshire.core :as json]
@@ -24,6 +25,7 @@
             [clojure.test :refer [deftest is testing]]
             [datahike.api :as d]
             [digdir.config.accessor :as accessor]
+            [digdir.config.core :as config-core]
             [digdir.config.db :as config-db]
             [digdir.config.deployment-specific :as ds]
             [digdir.config.env-bridge :as env-bridge]
@@ -32,17 +34,39 @@
             [digdir.docs.loader :as loader]
             [digdir.docs.pipeline.search-phrases :as sp]
             [digdir.llm.client]
+            [digdir.secrets :as secrets]
             [digdir.setup.config :as setup-config]
             [digdir.skills.enrichment.propose-questions :as pq]))
 
 (def ^:private llm-paths
-  "What Phase 2 adds. `services.llm.model` is deliberately NOT here: it
-   arrives in Phase 4 with the `services.azure-openai.model-name` migration,
-   and defining it earlier would ship a path an operator can set to no effect.
-  "
+  "What Phase 2 adds, plus `services.llm.model`, which Phase 4 adds with the
+   `services.azure-openai.model-name` migration. Phase 2 deliberately left the
+   model out: defining it before its reader existed would have shipped a path an
+   operator can set to no effect, which is the trap the provider-resolver change
+   exists to remove. Phase 4 defines it and reads it in the same change."
   {"services.llm.api-endpoint" {:value-type :string :encrypted? false}
    "services.llm.api-key"      {:value-type :string :encrypted? true}
-   "services.llm.provider"     {:value-type :edn    :encrypted? false}})
+   "services.llm.provider"     {:value-type :edn    :encrypted? false}
+   "services.llm.model"        {:value-type :string :encrypted? false}})
+
+(defn- with-env
+  "Stub the environment through the seam `digdir.secrets` and the bridge both
+   read, so the stub is on the door the code under test actually uses."
+  [m f]
+  (binding [secrets/*env-lookup* (fn [k] (get m k))]
+    (f)))
+
+(defn- capture-writes
+  "Run `f` with config-DB writes captured instead of performed. Same stub shapes
+   as `digdir.config.env-bridge-test`."
+  [f]
+  (let [writes (atom [])]
+    (with-redefs [config-db/get-config-node-by-tenant-config-key (fn [& _] {:config.node/id "platform/t/default"})
+                  config-core/get-master-key (constantly "test-master-key")
+                  config-db/set-node-value! (fn [_ opts]
+                                              (swap! writes conj (select-keys opts [:path :value]))
+                                              :created)]
+      [(f) @writes])))
 
 (defn- registered-definitions
   "Every definition `ensure-all-config-definitions!` registers, as
@@ -77,7 +101,7 @@
       ;; Positive control on the SAME capture: without it, an empty capture
       ;; would make every absence below pass.
       (is (contains? defs "services.azure-openai.use-azure-openai-api"))
-      (is (contains? defs "services.lmstudio.api-key")))
+      (is (contains? defs "services.colbert.api-key")))
 
     (doseq [[path {:keys [value-type encrypted?]}] llm-paths]
       (testing path
@@ -91,8 +115,12 @@
           ;; `cfg/get` walks up to __global__ only for inherit-owned paths.
           (is (not= :inherit (:ownership opts))))))
 
-    (testing "services.llm.model is NOT defined in Phase 2"
-      (is (not (contains? defs "services.llm.model"))))))
+    ;; FLIPPED by Phase 4 of the provider-resolver change. In Phase 2 this asserted the opposite: the model
+    ;; was deliberately undefined while nothing read it, because a path an
+    ;; operator can set to no effect is the trap the provider-resolver change exists to remove.
+    ;; Phase 4 defines it and reads it in the same change.
+    (testing "services.llm.model is defined by Phase 4, with its reader"
+      (is (contains? defs "services.llm.model")))))
 
 (deftest services-llm-definitions-ship-in-the-snapshot-and-are-decided
   ;; `every-services-path-is-decided` iterates the SNAPSHOT's definitions, so a
@@ -118,14 +146,9 @@
       ;;
       ;; ⚠️ The two `some?` checks are load-bearing. Without them a path missing
       ;; from BOTH code and snapshot compares nil = nil and this passes - which
-      ;; is exactly how it behaved until the OpenRouter key-leak fix verification found it. The
-      ;; union-based `provider-selector-pins-test/selector-2-openrouter-arm-reaches-openrouter`
-      ;; cannot tell the halves apart, so per-half evidence for
-      ;; `services.openrouter.model` lives here and in
-      ;; `search-phrases-provider-paths-test` (runtime half: every-documented-…;
-      ;; snapshot half: the-openrouter-model-definition-ships-…).
+      ;; is exactly how it behaved until the OpenRouter key-leak fix verification found it.
       (let [registered (registered-definitions)]
-        (doseq [path (conj (vec (keys llm-paths)) "services.openrouter.model")]
+        (doseq [path (keys llm-paths)]
           (let [in-code (:description (get registered path))
                 in-snap (:config-def/description (get snap path))]
             (is (some? in-code) (str path " has no description in code - is it registered?"))
@@ -137,7 +160,15 @@
       (is (contains? ds/deployment-specific-paths "services.llm.api-endpoint"))
       (is (contains? ds/deployment-specific-paths "services.llm.api-key"))
       (is (contains? ds/globally-defaultable-paths "services.llm.provider")
-          "the default is decided in code, once — :openai-compatible"))))
+          "the default is decided in code, once — :openai-compatible")
+      ;; the model follows its legacy spelling's classification.
+      ;; services.azure-openai.model-name is globally defaultable, and the two
+      ;; must agree while one is the other's fallback - a migrated tenant would
+      ;; otherwise resolve differently from an unmigrated one.
+      (is (contains? ds/globally-defaultable-paths "services.llm.model")
+          "the model is globally defaultable, as services.azure-openai.model-name is")
+      (is (contains? ds/globally-defaultable-paths "services.azure-openai.model-name")
+          "POSITIVE CONTROL: the legacy spelling is in the same set"))))
 
 (defn- create-test-db []
   (let [cfg {:store {:backend :mem :id (str "llm-ns-test-" (random-uuid))}
@@ -170,6 +201,55 @@
             (is (keyword? v) (str "read back as " (type v)))
             (is (= :openai-compatible v)))))
       (finally (delete-test-db conn)))))
+
+;; ---------------------------------------------------------------------------
+;; BUILD — the env bridge seeds services.llm.*
+;; ---------------------------------------------------------------------------
+
+(deftest the-openai-compatible-pair-is-seeded-into-services-llm
+  (let [by-name (into {} (map (juxt :env-var identity)) env-bridge/env-config-bindings)]
+    (testing "the rows are config-db rows at services.llm.*"
+      (is (= {:destination :config-db :path "services.llm.api-endpoint" :value-type :string :secret? false}
+             (select-keys (get by-name "OPENAI_API_ENDPOINT") [:destination :path :value-type :secret?])))
+      (is (= {:destination :config-db :path "services.llm.api-key" :value-type :string :secret? true}
+             (select-keys (get by-name "OPENAI_API_KEY") [:destination :path :value-type :secret?]))))
+    (testing "seeding writes both, and only both"
+      (let [[result writes] (capture-writes
+                              #(with-env {"OPENAI_API_ENDPOINT" "set" "OPENAI_API_KEY" "set"}
+                                 (fn [] (env-bridge/seed-config-from-env! (atom :stub) "t"))))]
+        (is (= ["services.llm.api-endpoint" "services.llm.api-key"] (:paths-written result)))
+        (is (= #{"services.llm.api-endpoint" "services.llm.api-key"} (set (map :path writes))))))))
+
+(deftest the-legacy-switch-variable-seeds-the-provider
+  ;; ONE variable for ONE decision. AZURE_OPENAI_USE_AZURE
+  ;; writes `services.llm.provider`; it no longer writes the boolean, which
+  ;; becomes an input only the resolver's fallback reads (live values are not
+  ;; rewritten - migration, not replacement).
+  (doseq [[raw expected] [["true" :azure] ["false" :openai-compatible]]]
+    (let [[result writes] (capture-writes
+                            #(with-env {"AZURE_OPENAI_USE_AZURE" raw}
+                               (fn [] (env-bridge/seed-config-from-env! (atom :stub) "t"))))]
+      (is (= ["services.llm.provider"] (:paths-written result)) raw)
+      (is (= [{:path "services.llm.provider" :value expected}] writes) raw)
+      (is (not-any? #(= "services.azure-openai.use-azure-openai-api" (:path %)) writes)
+          "the boolean is no longer written"))))
+
+(deftest the-legacy-model-variable-seeds-the-model
+  ;; Phase 4 of the provider-resolver change, the same shape as the switch variable above: ONE variable for
+  ;; ONE setting. AZURE_OPENAI_MODEL_NAME keeps its legacy NAME and now writes
+  ;; `services.llm.model`. It no longer writes services.azure-openai.model-name,
+  ;; which becomes an input only the resolver's fallback reads - live values are
+  ;; not rewritten, because this is a migration, not a replacement.
+  (let [by-name (into {} (map (juxt :env-var identity)) env-bridge/env-config-bindings)]
+    (is (= {:destination :config-db :path "services.llm.model" :value-type :string :secret? false}
+           (select-keys (get by-name "AZURE_OPENAI_MODEL_NAME") [:destination :path :value-type :secret?])))
+    (let [[result writes] (capture-writes
+                            #(with-env {"AZURE_OPENAI_MODEL_NAME" "a-model"}
+                               (fn [] (env-bridge/seed-config-from-env! (atom :stub) "t"))))]
+      (is (= ["services.llm.model"] (:paths-written result)))
+      (is (= [{:path "services.llm.model" :value "a-model"}] writes))
+      (is (not-any? #(= "services.azure-openai.model-name" (:path %)) writes)
+          "the legacy path is no longer written"))))
 
 ;; ---------------------------------------------------------------------------
 ;; HOLD — the run-level knobs stay in the environment
@@ -209,27 +289,33 @@
                           env-bridge/env-config-bindings))))))
 
 ;; ---------------------------------------------------------------------------
-;; HOLD — services.llm.provider does not move selectors 2, 3 or 4 (the gate)
+;; services.llm.provider moves selectors 2, 3 and 4
 ;; ---------------------------------------------------------------------------
 
 (defn- stub-config
   "A tenant that has chosen the generic OpenAI-compatible path through BOTH
-   the switch and `services.llm.provider`, and set no keyword selector. Azure
-   credentials are present, as they are on any tenant that once used Azure."
+   the switch and `services.llm.provider`, with its own `services.llm.*`
+   credentials, and set no keyword selector. Azure credentials are present, as
+   they are on any tenant that once used Azure."
   [_opts & ks]
   (case (vec ks)
     [:services :azure-openai :use-azure-openai-api] false
     [:services :llm :provider] :openai-compatible
+    [:services :llm :api-key] "llm-key"
+    [:services :llm :api-endpoint] "https://llm.example"
+    [:services :azure-openai :model-name] "generic-model"
     [:services :azure-openai :api-key] "set"
     [:services :azure-openai :api-endpoint] "https://azure.example"
     [:services :azure-openai :deployment-name] "dep"
     nil))
 
-(deftest services-llm-provider-does-not-move-the-keyword-selectors
-  ;; Phase 3 is gated on the provider-resolver change. Until it lands, selectors 2-4 keep their own
-  ;; reads — so a tenant that says :openai-compatible everywhere Phase 2 lets
-  ;; it still sends these three to Azure. When Phase 3 lands this test is
-  ;; INVERTED, deliberately, and that inversion is the mission's done-condition.
+(deftest services-llm-provider-moves-the-keyword-selectors
+  ;; INVERTED by Phase 3 of the provider-resolver change, deliberately - that inversion is the mission's
+  ;; done-condition. It was `services-llm-provider-does-not-move-the-keyword-selectors`,
+  ;; the HOLD that kept selectors 2-4 on their own reads while Phase 3 was gated:
+  ;; a tenant that said :openai-compatible everywhere still sent these three to
+  ;; Azure. Now all three follow it. The Azure credentials are present, so a
+  ;; selector that still defaulted to Azure would have somewhere to go.
   (let [sent (atom [])]
     (with-redefs [accessor/get stub-config
                   digdir.llm.client/create-chat-completion
@@ -241,15 +327,38 @@
         (reset! sent [])
         (sp/create-chat-completion "t" {:messages [{:role "user" :content "x"}]})
         (is (= 1 (count @sent)) "the call must reach the client stub, or this proves nothing")
-        (is (= :azure (:impl (first @sent)))))
+        (is (= [:openai "https://llm.example"] ((juxt :impl :api-endpoint) (first @sent)))))
 
       (testing "selector 3 — self-improvement enrichment"
-        (let [provider (#'pq/self-improvement-provider "t")]
-          (is (= :azure-openai provider))
-          (is (= :azure (:impl (#'pq/provider-impl "t" provider))))))
+        (reset! sent [])
+        (pq/execute-propose-questions {:inputs {:chunk-id "c" :chunk-content "A passage."}
+                                       :parameters {}
+                                       :skill-params {:tenant "t"}})
+        (is (= 1 (count @sent)) "the call must reach the client stub, or this proves nothing")
+        (is (= [:openai "https://llm.example"] ((juxt :impl :api-endpoint) (first @sent)))))
 
       (testing "selector 4 — the loader"
         (reset! sent [])
         (loader/create-chat-completion "t" {:model "gpt-4o" :messages [{:role "user" :content "x"}]})
         (is (= 1 (count @sent)))
-        (is (= :azure (:impl (first @sent))))))))
+        (is (= [:openai "https://llm.example"] ((juxt :impl :api-endpoint) (first @sent))))))))
+
+(deftest the-loader-keeps-its-azure-timeout
+  ;; Phase 3 of the provider-resolver change routes the loader through `provider/resolve`, whose spec carries no
+  ;; `:request`. The loader has always given its Azure calls 30s (wkok honours it);
+  ;; the OpenAI-compatible branch of the client ignores `:request`, so only Azure
+  ;; can lose it - and nothing else would notice.
+  (let [sent (atom [])
+        azure (fn [_opts & ks]
+                (get {[:services :llm :provider] :azure
+                      [:services :azure-openai :api-key] "set"
+                      [:services :azure-openai :api-endpoint] "https://azure.example"
+                      [:services :azure-openai :deployment-name] "dep"}
+                     (vec ks)))]
+    (with-redefs [accessor/get azure
+                  digdir.llm.client/create-chat-completion (fn [_conversation opts]
+                                                             (swap! sent conj opts)
+                                                             {:choices [{:message {:content "a, b"}}]})]
+      (loader/create-chat-completion "t" {:model "gpt-4o" :messages [{:role "user" :content "x"}]}))
+    (is (= 1 (count @sent)) "the call must reach the client stub, or this proves nothing")
+    (is (= [:azure {:timeout 30000}] ((juxt :impl :request) (first @sent))))))

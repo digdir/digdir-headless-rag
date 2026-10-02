@@ -19,7 +19,11 @@
   {"services.azure-openai.api-key" "az-key"
    "services.azure-openai.api-endpoint" "https://azure.provider-test.invalid"
    "services.azure-openai.deployment-name" "az-deployment"
-   "services.azure-openai.model-name" "generic-model"})
+   "services.azure-openai.model-name" "generic-model"
+   ;; the openai-compatible branch now reads its own
+   ;; per-tenant credentials instead of leaving them to the transport.
+   "services.llm.api-key" "llm-key"
+   "services.llm.api-endpoint" "https://llm.provider-test.invalid"})
 
 (defn- with [values f] (fx/with-install (merge azure-config values) f))
 
@@ -44,12 +48,14 @@
                             {:defined (disj (fx/fresh-install-definitions) switch)}
                             #(provider/selected-provider tenant))))))
 
-(deftest switch-value-keeps-unset-apart-from-false
-  ;; provider_switch's boot refusal fires on UNSET only; collapsing it to a
-  ;; boolean would refuse deliberate `false` deployments.
-  (is (nil? (with {} #(provider/switch-value tenant))))
-  (is (false? (with {switch false} #(provider/switch-value tenant))))
-  (is (true? (with {switch true} #(provider/switch-value tenant)))))
+(deftest configured-provider-keeps-unset-apart-from-a-chosen-provider
+  ;; provider_switch's boot refusal fires on UNSET only; collapsing it would
+  ;; refuse deliberate non-Azure deployments. FLIPPED by the provider-resolver change: the value is
+  ;; now provider vocabulary, read from `services.llm.provider` with the boolean
+  ;; as its fallback (`provider-read-both-test` pins the precedence).
+  (is (nil? (with {} #(provider/configured-provider tenant))))
+  (is (= :openai-compatible (with {switch false} #(provider/configured-provider tenant))))
+  (is (= :azure (with {switch true} #(provider/configured-provider tenant)))))
 
 ;; ---------------------------------------------------------------------------
 ;; The call spec
@@ -61,31 +67,40 @@
           :model "az-deployment"
           :api-key "az-key"
           :api-endpoint "https://azure.provider-test.invalid"
-          :provider/source {:api-key {:from :config :path "services.azure-openai.api-key" :present? true}
-                            :api-endpoint {:from :config :path "services.azure-openai.api-endpoint" :present? true}}}
+          ;; FLIPPED by the provider-resolver change: no `:present?` - a credential that is not
+          ;; present refuses instead of being tagged and passed on.
+          :provider/source {:api-key {:from :config :path "services.azure-openai.api-key"}
+                            :api-endpoint {:from :config :path "services.azure-openai.api-endpoint"}
+                            ;; which path supplied the model
+                            :model {:from :config :path "services.azure-openai.deployment-name"}}}
          (with {switch true} #(provider/resolve tenant)))))
 
-(deftest resolve-on-azure-with-no-configured-key-says-so
-  ;; The key is nil, so wkok will fall back to AZURE_OPENAI_API_KEY — the
-  ;; per-tenant -> process-global door Phase 2 closes. Phase 1 changes nothing
-  ;; about it; the tag makes the state explicit instead of guessable.
-  (let [spec (with {switch true "services.azure-openai.api-key" nil} #(provider/resolve tenant))]
-    (is (nil? (:api-key spec)))
-    (is (= {:from :config :path "services.azure-openai.api-key" :present? false}
-           (get-in spec [:provider/source :api-key])))))
+(deftest resolve-on-azure-with-no-configured-key-refuses-naming-it
+  ;; FLIPPED by the provider-resolver change. Phase 1 passed the nil on, tagged `:present? false`,
+  ;; and wkok filled it from AZURE_OPENAI_API_KEY - the per-tenant ->
+  ;; process-global door Phase 2 closes. Now the nil never reaches wkok.
+  (let [e (try (with {switch true "services.azure-openai.api-key" nil} #(provider/resolve tenant))
+               nil
+               (catch clojure.lang.ExceptionInfo e e))]
+    (is (some? e) "resolve must refuse rather than return a nil key")
+    (is (= "services.azure-openai.api-key" (:path (ex-data e))))))
 
-(deftest resolve-on-openai-compatible-leaves-credentials-to-the-transport
-  ;; Phase 1 reproduces today exactly: the non-Azure sites passed NO opts, so
-  ;; client.clj (secret / OPENAI_API_ENDPOINT / default) and wkok (env) chose.
-  ;; The resolver never reads the environment itself.
+(deftest resolve-on-openai-compatible-takes-credentials-from-services-llm
+  ;; FLIPPED by the provider-resolver change. Phase 1 left these nil, and client.clj filled them
+  ;; from OPENAI_API_* in the environment (process-global). They now come from
+  ;; the tenant's own `services.llm.*`; the resolver still never reads the
+  ;; environment itself.
   (doseq [values [{} {switch false}]]
     (is (= {:provider :openai-compatible
             :impl :openai
             :model "generic-model"
-            :api-key nil
-            :api-endpoint nil
-            :provider/source {:api-key {:from :unresolved}
-                              :api-endpoint {:from :unresolved}}}
+            :api-key "llm-key"
+            :api-endpoint "https://llm.provider-test.invalid"
+            :provider/source {:api-key {:from :config :path "services.llm.api-key"}
+                              :api-endpoint {:from :config :path "services.llm.api-endpoint"}
+                              ;; the legacy key holds the value here,
+                              ;; and the spec says so rather than naming the new one
+                              :model {:from :config :path "services.azure-openai.model-name"}}}
            (with values #(provider/resolve tenant)))
         (pr-str values))))
 
@@ -109,12 +124,20 @@
                          (provider/resolve tenant))))
                   (is (seq @seen) "absolute: the wrapper saw reads at all")
                   (set (map (fn [p] (str/join "." (map name p))) @seen))))]
-    (testing "Azure: the switch, the deployment name, the key and the endpoint — not model-name"
-      (is (= #{switch "services.azure-openai.deployment-name"
+    ;; both branches now also read `services.llm.provider` (the
+    ;; decision reads both paths), and openai-compatible reads its own
+    ;; `services.llm.*` credentials. Still: neither branch reads the other's.
+    (testing "Azure: the decision, the deployment name, the key and the endpoint — not model-name, not services.llm.*"
+      (is (= #{"services.llm.provider" switch "services.azure-openai.deployment-name"
                "services.azure-openai.api-key" "services.azure-openai.api-endpoint"}
              (reads {switch true}))))
-    (testing "openai-compatible: the switch and model-name only — no Azure credential"
-      (is (= #{switch "services.azure-openai.model-name"} (reads {switch false}))))))
+    ;; the openai-compatible branch reads the MODEL's two paths -
+    ;; services.llm.model first, then the legacy services.azure-openai.model-name
+    ;; as its fallback. Azure's model is its deployment name, unchanged.
+    (testing "openai-compatible: the decision, BOTH model paths and its own services.llm.* — no Azure credential"
+      (is (= #{"services.llm.provider" switch "services.llm.model" "services.azure-openai.model-name"
+               "services.llm.api-key" "services.llm.api-endpoint"}
+             (reads {switch false}))))))
 
 (deftest a-caller-model-wins-and-the-default-is-not-even-read
   ;; Every call site's fallback was `(or model (if azure deployment-name
@@ -126,15 +149,37 @@
     (is (= "step-model" (:model (with {switch false} #(provider/resolve tenant {:model "step-model"}))))))
   (testing "an explicit nil model falls back, exactly as `or` did"
     (is (= "generic-model" (:model (with {switch false} #(provider/resolve tenant {:model nil}))))))
-  (testing "no platform tree + a caller model: resolves without touching the default"
-    (is (= {:provider :openai-compatible :model "step-model"}
-           (select-keys (fx/with-install (merge azure-config {switch true}) {:tenant-tree? false}
-                          #(provider/resolve tenant {:model "step-model"}))
-                        [:provider :model]))))
+  (testing "no platform tree + a caller model: the default is still not read, but the call now REFUSES"
+    ;; FLIPPED by the provider-resolver change. Phase 1 resolved this with nil credentials and the
+    ;; transport borrowed the process environment. A tenant with no platform
+    ;; tree has no credential of its own, so it refuses - naming the path, and
+    ;; keeping `:kind` for callers that decide on it.
+    (let [e (try (fx/with-install (merge azure-config {switch true}) {:tenant-tree? false}
+                   #(provider/resolve tenant {:model "step-model"}))
+                 nil
+                 (catch clojure.lang.ExceptionInfo e e))]
+      (is (= :tenant-root-missing (:kind (ex-data e))))
+      (is (= "services.llm.api-key" (:path (ex-data e))))))
   (testing "…whereas with no caller model it reads the default, and that read throws there, as it always did"
     (is (thrown? clojure.lang.ExceptionInfo
                  (fx/with-install (merge azure-config {switch true}) {:tenant-tree? false}
                    #(provider/resolve tenant))))))
+
+(deftest resolve-with-a-caller-model-never-reads-the-default-model
+  ;; What `a-caller-model-wins-and-the-default-is-not-even-read` could see before
+  ;; Phase 2 of the provider-resolver change, through its no-tree case: that case now refuses at the credential
+  ;; read first, so it no longer shows whether the default was read. Pinned here
+  ;; on a NORMAL tenant, on both branches: a caller model means neither
+  ;; `deployment-name` nor `model-name` is read.
+  (doseq [values [{switch true} {switch false}]]
+    (let [seen (atom [])]
+      (with values
+        #(let [installed accessor/get]
+           (with-redefs [accessor/get (fn [o & parts] (swap! seen conj (vec parts)) (apply installed o parts))]
+             (provider/resolve tenant {:model "caller"}))))
+      (is (seq @seen) "absolute: the wrapper saw reads at all")
+      (is (not-any? #{[:services :azure-openai :deployment-name] [:services :azure-openai :model-name]} @seen)
+          (str (pr-str values) " read a default model: " (pr-str @seen))))))
 
 (deftest model-for-is-the-old-fallback-and-reads-no-credential
   ;; For a site that picks its model in one place and makes the call in
@@ -157,5 +202,7 @@
         #(let [installed accessor/get]
            (with-redefs [accessor/get (fn [o & parts] (swap! seen conj (vec parts)) (apply installed o parts))]
              (provider/model-for tenant))))
-      (is (= #{[:services :azure-openai :use-azure-openai-api] [:services :azure-openai :deployment-name]}
+      ;; the decision now reads `services.llm.provider` first.
+      (is (= #{[:services :llm :provider] [:services :azure-openai :use-azure-openai-api]
+               [:services :azure-openai :deployment-name]}
              (set @seen))))))

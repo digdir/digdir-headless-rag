@@ -52,10 +52,6 @@
    "services.azure-openai.api-endpoint" "https://azure.harness.invalid"
    "services.azure-openai.deployment-name" "az-deployment"
    "services.azure-openai.model-name" "generic-model"
-   "services.lmstudio.api-key" "lm-key"
-   "services.lmstudio.api-endpoint" "http://lmstudio.harness.invalid:1234"
-   "services.lmstudio.model" "lm-model"
-   "services.openrouter.api-key" "or-key"
    ;; Defined by the OpenRouter key-leak fix, read by nothing until services.llm.* gets its reader. Installed now so that when
    ;; the openai-compatible branch starts resolving them, its change is a
    ;; clean declared rule (:secret -> :opts, api.openai.com -> this host)
@@ -116,9 +112,15 @@
     :call #(sp/create-chat-completion tenant {:model "caller-model" :messages [{:role "user" :content "x"}]})}
    {:id :loader :kind :direct
     :call #(loader/create-chat-completion tenant {:model "gpt-4o" :messages [{:role "user" :content "x"}]})}
+   ;; The loader's fallback call. The id names the OpenRouter route this entry
+   ;; was written for; the provider-resolver change removed that route, and the fallback model now
+   ;; names its model to the tenant's resolved provider (`{:model ...}`), so
+   ;; the entry drives that call. Its records keep their id, so that change to
+   ;; them is a declared one.
    {:id :loader-openrouter :kind :direct
     :call #(loader/create-chat-completion tenant {:model :google/gemma-3-27b-it
-                                                  :messages [{:role "user" :content "x"}]})}
+                                                  :messages [{:role "user" :content "x"}]}
+                                          {:model :google/gemma-3-27b-it})}
    ;; The two direct routing reads Phase 1 removes (one in production code, one in src-dev).
    ;; A third read (sweep/runner.clj) chooses a model but makes no call, so only the
    ;; the provider-switch census covers it.
@@ -155,16 +157,24 @@
    ;; from the OPENAI_API_KEY secret whatever this path holds; after it, a nil
    ;; key must refuse. Without this arm that refusal is invisible here.
    :openai-no-key {switch false "services.llm.api-key" nil}
+   ;; The two retired keyword selectors. Phase 4 of the provider-resolver change removed their definitions,
+   ;; so a fresh install cannot hold these values; an install that predates it
+   ;; still can, and these arms are that install. They stay in the corpus too,
+   ;; because the before-capture has records for them.
    :search-phrases-lmstudio {"services.search-phrases.provider" :lmstudio}
    :self-improvement-lmstudio {"services.self-improvement.provider" :lmstudio}})
 
 (def unobserved-by-phase-0
-  "Calls Phase 0 cannot record; the step-parameter provenance record's body lists both. The leaf stubs still
-   see them, so they stay in the record — only the count check is waived.
-   - propose-questions' :lmstudio arm POSTs past digdir.llm.client;
-   - rechunk_reground calls wkok directly, below every capture point."
+  "Calls Phase 0 cannot record. The leaf stubs still see them, so they stay in
+   the record — only the count check is waived. A run listed here that IS
+   recorded fails (`:expected-unobserved-but-recorded`), so an entry cannot
+   outlive the blind spot it names.
+   - rechunk_reground calls wkok directly, below every capture point.
+   The step-parameter provenance record listed a second: propose-questions' :lmstudio arm POSTed past
+   digdir.llm.client. Phase 3 of the provider-resolver change deleted that arm; the run now goes through
+   the client at its step and is recorded, so its `:runs` entry is gone."
   {:entries #{:sweep-rechunk}
-   :runs #{[:propose-questions [:self-improvement-lmstudio :none]]}})
+   :runs #{}})
 
 (defn- unobserved? [entry-id arm]
   (or (contains? (:entries unobserved-by-phase-0) entry-id)
@@ -217,27 +227,32 @@
    directly rather than through `provenance/capture`, so a run that throws
    still yields the events recorded before it did.
 
+   `:output` is what the run printed. A skill that catches a refusal and
+   degrades (query-planner, read-signals) reports it only there.
+
    Does NOT register the corpus — `capture` does, once per capture. Called on
    its own (a REPL, a scratch test), register first or a graph entry fails
    with :skill-not-found before any call."
   [{:keys [kind call skill inputs respond] :as entry} values layer]
   (let [{:keys [step-params skill-params opts]} (if (= :graph kind) (layer-setup layer skill) {})
         sink (atom [])
-        wire (fx/with-install (merge credentials values)
-               (fn []
-                 (with-redefs [ctx/build-execution-context ctx-without-services]
-                   (fx/with-wire {:respond (or respond (constantly "ok"))}
-                     (fn []
-                       (binding [provenance/*sink* sink]
-                         (if (= :graph kind)
-                           (runner/run-graph (one-step-graph entry (merge (:step-params entry) step-params))
-                                             inputs
-                                             (merge {:tenant tenant
-                                                     :skill-params (merge {:tenant tenant} (:skill-params entry) skill-params)
-                                                     ::runner/suppress-graph-trace? true}
-                                                    opts))
-                           (call))))))))]
-    {:calls (:calls wire) :error (:error wire) :events @sink}))
+        out (java.io.StringWriter.)
+        wire (binding [*out* out]
+               (fx/with-install (merge credentials values)
+                 (fn []
+                   (with-redefs [ctx/build-execution-context ctx-without-services]
+                     (fx/with-wire {:respond (or respond (constantly "ok"))}
+                       (fn []
+                         (binding [provenance/*sink* sink]
+                           (if (= :graph kind)
+                             (runner/run-graph (one-step-graph entry (merge (:step-params entry) step-params))
+                                               inputs
+                                               (merge {:tenant tenant
+                                                       :skill-params (merge {:tenant tenant} (:skill-params entry) skill-params)
+                                                       ::runner/suppress-graph-trace? true}
+                                                      opts))
+                             (call)))))))))]
+    {:calls (:calls wire) :error (:error wire) :events @sink :output (str out)}))
 
 ;; ---------------------------------------------------------------------------
 ;; The join
@@ -387,13 +402,16 @@
 ;; before-capture. A declaration is data, checked rather than trusted:
 ;;
 ;;   {:rules    [{:why str :select {path v} :from {path v} :to {path v}} ...]
-;;    :refusals [{:why str :select {path v} :names-path "services.x.y"} ...]}
+;;    :refusals [{:why str :select {path v} :names-path "services.x.y"
+;;                :swallowed? bool} ...]}
 ;;
 ;; `path` is a vector into a record (`[:sent :key-from]`); a `:select` value that
 ;; is a SET matches any member. A rule rewrites the records it selects from
 ;; `:from` to `:to`; a refusal says the selected runs now make ZERO calls and
-;; throw naming `:names-path`. Refusals select on `[:entry]` / `[:arm]` only —
-;; a refused run has no `:sent` to select on.
+;; throw naming `:names-path`. With `:swallowed? true` they instead throw
+;; NOTHING and print the path: the skill catches the refusal and degrades.
+;; Refusals select on `[:entry]` / `[:arm]` only — a refused run has no `:sent`
+;; to select on.
 ;;
 ;; A rule or refusal that selects nothing is a failure, and so is a rule whose
 ;; `:from` does not describe every record it selects: a declaration cannot be
@@ -409,15 +427,35 @@
 (defn- refusal-for [declarations entry-id arm]
   (some #(when (matches? {:entry entry-id :arm arm} (:select %)) %) (:refusals declarations)))
 
+(defn- refusal-message
+  "The one message a thrown refusal carries. From a graph step it arrives
+   wrapped by the runner, `(ex-info \"Step execution failed\" {:step-id ..
+   :error <step result>})` with no cause, and the skill's own message is the
+   step result's `[:error :error-message]` (the `skills/error-result` shape;
+   `graph.trace` reads it the same way). Only that string is read, never the
+   whole ex-data: a path in the run's inputs or context would pass a refusal
+   that never happened."
+  [error]
+  (str (or (get-in (ex-data error) [:error :error :error-message])
+           (ex-message error))))
+
 (defn- refusal-problems
-  "Why a run declared as a refusal is not one, or nil."
-  [{:keys [names-path]} {:keys [calls error]}]
+  "Why a run declared as a refusal is not one, or nil. A refusal makes ZERO
+   calls and names `:names-path` in the error it throws — or, declared
+   `:swallowed? true`, in what the run printed: a skill that catches the
+   refusal and degrades. Zero calls and no error is also what a skill that
+   never tried looks like, so the printed path is the positive evidence, and a
+   swallowed refusal that throws is a declaration that misdescribes the run."
+  [{:keys [names-path swallowed?]} {:keys [calls error output]}]
   (not-empty
    (cond-> []
      (seq calls) (conj [:declared-refusal-but-called (count calls)])
-     (nil? error) (conj [:declared-refusal-but-no-error])
-     (and error (not (str/includes? (str (ex-message error)) names-path)))
-     (conj [:refusal-does-not-name names-path (ex-message error)]))))
+     (and swallowed? error) (conj [:declared-swallowed-but-threw (refusal-message error)])
+     (and swallowed? (nil? error) (not (str/includes? (str output) names-path)))
+     (conj [:swallowed-refusal-does-not-name names-path])
+     (and (not swallowed?) (nil? error)) (conj [:declared-refusal-but-no-error])
+     (and (not swallowed?) error (not (str/includes? (refusal-message error) names-path)))
+     (conj [:refusal-does-not-name names-path (refusal-message error)]))))
 
 (defn record-key [r] [(:entry r) (:arm r) (:path r) (:call-index r)])
 
@@ -447,10 +485,21 @@
                               {:entry (:entry r) :arm (:arm r) :refused (:names-path rf)}))]
       {:records (vec (concat applied refused)) :problems @problems})))
 
+(defn- call-sources
+  "Guard 4's input: where each in-src call of run `r` took its credentials,
+   and the `:provider/source` tag that says why."
+  [entry arm r]
+  (mapv (fn [[path ev]]
+          (merge {:entry (:id entry) :arm arm :path path}
+                 (select-keys ev [:key-from :endpoint-from :key-source :endpoint-source])))
+        (in-src-calls (:events r))))
+
 (defn capture
   "{:runs n :unregistered [skill-id ...] :problems {[entry arm] [...]}
-    :records [record ...]} over every run. A run `declarations` names as a
-   refusal is held to that instead: zero calls, and an error naming the path."
+    :records [record ...] :calls [call-source ...]} over every run. A run
+   `declarations` names as a refusal is held to that instead: zero calls, and
+   an error naming the path. `:calls` is Guard 4's input and never part of a
+   record, so the before-capture comparison does not see it."
   ([] (capture {}))
   ([declarations]
    (reduce (fn [acc [entry arm values layer]]
@@ -459,13 +508,54 @@
                    ps (if rf (refusal-problems rf r) (problems entry arm r))]
                (cond-> (-> acc
                            (update :runs inc)
+                           (update :calls into (call-sources entry arm r))
                            (update :records conj
                                    (if rf
                                      {:entry (:id entry) :arm arm :refused (:names-path rf)}
                                      (record entry arm values r))))
                  ps (assoc-in [:problems [(:id entry) arm]] ps))))
-           {:runs 0 :unregistered (register-corpus!) :problems {} :records []}
+           {:runs 0 :unregistered (register-corpus!) :problems {} :records [] :calls []}
            (runs))))
+
+;; ---------------------------------------------------------------------------
+;; Guard 4 — the provider-resolver change's done-condition
+;; ---------------------------------------------------------------------------
+
+(def guard-4-sources
+  "The only places a credential may come from: the tenant's config, or the
+   sweep's run-override (src-dev only; `provider-env-door-test`)."
+  #{:config :run-override})
+
+(defn- guard-4-holds? [c]
+  (and (= :opts (:key-from c))
+       (= :opts (:endpoint-from c))
+       (contains? guard-4-sources (:key-source c))
+       (contains? guard-4-sources (:endpoint-source c))))
+
+(defn guard-4-problems
+  "Every call takes its key and endpoint from the resolved spec (`:opts`), and
+   the spec says each came from config or the run-override. An ALLOWLIST:
+   `:untagged`, `:unresolved`, `:env` and nil all fail — a guard that accepted
+   whatever was not a known-bad value would pass a call site that dropped the
+   tag.
+
+   `exceptions` is {entry-id {:why str :excuses {field value}}}: that entry's
+   calls may have exactly those field values, and must hold Guard 4 in every
+   other respect. Checked, not trusted: an exception that excuses no call is a
+   problem, so it is deleted in the commit that makes it unnecessary."
+  [calls exceptions]
+  (let [excused? (fn [c]
+                   (when-let [{:keys [excuses]} (get exceptions (:entry c))]
+                     (and (= excuses (select-keys c (keys excuses)))
+                          (guard-4-holds? (merge c (zipmap (keys excuses) (repeat :config)))))))
+        violations (remove guard-4-holds? calls)
+        used (set (map :entry (filter excused? violations)))]
+    (not-empty
+     (vec (concat
+           (for [c violations :when (not (excused? c))]
+             [:guard-4 (select-keys c [:entry :arm :key-from :endpoint-from :key-source :endpoint-source])])
+           (for [e (keys exceptions) :when (not (contains? used e))]
+             [:vacuous-guard-4-exception e]))))))
 
 (defn diff-records
   "What changed between two record sets, keyed by `record-key`."

@@ -3,7 +3,10 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [digdir.sweep.invoke :as sweep-invoke]
+            [digdir.config.accessor :as accessor]
             [digdir.eval.run-validity :as validity]
+            [digdir.llm.provider :as provider]
+            [digdir.llm.provider-fixtures :as fx]
             [digdir.sweep.runner :as runner]))
 
 (deftest retrieved-chunk-ids-reads-reranked-then-falls-back
@@ -542,3 +545,83 @@
     ;; the guard up.
     (is (= :no-llm-call (validity/classify {"llm-calls" "0" "llm-ms" "0"})))
     (is (= :measured (validity/classify {"llm-calls" "2" "llm-ms" "9000"})))))
+
+;; ---------------------------------------------------------------------------
+;; the sweep hands its OPENAI_API_* pair to the resolver
+;; ---------------------------------------------------------------------------
+
+(defn- resolved-with [env]
+  (try
+    (let [installed (runner/install-sweep-credentials! #(get env %))]
+      {:installed installed
+       :spec (fx/with-install {"services.llm.provider" :openai-compatible
+                               "services.llm.api-key" "tenant-key"
+                               "services.llm.api-endpoint" "https://tenant.invalid"}
+               #(provider/resolve "sweep-tenant"))})
+    (catch clojure.lang.ExceptionInfo e {:threw (ex-message e)})
+    (finally (provider/clear-run-override!))))
+
+(deftest a-sweep-with-both-variables-routes-through-them
+  (let [{:keys [installed spec]} (resolved-with {"OPENAI_API_ENDPOINT" "http://example.invalid:11434/v1"
+                                                 "OPENAI_API_KEY" "lmstudio"})]
+    (is (true? installed))
+    (is (= "http://example.invalid:11434/v1" (:api-endpoint spec)))
+    (is (= {:from :run-override} (get-in spec [:provider/source :api-endpoint])))))
+
+(deftest a-sweep-with-neither-variable-leaves-the-tenant-config-in-charge
+  (let [{:keys [installed spec]} (resolved-with {})]
+    (is (nil? installed))
+    (is (= "https://tenant.invalid" (:api-endpoint spec)))
+    (is (= :config (get-in spec [:provider/source :api-endpoint :from])))))
+
+(deftest a-sweep-with-half-a-pair-refuses-naming-the-missing-variable
+  (is (re-find #"OPENAI_API_KEY" (str (:threw (resolved-with {"OPENAI_API_ENDPOINT" "http://example.invalid/v1"})))))
+  (is (re-find #"OPENAI_API_ENDPOINT" (str (:threw (resolved-with {"OPENAI_API_KEY" "lmstudio"}))))))
+
+(deftest run-matrix-clears-the-override-it-ran-under
+  ;; The override is process-global, so a REPL that ran a sweep would otherwise
+  ;; keep routing every openai-compatible call through the sweep's pair.
+  ;; `run-matrix` clears it on the way out - returned or thrown.
+  (let [tenant-endpoint #(fx/with-install {"services.llm.provider" :openai-compatible
+                                           "services.llm.api-key" "tenant-key"
+                                           "services.llm.api-endpoint" "https://tenant.invalid"}
+                           (fn [] (:api-endpoint (provider/resolve "sweep-tenant"))))]
+    (try
+      (doseq [[how body] [["returned" (fn [_] {:rows []})]
+                          ["threw" (fn [_] (throw (ex-info "the sweep failed" {})))]]]
+        (provider/install-run-override! {:api-endpoint "http://sweep.invalid/v1" :api-key "sweep-key"})
+        (testing (str "precondition, " how ": the sweep's pair is in force")
+          (is (= "http://sweep.invalid/v1" (tenant-endpoint))))
+        (with-redefs [runner/run-matrix* body]
+          (try (runner/run-matrix {}) (catch clojure.lang.ExceptionInfo _ nil)))
+        (testing (str "after run-matrix " how ": the tenant's own config resolves again")
+          (is (= "https://tenant.invalid" (tenant-endpoint)))))
+      (finally (provider/clear-run-override!)))))
+
+(deftest the-manifest-records-generation-on-the-agents-provider
+  ;; enrichment (the manifest's :generation task) follows the SAME
+  ;; provider decision as the agent. It used to be recorded from
+  ;; services.self-improvement.provider and services.lmstudio.*, which are retired:
+  ;; a manifest still reading them would describe settings that route nothing.
+  (let [config {[:services :self-improvement :provider] :azure-openai ; retired: must be ignored
+                [:services :azure-openai :model-name] "generic-model"
+                [:services :azure-openai :deployment-name] "az-deployment"
+                [:services :azure-openai :api-endpoint] "https://azure.invalid"
+                [:services :lmstudio :model] "lm-model"}
+        manifest (fn [provider extra]
+                   (with-redefs [accessor/get (fn [_ & path] (get (merge config extra) (vec path)))
+                                 provider/selected-provider (constantly provider)
+                                 runner/fetch-openai-models (constantly nil)
+                                 runner/fetch-lmstudio-models (constantly nil)]
+                     (:tasks (runner/resolve-model-manifest! "t"))))]
+    (testing "openai-compatible: generation on the agent's provider and endpoint, with its model"
+      (let [{:keys [agent generation]} (manifest :openai-compatible {})]
+        (is (= [:lmstudio "generic-model"] ((juxt :provider :model) generation)))
+        (is (= (:provider agent) (:provider generation)))
+        (is (= (:endpoint agent) (:endpoint generation)))))
+    (testing "azure: the same, on Azure"
+      (let [{:keys [generation]} (manifest :azure {})]
+        (is (= [:azure-openai "az-deployment" "https://azure.invalid"]
+               ((juxt :provider :model :endpoint) generation)))))
+    (testing "the usage-level model override is still recorded"
+      (is (= "si-model" (:model (:generation (manifest :openai-compatible {[:services :self-improvement :model] "si-model"}))))))))

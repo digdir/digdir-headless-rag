@@ -98,26 +98,30 @@
            [{:row row :form :prose :ctx (if (docstring? parent node) :docstring :prose)}]
            :else []))))))
 
-(defn- source-files []
-  (->> ["src" "src-dev"]
-       (mapcat #(file-seq (io/file %)))
-       (filter #(re-find #"\.clj[cs]?$" (.getName ^java.io.File %)))
-       (sort-by str)))
+(defn- source-files
+  ([] (source-files ["src" "src-dev"]))
+  ([roots]
+   (->> roots
+        (mapcat #(file-seq (io/file %)))
+        (filter #(re-find #"\.clj[cs]?$" (.getName ^java.io.File %)))
+        (sort-by str))))
 
 (defn- census-with
-  "{:files n :failures [[file msg]] :mentions {file [mention …]}} over src +
-   src-dev, collecting what `mention-fn` finds in each parsed file."
-  [mention-fn]
-  (reduce (fn [acc f]
-            (let [path (str f)]
-              (try
-                (let [ms (vec (mention-fn (p/parse-file-all f)))]
-                  (cond-> (update acc :files inc)
-                    (seq ms) (assoc-in [:mentions path] ms)))
-                (catch Exception e
-                  (update acc :failures conj [path (ex-message e)])))))
-          {:files 0 :failures [] :mentions {}}
-          (source-files)))
+  "{:files n :failures [[file msg]] :mentions {file [mention …]}} over `roots`
+   (src + src-dev unless given), collecting what `mention-fn` finds in each
+   parsed file."
+  ([mention-fn] (census-with mention-fn ["src" "src-dev"]))
+  ([mention-fn roots]
+   (reduce (fn [acc f]
+             (let [path (str f)]
+               (try
+                 (let [ms (vec (mention-fn (p/parse-file-all f)))]
+                   (cond-> (update acc :files inc)
+                     (seq ms) (assoc-in [:mentions path] ms)))
+                 (catch Exception e
+                   (update acc :failures conj [path (ex-message e)])))))
+           {:files 0 :failures [] :mentions {}}
+           (source-files roots))))
 
 (def ^:private census (delay (census-with mentions)))
 
@@ -135,24 +139,24 @@
 (def ^:private classified
   {"src/digdir/llm/provider.clj"
    {:mentions 1 :kind :routing-read
-    :why "THE read: `switch-value`. Everything else asks `selected-provider` or `resolve`"}
+    :why "THE read: `configured-provider`. Everything else asks `selected-provider` or `resolve`"}
 
    "src/digdir/boot/provider_switch.clj"
    {:mentions 1 :kind :metadata
     :why "switch-env-var: the variable named in the boot refusal; no read. The check itself reads
-          through provider/switch-value (Phase 1 of the provider-resolver change deleted its own switch-path read)"}
+          through provider/configured-provider (Phase 1 of the provider-resolver change deleted its own switch-path read)"}
 
    "src/digdir/config/verify.clj"
    {:mentions 1 :kind :allowlisted-read
-    :why "Presence check in runtime-required-service-paths; makes no provider decision"}
+    :why "the shared-vs-default services issue diagnostic (unreachable-provider-decision): a value set where the runtime cannot
+          see it; the decision itself comes from provider/configured-provider. FLIPPED by the provider-resolver change from a
+          presence check in runtime-required-service-paths, which under read-both would report a
+          legacy-configured tenant unconfigured while the runtime routes it (the Azure-switch default mismatch at the verifier)"}
 
    "src/digdir/config/env_bridge.clj"
-   {:mentions 2 :kind :write
-    :why "Seeding table row: AZURE_OPENAI_USE_AZURE -> the path (env is a write path, never read back)"}
-
-   "src/digdir/setup/llm.clj"
    {:mentions 1 :kind :write
-    :why "Setup wizard writes the switch (use-azure-path)"}
+    :why "Seeding table row: AZURE_OPENAI_USE_AZURE, the legacy spelling, now seeds
+          services.llm.provider; the boolean path is no longer written"}
 
    "src/digdir/setup/config.clj"
    {:mentions 1 :kind :definition
@@ -193,9 +197,9 @@
 
 (deftest routing-reads-reduce-to-one
   (testing "Four routing reads on 267718dd; Phase 1 of the provider-resolver change reduced them to exactly
-            one, provider/switch-value, inside digdir.llm.provider."
+            one, provider/configured-provider, inside digdir.llm.provider."
     (let [routing (into (sorted-set) (keep (fn [[f {:keys [kind]}]] (when (= :routing-read kind) f))) classified)]
-      (is (= 1 (count routing)) (str routing)))))
+      (is (= #{"src/digdir/llm/provider.clj"} routing) (str routing)))))
 
 (deftest the-census-cannot-be-satisfied-by-documentation
   (testing "The instrument, on source whose answer is known: one real read among
@@ -279,9 +283,30 @@
 
 (def ^:private llm-classified
   "Every file whose CODE names services.llm.provider. Hand-typed on purpose, as
-   `classified` is. Phase 2 adds the routing read (provider.clj) and the writes
-   (env_bridge.clj, setup/llm.clj), and flips `no-code-reads-services-llm-provider-yet`."
-  {"src/digdir/setup/config.clj"
+   `classified` is: the census checks the per-file COUNTS, and a reviewer checks
+   the KIND. `exactly-one-routing-read-of-services-llm-provider` pins which file
+   holds the routing read."
+  {"src/digdir/llm/provider.clj"
+   {:mentions 1 :kind :routing-read
+    :why "THE read of services.llm.provider: `provider-keys`, read by
+          configured-provider(-with-trace). The boolean switch is its fallback"}
+
+   "src/digdir/config/env_bridge.clj"
+   {:mentions 1 :kind :write
+    :why "Seeding row: AZURE_OPENAI_USE_AZURE, the legacy spelling, seeds
+          services.llm.provider. Env is a write path, never read back"}
+
+   "src/digdir/setup/llm.clj"
+   {:mentions 1 :kind :write
+    :why "Setup wizard writes services.llm.provider (provider-path)"}
+
+   "src/digdir/config/verify.clj"
+   {:mentions 1 :kind :allowlisted-read
+    :why "the shared-vs-default services issue diagnostic: a value set where the runtime cannot see it. The decision
+          itself comes from provider/configured-provider. Mirrors verify's row under
+          the switch needle"}
+
+   "src/digdir/setup/config.clj"
    {:mentions 1 :kind :definition
     :why "config-def registration"}
 
@@ -314,13 +339,14 @@
     (is (= expected actual)
         "per-file counts: a second mention in an already-listed file is a new read too")))
 
-(deftest no-code-reads-services-llm-provider-yet
-  (testing "TODAY: zero routing reads — nothing decides a provider from this key yet.
-            Phase 2's done-condition is that this becomes exactly one, inside
-            digdir.llm.provider (the one function that reads the provider
-            decision), and nowhere else."
+(deftest exactly-one-routing-read-of-services-llm-provider
+  (testing "the provider-resolver change's done-condition for the new key: exactly one routing read, and it is
+            digdir.llm.provider (the one function that reads the provider decision). Before
+            Phase 2 there were none. This pins WHICH file; `every-code-mention-…` pins that every
+            code mention is classified at all. The two work as a pair, and a routing read filed
+            under the wrong :kind is what this one catches."
     (let [routing (into (sorted-set) (keep (fn [[f {:keys [kind]}]] (when (= :routing-read kind) f))) llm-classified)]
-      (is (= 0 (count routing)) (str routing)))))
+      (is (= #{"src/digdir/llm/provider.clj"} routing) (str routing)))))
 
 (deftest the-sequence-needle-cannot-be-satisfied-by-documentation-or-a-bare-provider
   (testing "The second instrument, on source whose answer is known."
@@ -345,3 +371,225 @@
     (is (= [:docstring]
            (mapv :ctx (llm-provider-mentions
                        (p/parse-string-all "(defn k\n  \"line one\n   names services.llm.provider\"\n  [])")))))))
+
+;; ===========================================================================
+;; The third needle: the MODEL's two paths
+;; ===========================================================================
+;;
+;; Phase 4 makes `services.llm.model` the model, with
+;; `services.azure-openai.model-name` as its legacy spelling and fallback. The
+;; same rule as the provider decision applies, for the same reason: every site
+;; that ASKS about the model must ask about both keys, and only ONE site may
+;; read them to route. A raw presence check of the legacy path alone reports a
+;; migrated tenant unconfigured while the runtime routes it — the Azure-switch default mismatch at the
+;; verifier, in `config/verify`'s own words.
+;;
+;; Two sequence needles in one census, because the two paths travel together:
+;;   - `:services :llm :model` / `"services" "llm" "model"` / "services.llm.model"
+;;   - `:services :azure-openai :model-name` / the string run / the dotted path
+;; Docstrings, comments, `#_`, `(comment …)` and prose that merely CONTAINS a
+;; path do not count — the same rule, and the same residual blind spot.
+
+(def ^:private model-needles
+  [{:keywords [:services :llm :model]
+    :strings ["services" "llm" "model"]
+    :dotted "services.llm.model"}
+   {:keywords [:services :azure-openai :model-name]
+    :strings ["services" "azure-openai" "model-name"]
+    :dotted "services.azure-openai.model-name"}])
+
+(defn- path-mentions
+  "A mention function for `needles`, each {:keywords :strings :dotted}: the
+   keyword run, the string run and the dotted path count, prose that merely
+   CONTAINS the dotted path does not."
+  [needles]
+  (fn mentions
+    ([node] (mentions node nil :code))
+    ([node parent ctx]
+     (let [tag (n/tag node)]
+       (cond
+         (skipped-tags tag) []
+         (and (= :list tag) (= 'comment (head-symbol node)))
+         (mapcat #(mentions % node :comment-form) (n/children node))
+         (n/inner? node)
+         (let [vals (mapv token-value (code-children node))
+               row (:row (meta node))]
+           (concat (when (#{:list :vector} tag)
+                     (vec (for [{:keys [keywords strings dotted]} needles
+                                [run form] [[keywords :keyword-run] [strings :string-run]]
+                                :when (contains-run? vals run)]
+                            {:row row :form form :path dotted :ctx ctx})))
+                   (mapcat #(mentions % node ctx) (n/children node))))
+         :else
+         (let [v (token-value node)
+               row (:row (meta node))]
+           (cond
+             (some #(= v (:dotted %)) needles)
+             [{:row row :form v :path v :ctx (if (docstring? parent node) :docstring ctx)}]
+             (and (string? v) (some #(str/includes? v (:dotted %)) needles))
+             [{:row row :form :prose :ctx (if (docstring? parent node) :docstring :prose)}]
+             :else [])))))))
+
+(def ^:private model-mentions (path-mentions model-needles))
+
+(def ^:private model-census (delay (census-with model-mentions)))
+
+(def ^:private model-classified
+  "Every file whose CODE names either model path. Hand-typed, as the two above
+   are: the census checks the per-file COUNTS and a reviewer checks the KIND.
+   `exactly-one-routing-read-of-the-model` pins which file routes."
+  {"src/digdir/llm/provider.clj"
+   {:mentions 2 :kind :routing-read
+    :why "THE read of both model paths: `model-keys` and `legacy-model-keys`,
+          read by configured-model(-with-trace). Everything else asks the provider namespace"}
+
+   "src/digdir/config/verify.clj"
+   {:mentions 2 :kind :allowlisted-read
+    :why "`model-decision-paths`, for REPORTING ONLY: which path holds a value the runtime
+          cannot see (the shared-vs-default services issue's shape). The decision comes from provider/configured-model.
+          Phase 4 REMOVED the legacy path from runtime-required-service-paths, where a
+          presence check would report a migrated tenant unconfigured (the Azure-switch default mismatch at the verifier)"}
+
+   "src/digdir/config/env_bridge.clj"
+   {:mentions 1 :kind :write
+    :why "Seeding row: AZURE_OPENAI_MODEL_NAME, the legacy VARIABLE name, now seeds
+          services.llm.model - the same shape as AZURE_OPENAI_USE_AZURE
+          seeding services.llm.provider. Env is a write path, never read back"}
+
+   "src/digdir/setup/llm.clj"
+   {:mentions 1 :kind :write
+    :why "The setup wizard writes the model it probed to services.llm.model (model-path)"}
+
+   "src/digdir/setup/config.clj"
+   {:mentions 2 :kind :definition
+    :why "config-def registration: services.llm.model (new in Phase 4) and the legacy
+          services.azure-openai.model-name, which keeps its definition while it is the fallback"}
+
+   "src/digdir/config/deployment_specific.clj"
+   {:mentions 2 :kind :metadata
+    :why "Membership in the globally-defaultable key set, one row per path"}})
+
+(deftest the-model-census-reads-and-can-hit
+  (let [{:keys [files failures mentions]} @model-census]
+    (is (< 200 files) "src + src-dev were actually walked")
+    (is (empty? failures) (str "files the census could not parse: " failures))
+    (testing "POSITIVE CONTROL: the needle hits the registration we know exists"
+      (is (some #(and (= :code (:ctx %)) (= "services.azure-openai.model-name" (:form %)))
+                (get mentions "src/digdir/setup/config.clj"))))
+    (testing "and the documentation exclusion is exercised on real source"
+      (is (some #(= :docstring (:ctx %)) (mapcat val mentions))
+          "a docstring names a model path and is set aside"))))
+
+(deftest every-code-mention-of-a-model-path-is-classified
+  (let [actual (code-counts @model-census)
+        expected (into (sorted-map) (map (fn [[f {:keys [mentions]}]] [f mentions])) model-classified)
+        new-files (set/difference (set (keys actual)) (set (keys expected)))
+        gone-files (set/difference (set (keys expected)) (set (keys actual)))]
+    (is (empty? new-files)
+        (str "UNCLASSIFIED code mentions of a model path — a site that asks about the model "
+             "without going through digdir.llm.provider is the Azure-switch default mismatch's shape. Classify each in "
+             "`model-classified`: " (pr-str (select-keys (:mentions @model-census) new-files))))
+    (is (empty? gone-files)
+        (str "classified files with no code mention left — delete their rows: " (pr-str gone-files)))
+    (is (= expected actual)
+        "per-file counts: a second mention in an already-listed file is a new read too")))
+
+(deftest exactly-one-routing-read-of-the-model
+  (testing "Phase 4 of the provider-resolver change's done-condition: exactly one routing read of the model, in
+            digdir.llm.provider. Before Phase 4 there were three sites reading the legacy
+            path to decide something (the resolver, the boot guard's configured signal and
+            the sweep runner) plus a presence check in the verifier."
+    (let [routing (into (sorted-set) (keep (fn [[f {:keys [kind]}]] (when (= :routing-read kind) f))) model-classified)]
+      (is (= #{"src/digdir/llm/provider.clj"} routing) (str routing)))))
+
+(deftest the-model-needle-cannot-be-satisfied-by-documentation-or-a-bare-model
+  (testing "The third instrument, on source whose answer is known."
+    (let [src (str "(ns x \"ns doc: services.llm.model\")\n"
+                   "; comment: (cfg/get t :services :llm :model)\n"
+                   "#_(cfg/get t :services :azure-openai :model-name)\n"
+                   "(comment (cfg/get t :services :llm :model))\n"
+                   "(defn f \"reads services.azure-openai.model-name\" [t]\n"
+                   "  (println \"set services.llm.model instead\")\n"
+                   "  (cfg/get {:tenant t} :services :llm :model))\n"
+                   "(def p \"services.azure-openai.model-name\")\n"
+                   "(def v [\"services\" \"llm\" \"model\"])\n"
+                   "(defn g [spec] (:model spec))\n"
+                   "(defn h [t] (cfg/get {:tenant t} :services :llm :provider))\n"
+                   "(defn i [t] (cfg/get {:tenant t} :services :lmstudio :model))\n")
+          ms (model-mentions (p/parse-string-all src))
+          code (filter #(= :code (:ctx %)) ms)]
+      (is (= [7 8 9] (mapv :row code))
+          "the keyword run, the dotted def and the string run — not a bare :model, not another service's :model")
+      (is (= #{:docstring :prose :comment-form :code} (set (map :ctx ms)))
+          "the excluded mentions were SEEN and classified, not missed")))
+  (testing "a MULTI-LINE string is a leaf too"
+    (is (= [:docstring]
+           (mapv :ctx (model-mentions
+                       (p/parse-string-all "(defn k\n  \"line one\n   names services.llm.model\"\n  [])")))))))
+
+;; ---------------------------------------------------------------------------
+;; The seven removed paths: nothing in code names them
+;; ---------------------------------------------------------------------------
+;;
+;; Phase 3 of the provider-resolver change and the loader-fallback change took away every reader of seven paths; Phase 4 removes
+;; their definitions, deployment-specific rows and env-bridge rows
+;; (`digdir.config.removed-definitions-test` pins that absence). What is left to
+;; pin is NON-READERSHIP, and it is stronger than that: no CODE mention at all,
+;; by any of the three spellings, because a registration, a seeding row and a
+;; read are all code mentions and none should remain. Documentation may still
+;; name them; that is history, and the same exclusion rule as the censuses
+;; above sets it aside.
+;;
+;; All four source roots, not the two the censuses above walk: `src-prod` holds
+;; the production boot, and a read there is still a read.
+;;
+;; This is the ONLY guard against a read coming back. The absence tests cannot
+;; see reads by design: with `nothing-in-code-names-a-removed-path` disabled, a
+;; restored read passed the whole suite (the inert-config-definitions removal's sabotage).
+
+(def ^:private removed-paths
+  "The same seven as `digdir.config.removed-definitions-test/removed-paths`."
+  #{"services.search-phrases.provider" "services.self-improvement.provider"
+    "services.lmstudio.api-key" "services.lmstudio.api-endpoint" "services.lmstudio.model"
+    "services.openrouter.model" "services.openrouter.api-key"})
+
+(defn- needle-for
+  "{:keywords :strings :dotted} for one dotted path."
+  [dotted]
+  (let [parts (str/split dotted #"\.")]
+    {:keywords (mapv keyword parts) :strings parts :dotted dotted}))
+
+(def ^:private removed-roots ["src" "src-dev" "src-prod" "src-build"])
+
+(def ^:private removed-census
+  (delay (census-with (path-mentions (mapv needle-for (sort removed-paths))) removed-roots)))
+
+(deftest the-census-needles-are-exactly-the-removed-definitions
+  ;; Two hand-typed copies of the seven: a typo here blinds that path's needle,
+  ;; and the aggregate "some hit" control cannot see it.
+  (is (= removed-paths @(requiring-resolve 'digdir.config.removed-definitions-test/removed-paths))))
+
+(deftest the-removed-path-census-reads-every-root-and-can-hit
+  (let [{:keys [files failures mentions]} @removed-census]
+    (is (< 200 files) "the source roots were actually walked")
+    (is (empty? failures) (str "files the census could not parse: " failures))
+    (testing "every root is walked, including the production boot"
+      (doseq [root removed-roots]
+        (is (some #(str/starts-with? (str %) (str root "/")) (source-files removed-roots)) root)))
+    (testing "POSITIVE CONTROL: the same instrument, given a sibling that stays, hits it in CODE
+              in both spellings - so a zero below is not a blind needle"
+      (let [sibling (census-with (path-mentions [(needle-for "services.self-improvement.model")]) removed-roots)
+            code (filter #(= :code (:ctx %)) (mapcat val (:mentions sibling)))]
+        (is (some #(= "services.self-improvement.model" (:form %)) code) "the dotted registration")
+        (is (some #(= :keyword-run (:form %)) code) "a keyword-run read")))
+    (testing "and the needles for the seven DO hit real source - in documentation, which is set aside"
+      (is (some #(not= :code (:ctx %)) (mapcat val mentions))
+          "no mention of any of the seven anywhere: the census would read the same with its needles broken"))))
+
+(deftest nothing-in-code-names-a-removed-path
+  (let [counts (code-counts @removed-census)]
+    (is (empty? counts)
+        (str "code still names a removed path - a read, a registration or a seeding row: "
+             (pr-str (into (sorted-map)
+                           (map (fn [[f ms]] [f (vec (distinct (keep :path (filter #(= :code (:ctx %)) ms))))]))
+                           (select-keys (:mentions @removed-census) (keys counts))))))))

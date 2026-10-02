@@ -5,19 +5,26 @@
             [digdir.llm.client :as llm-client]
             [digdir.llm.openai :as llm]
             [digdir.llm.provider :as provider]
+            [digdir.llm.provider-fixtures :as fx]
             [digdir.skills.builtin.agent.loop :as agent-loop]))
+
+(def ^:private llm-credentials
+  "the resolver reads the openai-compatible branch's own credentials
+   and refuses without them, instead of leaving them to the env fallback."
+  {"services.llm.api-key" "stub-key" "services.llm.api-endpoint" "http://streaming-stub.invalid"})
 
 (defn- with-stub-streaming
   "Stub `streaming-chat-completion` to call `on-content-delta` with each
    element of `deltas` in order, then return `final-response`."
   [deltas final-response f]
-  (with-redefs [provider/selected-provider (constantly :openai-compatible)
-                llm/streaming-chat-completion
-                (fn [_params {:keys [on-content-delta]}]
-                  (when on-content-delta
-                    (doseq [d deltas] (on-content-delta d)))
-                  final-response)]
-    (f)))
+  (fx/with-install llm-credentials
+    #(with-redefs [provider/selected-provider (constantly :openai-compatible)
+                   llm/streaming-chat-completion
+                   (fn [_params {:keys [on-content-delta]}]
+                     (when on-content-delta
+                       (doseq [d deltas] (on-content-delta d)))
+                     final-response)]
+       (f))))
 
 (deftest call-llm-streaming-emits-paragraph-chunks
   (testing "Per-token deltas land as paragraph-bounded :response/chunk events"
@@ -59,7 +66,8 @@
                     (fn [& _]
                       (reset! blocking? true)
                       {:choices [{:message {:content "ok"}}]})]
-        (agent-loop/call-llm "t" [{:role "user" :content "x"}] nil "gpt-4o" 0.1)
+        (fx/with-install llm-credentials
+          #(agent-loop/call-llm "t" [{:role "user" :content "x"}] nil "gpt-4o" 0.1))
         (is (false? @streamed?))
         (is (true? @blocking?))))))
 

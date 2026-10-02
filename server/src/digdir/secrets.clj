@@ -76,7 +76,7 @@
    :postgres-password {:env-var "ADH_POSTGRES_PWD" :tier :bootstrap
                        :doc "Datahike JDBC backend password, when Postgres is the store."}
    :openai-api-key    {:env-var "OPENAI_API_KEY" :tier :runtime
-                       :doc "OpenAI-compatible provider key, read per request."}
+                       :doc "OpenAI-compatible provider key. Since the provider-resolver change a seeding input for services.llm.api-key only: no LLM call reads it (Phase 3 deleted the last reader, search-phrases' :lmstudio arm)."}
    :anthropic-api-key {:env-var "ANTHROPIC_API_KEY" :tier :runtime
                        :doc "Anthropic provider key, read per request."}})
 

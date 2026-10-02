@@ -125,6 +125,23 @@
       (is (empty? (filter generated optional))
           "a variable is both generated and prompted for"))))
 
+(deftest the-openai-compatible-prompts-are-the-variables-that-path-needs
+  ;; Two more shell-side copies of names Clojure owns, asserted against the
+  ;; owner like the others. `setup-env-run-test` checks WHEN they are asked; this
+  ;; checks WHICH: a typo writes a variable nothing reads, and a binding the
+  ;; branch needs but the lists omit is a value the newcomer is never asked for.
+  (let [src (script)
+        asked (into (or (shell-list src "OPENAI_COMPATIBLE_VARS") #{})
+                    (shell-list src "OPENAI_COMPATIBLE_MODEL_VARS"))
+        needed (->> (env-bridge/first-query-bindings :openai-compatible)
+                    (filter #(= :openai-compatible (:provider %)))
+                    (map :env-var)
+                    set)]
+    (is (seq needed) "no :provider :openai-compatible first-query bindings - the comparison would be vacuous")
+    (testing "the lists asked after a non-Azure answer hold exactly what that path needs for a first query"
+      (is (= needed asked)
+          (str "asked " (pr-str (sort asked)) ", needed " (pr-str (sort needed)))))))
+
 (deftest the-script-never-prints-a-secret-value
   ;; The rule `digdir.secrets` states, applied to the one place that handles
   ;; every secret in plaintext. Checked structurally: the reporting helper is

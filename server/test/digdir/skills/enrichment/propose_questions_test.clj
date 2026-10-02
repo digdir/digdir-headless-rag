@@ -11,10 +11,13 @@
       produces despite the prompt: clean lines, numbered, bulleted.
    4. The skill body assembles questions + provenance from a stubbed
       OpenAI response and caps at :question-count."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [cheshire.core :as json]
+            [clj-http.client :as http]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [digdir.rag.skills.core :as skills]
             [digdir.skills.enrichment.propose-questions :as pq]
             [digdir.config.accessor :as cfg]
+            [digdir.llm.client :as client]
             [wkok.openai-clojure.api :as openai]))
 
 (use-fixtures :once
@@ -52,6 +55,27 @@
   [content]
   {:choices [{:message {:content content}}]})
 
+(defn- install
+  "An accessor stub: `values` by path, nil for everything else. Since the provider-resolver change
+   Phase 3 the skill resolves its call through `digdir.llm.provider`, so the
+   stub has to answer the provider decision and the branch's credentials - a
+   stub that answered every path with one string would be read as the provider
+   and refused."
+  [values]
+  (fn [_opts & path] (get values (vec path))))
+
+(def ^:private azure-install
+  (install {[:services :llm :provider] :azure
+            [:services :azure-openai :api-key] "az-key"
+            [:services :azure-openai :api-endpoint] "https://azure.invalid"
+            [:services :azure-openai :deployment-name] "stub-azure-deployment"}))
+
+(def ^:private openai-compatible-install
+  (install {[:services :llm :provider] :openai-compatible
+            [:services :llm :api-key] "llm-key"
+            [:services :llm :api-endpoint] "http://llm.invalid"
+            [:services :azure-openai :model-name] "local-model"}))
+
 (deftest response-parsing
   (testing "Clean one-per-line output passes through trimmed and deduped"
     (is (= ["Når ble Altinn 3 lansert?"
@@ -75,7 +99,7 @@
 
 (deftest skill-body-happy-path
   (testing "Stubbed LLM response → :questions vector capped at :question-count + provenance"
-    (with-redefs [cfg/get (fn [_opts & _path] "stub-azure-deployment")
+    (with-redefs [cfg/get azure-install
                   openai/create-chat-completion
                   (fn [_convo _impl-opts]
                     (stub-response
@@ -102,7 +126,7 @@
 
 (deftest skill-body-defaults
   (testing "Omitting :question-count defaults to 4"
-    (with-redefs [cfg/get (fn [_opts & _path] "stub-azure-deployment")
+    (with-redefs [cfg/get azure-install
                   openai/create-chat-completion
                   (fn [_convo _impl-opts]
                     (stub-response
@@ -116,3 +140,84 @@
                      :skill-params {:tenant "digdir"}})
             outputs (skills/get-result-outputs result)]
         (is (= 4 (count (:questions outputs))))))))
+
+;; ---------------------------------------------------------------------------
+;; enrichment goes through digdir.llm.client on BOTH branches
+;; ---------------------------------------------------------------------------
+;;
+;; Its OpenAI-compatible path used to be a direct POST of its own. Through the
+;; client it now gets what every other OpenAI-compatible call gets. That is the
+;; collapse working - one path, one set of knobs - but it changes enrichment
+;; OUTPUT on any machine that exports those knobs, which is every sweep machine,
+;; so it is pinned here rather than left to be found from moved results.
+
+(defn- sent-body
+  "Run the skill on `accessor` with the direct POST captured; answers the JSON
+   body the client sent, parsed."
+  [accessor env]
+  (let [!bodies (atom [])]
+    (with-redefs [cfg/get accessor
+                  client/env-num (fn [k] (get env k))
+                  http/post (fn [_url opts]
+                                         (swap! !bodies conj (json/parse-string (:body opts) true))
+                                         {:body (stub-response "q1\nq2")})]
+      (pq/execute-propose-questions {:inputs {:chunk-id "c" :chunk-content "content"}
+                                     :parameters {}
+                                     :skill-params {:tenant "digdir"}}))
+    @!bodies))
+
+(deftest openai-compatible-enrichment-takes-the-clients-inference-overrides
+  (testing "OPENAI_TEMPERATURE replaces the skill's own 0.4, as it does for every
+            OpenAI-compatible call. The direct POST never applied it."
+    (let [[body :as bodies] (sent-body openai-compatible-install {"OPENAI_TEMPERATURE" 0.9})]
+      (is (= 1 (count bodies)) "absolute: the call went through the client's direct POST")
+      (is (= 0.9 (:temperature body)))
+      (is (= "local-model" (:model body)))))
+  (testing "with no override exported, the skill's own temperature is sent"
+    (is (= 0.4 (:temperature (first (sent-body openai-compatible-install {})))))))
+
+(deftest azure-enrichment-is-untouched-by-the-overrides
+  (testing "the Azure branch delegates to wkok, which the client does not apply
+            the process-wide overrides to - as before Phase 3 of the provider-resolver change"
+    (let [!seen (atom nil)]
+      (with-redefs [cfg/get azure-install
+                    client/env-num (fn [k] (get {"OPENAI_TEMPERATURE" 0.9} k))
+                    openai/create-chat-completion (fn [convo _opts] (reset! !seen convo) (stub-response "q1"))]
+        (pq/execute-propose-questions {:inputs {:chunk-id "c" :chunk-content "content"}
+                                       :parameters {}
+                                       :skill-params {:tenant "digdir"}}))
+      (is (= 0.4 (:temperature @!seen)))
+      (is (= "stub-azure-deployment" (:model @!seen))))))
+
+(deftest openai-compatible-enrichment-is-retried-on-429
+  (testing "the client's 429 retry now covers enrichment's OpenAI-compatible calls"
+    (let [!attempts (atom 0)]
+      (with-redefs [cfg/get openai-compatible-install
+                    client/env-num (constantly nil)
+                    client/sleep-ms! (fn [_])
+                    http/post (fn [_url _opts]
+                                           (if (= 1 (swap! !attempts inc))
+                                             (throw (ex-info "clj-http: status 429" {:status 429 :headers {}}))
+                                             {:body (stub-response "q1\nq2")}))]
+        (let [result (pq/execute-propose-questions {:inputs {:chunk-id "c" :chunk-content "content"}
+                                                    :parameters {}
+                                                    :skill-params {:tenant "digdir"}})]
+          (is (skills/result-success? result))
+          (is (= 2 @!attempts) "one 429, then the retry that succeeded"))))))
+
+(deftest openai-compatible-enrichment-sends-one-think-prefill
+  (testing "OPENAI_DISABLE_THINKING=true: the client appends the closed-<think> turn, and
+            enrichment no longer adds its own - two would be sent if it did"
+    (let [!bodies (atom [])]
+      (with-redefs [cfg/get openai-compatible-install
+                    client/env-num (constantly nil)
+                    client/env-flag? (fn [k] (= "OPENAI_DISABLE_THINKING" k))
+                    http/post (fn [_url opts]
+                                (swap! !bodies conj (json/parse-string (:body opts) true))
+                                {:body (stub-response "q1")})]
+        (pq/execute-propose-questions {:inputs {:chunk-id "c" :chunk-content "content"}
+                                       :parameters {}
+                                       :skill-params {:tenant "digdir"}}))
+      (is (= 1 (count @!bodies)) "absolute: one call, through the client")
+      (is (= 1 (count (filter #(= {:role "assistant" :content "<think></think>"} %)
+                              (:messages (first @!bodies)))))))))

@@ -60,7 +60,7 @@
   (testing "every bridged binding can actually be written"
     (doseq [b (filter env-bridge/bridged? env-bridge/env-config-bindings)]
       (is (string? (:path b)) (str (:env-var b) " must name a config path"))
-      (is (contains? #{:string :boolean} (:value-type b))
+      (is (contains? #{:string :boolean :provider-switch} (:value-type b))
           (str (:env-var b) " must declare a value-type the coercion knows"))))
 
   (testing "every binding says what it is, for the checklist"
@@ -114,7 +114,17 @@
       (is (false? (env-bridge/coerce-value b "no")))))
 
   (testing "a string path is trimmed"
-    (is (= "sk-x" (env-bridge/coerce-value {:value-type :string} "  sk-x \n")))))
+    (is (= "sk-x" (env-bridge/coerce-value {:value-type :string} "  sk-x \n"))))
+
+  (testing "the legacy switch spelling becomes a provider choice"
+    ;; AZURE_OPENAI_USE_AZURE seeds services.llm.provider: one variable, one
+    ;; decision. Anything that is not an explicit true is the non-Azure path,
+    ;; exactly as the boolean it replaces read it.
+    (let [b {:value-type :provider-switch}]
+      (is (= :azure (env-bridge/coerce-value b "true")))
+      (is (= :azure (env-bridge/coerce-value b " TRUE ")))
+      (is (= :openai-compatible (env-bridge/coerce-value b "false")))
+      (is (= :openai-compatible (env-bridge/coerce-value b "no"))))))
 
 ;; ---------------------------------------------------------------------------
 ;; The bridge
@@ -244,7 +254,8 @@
   (let [m (env-bridge/env-var->config-path :azure-openai)]
     (is (= 6 (count m)))
     (is (= "services.azure-openai.api-key" (get m "AZURE_OPENAI_API_KEY")))
-    (is (= "services.azure-openai.use-azure-openai-api" (get m "AZURE_OPENAI_USE_AZURE")))))
+    ;; the legacy switch variable seeds the provider decision.
+    (is (= "services.llm.provider" (get m "AZURE_OPENAI_USE_AZURE")))))
 
 (deftest credentials-are-marked-so-a-checklist-can-say-which-not-to-paste
   (is (true? (env-bridge/secret-env-var? "TYPESENSE_API_KEY_ADMIN")))
@@ -278,16 +289,16 @@
         "the variable nothing in the running system consults is gone")))
 
 (deftest variables-no-config-write-can-reach-are-in-the-table-and-never-bridged
-  ;; #314 added OPENAI_API_ENDPOINT / OPENAI_API_KEY to the wizard's list with
-  ;; the reason attached: `digdir.llm.client` reads them per call and there is
-  ;; no `services.openai.*` definition for a value to live at. They belong in
-  ;; the table for the checklist, and must never be written.
-  (let [by-name (into {} (map (juxt :env-var identity)) env-bridge/env-config-bindings)]
-    (doseq [n ["OPENAI_API_ENDPOINT" "OPENAI_API_KEY"]]
-      (is (contains? by-name n) (str n " must appear in the one table"))
-      (is (= :environment (:destination (get by-name n))))
-      (is (nil? (:path (get by-name n)))
-          "there is not even an ignored config path to name")))
+  ;; The local-model path added OPENAI_API_ENDPOINT / OPENAI_API_KEY here as pathless rows the
+  ;; client read per call. Phase 2 of the provider-resolver change gave them a config home
+  ;; (`services.llm.*`) together with their reader, so they are bridged now and
+  ;; pinned in `digdir.config.llm-namespace-test`. What remains pathless is what
+  ;; cannot live in the config DB by construction: the bootstrap tier.
+  (let [pathless (filter #(nil? (:path %)) env-bridge/env-config-bindings)]
+    (is (seq pathless) "the instrument must see the pathless rows, or the next line is vacuous")
+    (is (every? #(= :bootstrap (:destination %)) pathless)
+        (str "a pathless row that is not bootstrap: "
+             (pr-str (map :env-var (remove #(= :bootstrap (:destination %)) pathless))))))
   (is (empty? (filter #(and (env-bridge/bridged? %) (nil? (:path %)))
                       env-bridge/env-config-bindings))
       "nothing pathless is ever bridged"))

@@ -1,0 +1,74 @@
+;; WHO GENERATED THE COMMITTED WARM PHRASE CACHE, declared so that its entries
+;; can be looked up under THEIR OWN identity instead of being served as if this
+;; installation had produced them (the phrase negative-cache issue option e).
+;;
+;; The cache key names the provider that answered and the model actually sent.
+;; Those are deployment-specific, so a shipped archive is unreachable unless it
+;; says whose output it is. This file is that statement. It is read by
+;; `digdir.boot.phrase-cache`, which REFUSES to unpack if the declaration does
+;; not match the archive it ships beside.
+;;
+;; EXACTLY ONE identity. A list is refused rather than iterated: every extra
+;; identity is another generator whose output we serve, and that is a policy
+;; decision, not a configuration value.
+{:provider :azure
+ :model "gpt-4o"
+
+ ;; ⚠️ BOTH ARE STATEMENTS OF RECORD, and the check below is weaker than it looks.
+ ;;   model    - `digdir.setup.demo-dataset/dataset-values`, the constant the
+ ;;              2026-09-03 materialisation was CONFIGURED with. `ensure-warm!`
+ ;;              verifies that its hash equals the model segment the archive's
+ ;;              own keys carry, so a declaration that does not describe this
+ ;;              archive fails the unpack. That proves CONSISTENCY WITH THE OLD
+ ;;              KEY - not what reached the wire, because the old key hashed the
+ ;;              configured value and the request overwrote it. That gap is
+ ;;              the phrase-cache model-key issue, and it is exactly why the key changed.
+ ;;   provider - the branch that materialisation ran on. NOT verifiable at all
+ ;;              for THIS archive: the old four-segment key carried no provider
+ ;;             and it still carries none - the unpack
+ ;;              copies the archive AS SHIPPED, so this line is the provider's
+ ;;              only record, and the unpack reports
+ ;;              `:verified #{:configured-model}`. An archive rebuilt under the
+ ;;              current five-segment key has both checked.
+ ;;
+ ;; ⚠️ A REBUILD REPLACES THIS FILE'S CLAIMS, not only the archive: :provider and
+ ;; :model become the rebuilding installation's, and the :vetting below
+ ;; describes THESE entries and does not carry over. See the corpus README.
+ :generated "2026-09-03"
+ :archive "demo-corpus/phrase-cache-folder-v2.edn.gz"
+
+ ;; ── WHAT WAS ACTUALLY CHECKED, so the trust is recorded and not inherited ──
+ ;;
+ ;; ⚠️ THIS IS A SPOT CHECK, NOT A VETTING, and it should not be read as one.
+ ;;
+ ;; Done in review on 2026-09-22 while measuring the single-phrase reply issue, before this file
+ ;; existed, and written down here afterwards.
+ ;;
+ ;; Over the WHOLE population (7,149 entries), by joining every entry back to
+ ;; the chunk that produced it:
+ ;;   - every entry is non-empty: minimum 4 phrases, mean 11.7, maximum 46;
+ ;;   - phrase count tracks chunk length, Spearman 0.82, which is what a
+ ;;     competent extractor looks like;
+ ;;   - 7,109 of 7,109 requested chunks are covered, with 40 stale entries.
+ ;;
+ ;; READ BY EYE: 18 entries, deliberately the worst case rather than a random
+ ;; sample — all 8 of the four-phrase entries and a seeded sample of 10
+ ;; five-phrase ones. All 18 carried specific, usable phrases about their
+ ;; chunk. 4 of the 8 lowest were link lists or short fact lists rather than
+ ;; prose, and even those produced sensible entity phrases.
+ ;;
+ ;; WHAT THIS DOES NOT ESTABLISH: nobody has read a random sample across the
+ ;; distribution, nobody has checked the ~7,131 entries outside that 18, and
+ ;; there is no stated acceptance criterion. A real vetting would fix all
+ ;; three. Until then this is one lane's spot check of the low tail.
+ ;;
+ ;; THE PROPER VETTING - sampling protocol, acceptance criterion, and the
+ ;; entries outside the 18 - is tracked as its own issue. Replace the :vetting
+ ;; map below when it is done; this note is meant to be superseded, not kept.
+ ;;   see: the unvetted phrase-archive issue
+ :vetting {:by "a reviewer"
+           :on "2026-09-22"
+           :kind :spot-check
+           :read-by-eye 18
+           :population 7149
+           :conclusion "the low tail is specific and usable; not a random sample, no acceptance criterion"}}

@@ -83,18 +83,26 @@ a second door to the same values or making the config DB a fourth backend.
 
 ## 3. Tier 3, which fits neither: runtime env reads in production code
 
-Two production call sites read a credential from the environment at request
+One production call site reads a credential from the environment at request
 time, bypassing both tiers.
 
 | site | reads | on absence |
 |---|---|---|
-| `llm/client.clj:107` | `OPENAI_API_KEY` | `nil` → passed to the provider |
 | `llm/anthropic.cljc:27` | `ANTHROPIC_API_KEY` | **the literal string `"Not set"`** |
 
-The second is the exact failure this issue's constraint 2 forbids: a missing
-secret does not fail at the point of use, it becomes an authentication failure
-at the provider, one layer away from the cause and with a misleading message.
-These two are the clearest candidates for the new layer's first callers.
+There were more:
+- `llm/client.clj` was a row until Phase 2 of the provider-resolver change. The client now takes its endpoint
+  and key from opts only, and `digdir.llm.provider/resolve` fills them from the
+  tenant's `services.llm.*`, refusing and naming the path when one is unset.
+  `OPENAI_API_ENDPOINT` / `OPENAI_API_KEY` moved to Tier 1: they seed
+  `services.llm.*`.
+- search-phrases' `:lmstudio` arm was a row from Phase 2 of the provider-resolver change (the client's old
+  fallback, moved there verbatim) until Phase 3 of the provider-resolver change deleted the arm.
+
+The Anthropic row is the exact failure this issue's constraint 2 forbids: a
+missing secret does not fail at the point of use, it becomes an authentication
+failure at the provider, one layer away from the cause and with a misleading
+message. It is the clearest candidate for the new layer's first caller.
 
 ---
 
@@ -177,11 +185,13 @@ This inventory adds the one line. It is the only behavioural change here.
 `JWT_SECRET`, `DATAHIKE_FILE_PATH`, `ADH_POSTGRES_{URL,USER,PWD,TABLE}`.
 
 **Tier 1 — service credentials (config DB, seeded from env).**
-`AZURE_OPENAI_{API_KEY,API_ENDPOINT,DEPLOYMENT_NAME,MODEL_NAME,API_VERSION,USE_AZURE}`,
+`AZURE_OPENAI_{API_KEY,API_ENDPOINT,DEPLOYMENT_NAME,MODEL_NAME,API_VERSION,USE_AZURE}`
+(`USE_AZURE` is the legacy spelling that seeds `services.llm.provider`),
+`OPENAI_API_{KEY,ENDPOINT}` (seed `services.llm.*`, Phase 2 of the provider-resolver change),
 Typesense admin key (config-only, no env name).
 
-**Tier 3 — runtime env reads in production code.** `OPENAI_API_KEY`,
-`OPENAI_API_ENDPOINT`, `ANTHROPIC_API_KEY`.
+**Tier 3 — runtime env reads in production code.** `ANTHROPIC_API_KEY`. (The
+last `OPENAI_API_*` reader, search-phrases' `:lmstudio` arm, went in Phase 3 of the provider-resolver change.)
 
 **Server settings — env, not secrets, all with code-level defaults.**
 `HTTP_PORT`, `ADMIN_USER_EMAILS`, `AUTH_COOKIE_DOMAIN`, `AUTH_SECURE_COOKIES`,

@@ -47,3 +47,21 @@
 (deftest default-endpoint-test
   (testing "the offered default is LM Studio's, base URL including /v1"
     (is (= "http://localhost:1234/v1" setup-llm/default-local-endpoint))))
+
+(deftest the-wizard-writes-the-provider-key-not-the-legacy-boolean
+  ;; the choice lands in
+  ;; services.llm.provider; the boolean is only the resolver's fallback now.
+  ;; FLIPPED by Phase 4 of the provider-resolver change for the model, the same move: the wizard writes
+  ;; services.llm.model, and services.azure-openai.model-name is only the
+  ;; resolver's fallback until existing values are migrated.
+  (testing "openai-compatible: the provider, the probed endpoint, and the model"
+    (is (= {"services.llm.provider" :openai-compatible
+            "services.llm.api-endpoint" "http://localhost:1234/v1"
+            "services.llm.model" "qwen3"}
+           (setup-llm/wizard-values :openai-compatible {:endpoint "http://localhost:1234/v1" :model "qwen3"}))))
+  (testing "azure: the provider only - its credentials are printed as config-set lines"
+    (is (= {"services.llm.provider" :azure} (setup-llm/wizard-values :azure {}))))
+  (testing "neither ever writes the legacy switch"
+    (doseq [c [:openai-compatible :azure]]
+      (is (not (contains? (setup-llm/wizard-values c {:endpoint "e" :model "m"})
+                          "services.azure-openai.use-azure-openai-api"))))))

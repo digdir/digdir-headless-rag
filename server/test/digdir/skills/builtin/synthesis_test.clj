@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [deftest testing is]]
             [digdir.llm.client :as llm-client]
             [digdir.llm.provider :as provider]
+            [digdir.llm.provider-fixtures :as fx]
             [digdir.skills.builtin.synthesis :as synthesis]))
 
 (deftest test-detect-insufficient-context-english
@@ -142,13 +143,17 @@
                   llm-client/create-chat-completion
                   (fn [& _]
                     {:choices [{:message {:content "Svar [3]."}}]})]
-      (let [result (synthesis/execute-synthesis
-                    {:inputs {:query "Når ble Altinn 3 lansert?"
-                              :context-docs [{:page_content "irrelevant" :metadata {:source "c1"}}
-                                             {:page_content "irrelevant" :metadata {:source "c2"}}
-                                             {:page_content "launch info" :metadata {:source "c3"}}]}
-                     :parameters {:model "test-model"}
-                     :services {}})
+      (let [;; the resolver reads the openai-compatible branch's own
+            ;; credentials and refuses without them (no env fallback any more).
+            result (fx/with-install {"services.llm.api-key" "stub-key"
+                                     "services.llm.api-endpoint" "http://synthesis-stub.invalid"}
+                     #(synthesis/execute-synthesis
+                       {:inputs {:query "Når ble Altinn 3 lansert?"
+                                 :context-docs [{:page_content "irrelevant" :metadata {:source "c1"}}
+                                                {:page_content "irrelevant" :metadata {:source "c2"}}
+                                                {:page_content "launch info" :metadata {:source "c3"}}]}
+                        :parameters {:model "test-model"}
+                        :services {}}))
             outputs (:outputs result)]
         (is (= "Svar [1]." (:response outputs)))
         (is (= {1 "c3"} (:citation-index outputs)))

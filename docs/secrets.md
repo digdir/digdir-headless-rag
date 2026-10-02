@@ -146,7 +146,11 @@ The interface has landed with its first real callers, not with a big-bang
 rewrite of all 59 sites — a change to how a function is called propagates to
 every stub of it anywhere in the tree, which is a separate and riskier change.
 
-- ✅ `digdir.llm.client` — `OPENAI_API_KEY`, was degrading to `nil`.
+- ✅ `digdir.llm.client` — `OPENAI_API_KEY`, was degrading to `nil`. Since
+  Phase 2 of the provider-resolver change the client reads no secret at all: its key comes from the
+  tenant's `services.llm.api-key` through `digdir.llm.provider/resolve`. The
+  last `get! :openai-api-key`, the search-phrases `:lmstudio` arm's fallback
+  (moved there verbatim in Phase 2), went with the arm in Phase 3 of the provider-resolver change.
 - ✅ `digdir.llm.anthropic` — `ANTHROPIC_API_KEY`, was degrading to `"Not set"`.
   (Unreferenced code today, so this is illustration rather than a live fix.)
 - ⏭ **Tier 0 bootstrap** (`digdir.config.core/load-bootstrap-config`) is not

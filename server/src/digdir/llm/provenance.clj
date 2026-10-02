@@ -141,6 +141,13 @@
                 :key-rederived? (boolean key-rederived?)
                 :key-source (or (get-in source [:api-key :from]) :untagged)
                 :endpoint-source (or (get-in source [:api-endpoint :from]) :untagged)
+                ;; the model reads two config paths, so `:from`
+                ;; cannot say which answered - both are `:config`. Record the
+                ;; PATH when one answered, and the `:from` otherwise
+                ;; (`:neither`, `:caller`), so a source naming a path is one
+                ;; that decided. Absent stays `:untagged`, as above.
+                :model-source (let [m (get source :model)]
+                                (or (:path m) (:from m) :untagged))
                 :caller (trio caller)
                 :sent (trio sent)
                 :env-applied (set env-applied)

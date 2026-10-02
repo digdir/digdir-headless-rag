@@ -1389,13 +1389,18 @@
         endpoint (System/getenv "OPENAI_API_ENDPOINT")
         lm-models (when-not use-azure? (fetch-lmstudio-models endpoint))
         lm-record (fn [model-id] (get lm-models model-id))
-        agent-model (if use-azure?
-                      (cfgv :services :azure-openai :deployment-name)
-                      (cfgv :services :azure-openai :model-name))
+        ;; the resolver answers for both branches, and on the
+        ;; openai-compatible one it reads BOTH model paths (services.llm.model,
+        ;; with services.azure-openai.model-name as the fallback). Asking the
+        ;; legacy path here would record the wrong model for a migrated tenant.
+        agent-model (try (provider/model-for tenant) (catch Exception _ nil))
         judge-model (or (cfgv :services :judge :model) judge/default-judge-model)
-        gen-provider (cfgv :services :self-improvement :provider)
-        gen-model (cfgv :services :lmstudio :model)
-        gen-endpoint (cfgv :services :lmstudio :api-endpoint)]
+        ;; generation (enrichment) follows the SAME provider
+        ;; decision as the agent - `services.self-improvement.provider` and
+        ;; `services.lmstudio.*` are retired - so it is recorded on the agent's
+        ;; provider and endpoint, with its own usage-level model override when
+        ;; one is set (`services.self-improvement.model`).
+        gen-model (or (cfgv :services :self-improvement :model) agent-model)]
     {:captured-at (str (java.time.Instant/now))
      :tenant tenant
      :env (env-snapshot)
@@ -1423,14 +1428,39 @@
               :model judge-model
               :note "cloud judge — run as a SEPARATE azure-on pass, not the sweep-time route"}
       :generation (cond-> {:task :generation
-                           :provider gen-provider
-                           :engine (if (= gen-provider :lmstudio) :llama.cpp :azure)
+                           :provider (if use-azure? :azure-openai :lmstudio)
+                           :engine (if use-azure? :azure :llama.cpp)
                            :model gen-model
-                           :endpoint gen-endpoint
+                           :endpoint (if use-azure?
+                                       (cfgv :services :azure-openai :api-endpoint)
+                                       endpoint)
                            :mode :non-thinking}
                     (lm-record gen-model) (assoc :lmstudio (lm-record gen-model)))}}))
 
-(defn run-matrix
+(defn install-sweep-credentials!
+  "Hand the sweep's OpenAI-compatible endpoint AND key to the resolver.
+   They are per-run knobs set on the sweep's command line - the same
+   class as the sampling knobs `env-metadata-keys` records because they \"varied
+   SILENTLY\" - and the production resolver no longer reads the environment, so
+   the sweep passes them in explicitly through `provider/install-run-override!`:
+   process-global, the scope the environment always had.
+
+     neither set  -> nothing installed; each tenant's `services.llm.*` decides
+     both set     -> installed; returns true
+     one set      -> the installer refuses, naming the missing variable - a
+                     sweep arm sent to the right host with the wrong key (or no
+                     key) is the silent failure this replaces
+
+   `getenv` is a seam for tests; production passes `System/getenv`."
+  ([] (install-sweep-credentials! #(System/getenv %)))
+  ([getenv]
+   (let [endpoint (getenv "OPENAI_API_ENDPOINT")
+         api-key (getenv "OPENAI_API_KEY")]
+     (when-not (and (str/blank? endpoint) (str/blank? api-key))
+       (provider/install-run-override! {:api-endpoint endpoint :api-key api-key})
+       true))))
+
+(defn- run-matrix*
   "Run the cartesian product of {configs × questions × repeats}.
 
    `opts` keys:
@@ -1616,6 +1646,17 @@
 ;; =============================================================================
 ;; Matrix loading
 ;; =============================================================================
+
+(defn run-matrix
+  "Run the cartesian product of {configs × questions × repeats}; the opts and
+   the return shape are `run-matrix*`'s. Installs the sweep's
+   OPENAI_API_ENDPOINT / OPENAI_API_KEY pair as the resolver's run-override for
+   the duration, and clears it afterwards, so a REPL that ran a
+   sweep does not keep routing through it."
+  [opts]
+  (install-sweep-credentials!)
+  (try (run-matrix* opts)
+       (finally (provider/clear-run-override!))))
 
 (defn load-matrix
   "Read an EDN matrix file. Expected shape:

@@ -36,8 +36,143 @@
   "What the CURRENT phase intends to change relative to the committed
    before-capture — rules and refusals, in the shape documented at
    `digdir.llm.provider-harness` \"Declared changes\". Declared next to the
-   code that makes the change, in the same diff. Phase 1 declares nothing."
-  {:rules [] :refusals []})
+   code that makes the change, in the same diff. Phase 1 declared nothing.
+
+   Phase 2 of the provider-resolver change, the read side: the openai-compatible branch takes its
+   key and endpoint from `services.llm.*`, and a missing tenant key refuses
+   naming its path instead of borrowing a process-global credential.
+
+   In Phase 3 of the provider-resolver change, the dispatchers collapsed: search-phrases, the loader and
+   enrichment (propose-questions) call `provider/resolve`, so they follow the
+   provider decision - on the `false`/unset arms and on the two retired keyword
+   arms they now leave Azure for the tenant's OpenAI-compatible provider - and
+   with no key they refuse like everything else.
+
+   the last of Phase 3: the loader's OpenRouter route for three
+   fallback model names is gone. Its fallback call (`loader-openrouter`) goes
+   to the tenant's resolved provider with the fallback model's name kept, so
+   it follows the provider decision and refuses without a key like every
+   other call."
+  (let [refuses #{:agent :agent-streaming :entity-extraction :fact-checking :graph-builder
+                  :rag-generate :summarization :sweep-judge :sweep-rechunk :synthesis}
+        ;; These two catch the refusal and degrade: query-planner falls back to
+        ;; the raw query, read-signals to a local fallback signal. The run
+        ;; throws nothing and prints the path.
+        swallows #{:query-planner :read-signals}
+        ;; the three former dispatchers, and the arms on which the
+        ;; provider decision is NOT Azure (the retired keyword arms included - the
+        ;; keywords are no longer read, so those runs match `:unset`).
+        dispatchers #{:search-phrases :loader :propose-questions}
+        off-azure #{[:false :none] [:unset :none] [:search-phrases-lmstudio :none] [:self-improvement-lmstudio :none]}
+        to-llm {[:sent :branch] :openai [:sent :via] :client [:sent :endpoint-host] "llm.harness.invalid"}]
+    {:rules
+     [{:why "openai-compatible through digdir.llm.client: key and endpoint come from services.llm.*
+             (opts), not the OPENAI_API_KEY secret and the public default endpoint"
+       :select {[:sent :via] :client [:sent :branch] :openai [:sent :key-from] :secret}
+       :from {[:sent :key-from] :secret [:sent :endpoint-from] :default [:sent :endpoint-host] "api.openai.com"}
+       :to {[:sent :key-from] :opts [:sent :endpoint-from] :opts [:sent :endpoint-host] "llm.harness.invalid"}}
+      {:why "openai-compatible through raw wkok (streaming, rechunk): the resolver passes services.llm.*
+             instead of nil, so wkok no longer re-derives either one from the environment"
+       :select {[:sent :via] :wkok [:sent :branch] :openai}
+       :from {[:sent :key-from] nil [:sent :key?] false [:sent :key-rederived?] true
+              [:sent :endpoint-from] :default [:sent :endpoint-rederived?] true
+              [:sent :endpoint-host] "api.openai.com"}
+       :to {[:sent :key-from] :opts [:sent :key?] true [:sent :key-rederived?] false
+            [:sent :endpoint-from] :opts [:sent :endpoint-rederived?] false
+            [:sent :endpoint-host] "llm.harness.invalid"}}
+      ;; --- Phase 3 of the provider-resolver change ---
+      {:why "Phase 3: search-phrases and the loader follow the provider decision off Azure, still
+             overwriting the caller's model - now with model-name, not the deployment name"
+       :select {[:entry] #{:search-phrases :loader} [:arm] off-azure [:sent :branch] :azure}
+       :from {[:sent :via] :wkok [:sent :endpoint-host] "azure.harness.invalid" [:sent :model] "az-deployment"}
+       :to (assoc to-llm [:sent :model] "generic-model")}
+      {:why "Phase 3: enrichment follows the provider decision off Azure; a runner layer that names
+             a model still wins, so only the destination changes"
+       :select {[:entry] :propose-questions
+                [:arm] #{[:false :common] [:false :graph-step] [:false :override] [:false :per-skill]
+                         [:unset :common] [:unset :graph-step] [:unset :override] [:unset :per-skill]}}
+       :from {[:sent :branch] :azure [:sent :via] :wkok [:sent :endpoint-host] "azure.harness.invalid"}
+       :to to-llm}
+      {:why "Phase 3: enrichment with no model from any layer takes the provider's default, which the
+             join now attributes to the provider (it was propose-questions' own read, below the runner)"
+       :select {[:entry] :propose-questions
+                [:arm] #{[:false :none] [:false :override-nil] [:unset :none] [:unset :override-nil]
+                         [:search-phrases-lmstudio :none]}}
+       :from {[:sent :branch] :azure [:sent :via] :wkok [:sent :endpoint-host] "azure.harness.invalid"
+              [:sent :model] "az-deployment" [:source :model] :below-runner}
+       :to (assoc to-llm [:sent :model] "generic-model" [:source :model] :provider-fallback)}
+      {:why "Phase 3: services.search-phrases.provider :lmstudio is retired - its run goes where the
+             unset decision says, the tenant's services.llm.*, not services.lmstudio.*"
+       :select {[:entry] :search-phrases [:arm] [:search-phrases-lmstudio :none]}
+       :from {[:sent :endpoint-host] "lmstudio.harness.invalid:1234" [:sent :model] "lm-model"}
+       :to {[:sent :endpoint-host] "llm.harness.invalid" [:sent :model] "generic-model"}}
+      {:why "Phase 3: services.self-improvement.provider :lmstudio is retired - the direct POST that
+             Phase 0 could not observe is gone; the run goes through digdir.llm.client, at its step,
+             exactly as the unset decision's run does"
+       :select {[:entry] :propose-questions [:arm] [:self-improvement-lmstudio :none]}
+       :from {[:path] [:unobserved-by-phase-0] [:call-index] nil [:sent :via] :direct-post
+              [:sent :endpoint-host] "lmstudio.harness.invalid:1234" [:sent :model] "lm-model"
+              [:source :model] :below-runner}
+       :to {[:path] [:harness/enrichment-propose-questions :step] [:call-index] 0 [:sent :via] :client
+            [:sent :endpoint-host] "llm.harness.invalid" [:sent :model] "generic-model"
+            [:source :model] :provider-fallback}}
+      ;; --- the provider-resolver change ---
+      {:why "the loader's fallback model on an Azure decision goes to Azure, not OpenRouter, under
+             its own name - Azure takes it as the deployment, and a tenant with no such deployment
+             fails there. Key and endpoint come from the resolved spec, as before"
+       :select {[:entry] :loader-openrouter [:arm] #{[:true :none]}}
+       :from {[:sent :via] :client [:sent :branch] :openai [:sent :endpoint-host] "openrouter.ai"}
+       :to {[:sent :via] :wkok [:sent :branch] :azure [:sent :endpoint-host] "azure.harness.invalid"}}
+      {:why "off Azure, the loader's fallback model goes to the tenant's services.llm.* endpoint
+             under its own name, not to a hardcoded openrouter.ai. OpenRouter is a services.llm value"
+       :select {[:entry] :loader-openrouter [:arm] off-azure}
+       :from {[:sent :endpoint-host] "openrouter.ai"}
+       :to {[:sent :endpoint-host] "llm.harness.invalid"}}]
+     :refusals
+     [{:why "Azure with no tenant key: the resolver refuses naming the path, where wkok used to
+             substitute AZURE_OPENAI_API_KEY"
+       :select {[:arm] #{[:azure-no-key :none]} [:entry] refuses}
+       :names-path "services.azure-openai.api-key"}
+      {:why "openai-compatible with no services.llm.api-key: the resolver refuses naming the path,
+             where the client used to take the OPENAI_API_KEY secret"
+       :select {[:arm] #{[:openai-no-key :none]} [:entry] refuses}
+       :names-path "services.llm.api-key"}
+      {:why "the same Azure refusal, caught by the skill: it degrades quietly instead of calling"
+       :select {[:arm] #{[:azure-no-key :none]} [:entry] swallows}
+       :names-path "services.azure-openai.api-key"
+       :swallowed? true}
+      {:why "the same openai-compatible refusal, caught by the skill: it degrades quietly instead of calling"
+       :select {[:arm] #{[:openai-no-key :none]} [:entry] swallows}
+       :names-path "services.llm.api-key"
+       :swallowed? true}
+      ;; --- Phase 3 of the provider-resolver change ---
+      {:why "Phase 3: the former dispatchers with no Azure key refuse naming it, where each passed
+             nil to wkok and borrowed AZURE_OPENAI_API_KEY"
+       :select {[:arm] #{[:azure-no-key :none]} [:entry] dispatchers}
+       :names-path "services.azure-openai.api-key"}
+      {:why "Phase 3: the former dispatchers, openai-compatible with no services.llm.api-key, refuse
+             naming it, where they used to go to Azure whatever the decision said"
+       :select {[:arm] #{[:openai-no-key :none]} [:entry] dispatchers}
+       :names-path "services.llm.api-key"}
+      ;; --- the provider-resolver change ---
+      {:why "the loader's fallback with no Azure key refuses naming it, where it went to OpenRouter
+             on services.openrouter.api-key whatever the decision said"
+       :select {[:arm] #{[:azure-no-key :none]} [:entry] :loader-openrouter}
+       :names-path "services.azure-openai.api-key"}
+      {:why "the loader's fallback, openai-compatible with no services.llm.api-key, refuses naming
+             it, where it went to OpenRouter on services.openrouter.api-key"
+       :select {[:arm] #{[:openai-no-key :none]} [:entry] :loader-openrouter}
+       :names-path "services.llm.api-key"}]}))
+
+(def ^:private guard-4-exceptions
+  "Calls Guard 4 does not cover yet, each with the field values it excuses and
+   why. Checked, not trusted (`h/guard-4-problems`): an exception no call needs
+   fails, so it is deleted in the commit that makes it unnecessary.
+
+   None. The last one, the loader's OpenRouter route (7 calls), was deleted by
+   which removed the route: every call the corpus makes now takes its
+   credentials from provider/resolve."
+  {})
 
 (def ^:private taken (delay (h/capture declared-changes)))
 
@@ -106,3 +241,75 @@
           (is (= 2 (count records))))
         (is (= [[:vacuous-refusal "r"]]
                (:problems (h/expected-after before {:refusals [{:why "r" :select {[:arm] #{[:zz :none]}} :names-path "p"}]}))))))))
+
+(deftest refusals-are-checked-not-trusted
+  (testing "The refusal check, on runs whose answer is known: each way a refusal can
+            be real, and each way a run can look like one without being one."
+    (let [check #'h/refusal-problems
+          p "services.llm.api-key"
+          rf {:names-path p}
+          sw (assoc rf :swallowed? true)
+          msg (str p " is unset for tenant t")
+          direct (ex-info msg {:path p})
+          step-error (fn [m] (ex-info "Step execution failed" {:step-id :step :error {:error {:error-type :x :error-message m}}}))]
+      (testing "thrown directly, naming the path: a refusal"
+        (is (nil? (check rf {:calls [] :error direct}))))
+      (testing "thrown from a graph step: the runner wraps it with no cause, and the path is read from the step's error-result"
+        (is (nil? (check rf {:calls [] :error (step-error msg)}))))
+      (testing "a wrapped step error that does not name the path is not a refusal of it"
+        (is (= :refusal-does-not-name (ffirst (check rf {:calls [] :error (step-error "boom")})))))
+      (testing "the path elsewhere in ex-data (inputs, context) does not count: only the step's error message does"
+        (is (= :refusal-does-not-name
+               (ffirst (check rf {:calls [] :error (ex-info "Step execution failed"
+                                                             {:inputs {:q p} :error {:error {:error-message "boom"}}})})))))
+      (testing "zero calls and no error, NOT declared swallowed: fails, whatever was printed"
+        (is (= [[:declared-refusal-but-no-error]] (check rf {:calls [] :error nil :output msg}))))
+      (testing "declared swallowed: zero calls, no error, and the path in what the run printed"
+        (is (nil? (check sw {:calls [] :error nil :output (str "LLM call failed: " msg " - falling back")}))))
+      (testing "declared swallowed but silent: zero calls and no error is also a skill that never tried"
+        (is (= [[:swallowed-refusal-does-not-name p]] (check sw {:calls [] :error nil :output ""}))))
+      (testing "declared swallowed but it threw: the declaration misdescribes the run"
+        (is (= :declared-swallowed-but-threw (ffirst (check sw {:calls [] :error direct})))))
+      (testing "any call at all is not a refusal, swallowed or not"
+        (is (= :declared-refusal-but-called (ffirst (check rf {:calls [{}] :error direct}))))
+        (is (= :declared-refusal-but-called (ffirst (check sw {:calls [{}] :error nil :output msg}))))))))
+
+(deftest guard-4-every-call-takes-its-credentials-from-the-resolved-spec
+  (testing "the provider-resolver change's done-condition (Guard 4), over every call the corpus x matrix makes: key
+            and endpoint from the resolved spec (:opts), and the spec says each came from
+            config or the sweep's run-override - never the environment, never untagged.
+            sweep-rechunk calls wkok below every capture point (h/unobserved-by-phase-0),
+            so its calls are outside this guard; its wire records are held by the rules."
+    (let [calls (:calls @taken)]
+      (is (<= 150 (count calls))
+          "POSITIVE CONTROL: the guard saw the corpus's calls - an empty capture would pass it")
+      (is (empty? (h/guard-4-problems calls guard-4-exceptions))
+          (str "calls that do not take their credentials from config through provider/resolve: "
+               (pr-str (h/guard-4-problems calls guard-4-exceptions)))))))
+
+(deftest guard-4-is-checked-not-trusted
+  (testing "The guard, on calls whose answer is known: each way a call can pass, and each
+            way it can escape."
+    (let [ok {:entry :e :arm [:a :none] :key-from :opts :endpoint-from :opts
+              :key-source :config :endpoint-source :config}
+          check (fn [calls] (mapv first (h/guard-4-problems calls {})))]
+      (testing "config and the run-override pass"
+        (is (nil? (h/guard-4-problems [ok (assoc ok :key-source :run-override :endpoint-source :run-override)] {}))))
+      (testing "a key or endpoint the transport re-derived fails"
+        (is (= [:guard-4] (check [(assoc ok :key-from :env)])))
+        (is (= [:guard-4] (check [(assoc ok :key-from nil)])))
+        (is (= [:guard-4] (check [(assoc ok :endpoint-from :default)]))))
+      (testing "an allowlist: untagged, unresolved and absent sources fail"
+        (doseq [v [:untagged :unresolved nil]]
+          (is (= [:guard-4] (check [(assoc ok :key-source v)])) (pr-str v))
+          (is (= [:guard-4] (check [(assoc ok :endpoint-source v)])) (pr-str v))))
+      (let [ex {:e {:why "t" :excuses {:key-source :untagged :endpoint-source :untagged}}}
+            untagged (assoc ok :key-source :untagged :endpoint-source :untagged)]
+        (testing "an exception excuses exactly its fields, on its entry"
+          (is (nil? (h/guard-4-problems [ok untagged] ex))))
+        (testing "and nothing more: the same entry with a nil key still fails"
+          (is (= [:guard-4] (mapv first (h/guard-4-problems [ok untagged (assoc untagged :key-from nil)] ex)))))
+        (testing "another entry is not excused by it"
+          (is (= [:guard-4] (mapv first (h/guard-4-problems [ok untagged (assoc untagged :entry :other)] ex)))))
+        (testing "an exception that excuses no call fails"
+          (is (= [[:vacuous-guard-4-exception :e]] (h/guard-4-problems [ok] ex))))))))
