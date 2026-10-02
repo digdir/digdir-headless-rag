@@ -14,6 +14,7 @@
    #?(:clj [digdir.boot.placeholder-secrets :as placeholder-secrets])
    #?(:clj [digdir.boot.provider-switch :as provider-switch])
    #?(:clj [digdir.boot.required-env :as required-env])
+   #?(:clj [digdir.boot.agents :as boot-agents])
    #?(:clj [digdir.e2e.seed :as e2e-seed])
    #?(:clj [digdir.skills.init :as skills-init])
    ;; Side-effect requires: each ns invokes its register! to put the
@@ -127,6 +128,7 @@
      ;; used to re-require them here as well; that second path is gone on
      ;; purpose, so a registration problem has one place to look.
 
+     (boot-agents/seed!)
      ;; Boot-time E2E auto-seed (mirrors prod.cljc -main). No-op unless
      ;; E2E_API_KEY is set, so a plain `bb dev` is unchanged.
      (e2e-seed/maybe-seed!)

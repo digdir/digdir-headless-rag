@@ -157,10 +157,8 @@
          db @conn
          now (System/currentTimeMillis)
          existing (get-agent db (:id agent))
-         ;; Input wins so dump-import overrides whatever init-time
-         ;; seed-builtin-agents! pre-stamped with `now`. Operator/UI flows
-         ;; pass no timestamps and fall through to the existing-or-now path.
-         updated-at (or input-updated-at (when existing (:updated-at existing)) now)
+         ;; Input wins so a dump import keeps its own timestamps.
+         updated-at (or input-updated-at now)
          created-at (or input-created-at (when existing (:created-at existing)) now)
          dataset-scope-tx (mapv (fn [{:keys [tenant dataset-config-key]}]
                                   (let [scope-id (str "agent-dataset-scope-" (nano-id))]
@@ -172,26 +170,37 @@
          dataset-scope-ids (mapv :db/id dataset-scope-tx)
          retracts (mapv (fn [eid] [:db/retractEntity eid])
                         (existing-dataset-scope-eids db (:id agent)))
+         ;; Cardinality-many: asserting alone would only ever add.
+         existing-eid (agent-eid db (:id agent))
+         graph-retracts (when existing-eid
+                          (mapv (fn [graph-id]
+                                  [:db/retract existing-eid
+                                   :agent/allowed-skill-graphs graph-id])
+                                (d/q '[:find [?graph-id ...]
+                                       :in $ ?e
+                                       :where [?e :agent/allowed-skill-graphs ?graph-id]]
+                                     db existing-eid)))
+         params-retract (when (and existing-eid
+                                   (empty? (:skill-params agent))
+                                   (seq (:skill-params existing)))
+                          [[:db/retract existing-eid :agent/skill-params
+                            (pr-str (:skill-params existing))]])
          tx-data (vec
                   (concat
                    retracts
+                   graph-retracts
+                   params-retract
                    dataset-scope-tx
                    [(cond-> {:agent/id (:id agent)
                              :agent/name (:name agent)
                              :agent/description (:description agent)
-                             :agent/instructions (:instructions agent)
+                             :agent/instructions (or (:instructions agent) "")
                              :agent/default-skill-graph (:default-skill-graph agent)
                              :agent/allowed-skill-graphs (vec (:allowed-skill-graphs agent))
                              :agent/guardrails (pr-str (:guardrails agent))
                              :agent/enabled? (:enabled? agent)
                              :agent/created-at created-at
                              :agent/updated-at updated-at}
-                      ;; Only write :skill-params when the agent actually
-                      ;; carries overrides. An empty map writes an empty
-                      ;; "{}" string that round-trips fine, but the missing
-                      ;; attr case is the more common path (most agents have
-                      ;; no overrides) and skipping the assoc keeps the tx
-                      ;; minimal for those.
                       (seq (:skill-params agent))
                       (assoc :agent/skill-params (pr-str (:skill-params agent)))
                       (seq dataset-scope-ids) (assoc :agent/allowed-dataset-scopes dataset-scope-ids))]))]
@@ -277,6 +286,28 @@
            :allowed-skill-graphs filtered-allowed
            :default-skill-graph filtered-default)))
 
+(defn- seed-one-agent!
+  "Filter one definition to the available graphs and persist it."
+  [conn agent-def available-skill-graphs]
+  (let [filtered (filter-to-available-skill-graphs agent-def available-skill-graphs)]
+    (if (seq (:allowed-skill-graphs filtered))
+      (upsert-agent! conn filtered {:available-skill-graphs available-skill-graphs})
+      (do (t/log! :warn [::agent-skipped-no-available-skill-graphs
+                         {:agent-id (:id agent-def)
+                          :declared-skill-graphs (:allowed-skill-graphs agent-def)}])
+          nil))))
+
+(defn- isolating-failure
+  "Run f for one agent; log and return nil if it throws, so the rest still run."
+  [agent-id f]
+  (try
+    (f)
+    (catch Exception e
+      (t/log! :error [::agent-seed-failed {:agent-id agent-id
+                                           :error (ex-message e)
+                                           :errors (:errors (ex-data e))}])
+      nil)))
+
 (defn seed-builtin-agents!
   "Seed builtin agent definitions for the current product surfaces.
    This is idempotent because agents are upserted by :agent/id.
@@ -293,14 +324,58 @@
   (let [available-skill-graphs (agents/available-skill-graph-ids)]
     (vec
      (keep (fn [agent-def]
-             (let [filtered (filter-to-available-skill-graphs agent-def available-skill-graphs)]
-               (if (seq (:allowed-skill-graphs filtered))
-                 (upsert-agent! conn filtered
-                                {:available-skill-graphs available-skill-graphs})
-                 ;; nil, not the log! return value — `keep` would otherwise
-                 ;; collect it as if the agent had been seeded.
-                 (do (t/log! :warn [::agent-skipped-no-available-skill-graphs
-                                    {:agent-id (:id agent-def)
-                                     :declared-skill-graphs (:allowed-skill-graphs agent-def)}])
-                     nil))))
+             (isolating-failure (:id agent-def)
+                                #(seed-one-agent! conn agent-def available-skill-graphs)))
            (agents/builtin-agent-definitions)))))
+
+(defn seed-agent!
+  "Reseed one builtin agent from its code definition."
+  [conn agent-id]
+  (skills-init/ensure-initialized!)
+  (let [available-skill-graphs (agents/available-skill-graph-ids)]
+    (when-let [agent-def (first (filter #(= agent-id (:id %))
+                                        (agents/builtin-agent-definitions)))]
+      (seed-one-agent! conn agent-def available-skill-graphs))))
+
+(defn reconcile-skill-graphs!
+  "Bring each builtin's stored graph lists back in line with its definition,
+   leaving every other field alone. Returns the agents it changed."
+  [conn]
+  (skills-init/ensure-initialized!)
+  (let [available (agents/available-skill-graph-ids)]
+    (vec
+     (keep (fn [agent-def]
+             (isolating-failure
+              (:id agent-def)
+              #(let [filtered (filter-to-available-skill-graphs agent-def available)]
+                (when (seq (:allowed-skill-graphs filtered))
+                  (if-let [stored (get-agent @conn (:id agent-def))]
+                    (when (or (not= (set (:allowed-skill-graphs stored))
+                                    (set (:allowed-skill-graphs filtered)))
+                              (not= (:default-skill-graph stored)
+                                    (:default-skill-graph filtered)))
+                      (upsert-agent! conn
+                                     (assoc stored
+                                            :allowed-skill-graphs (:allowed-skill-graphs filtered)
+                                            :default-skill-graph (:default-skill-graph filtered))
+                                     {:available-skill-graphs available}))
+                    (upsert-agent! conn filtered {:available-skill-graphs available}))))))
+           (agents/builtin-agent-definitions)))))
+
+(defn drift-report
+  "What a reseed would do to every agent, stored or declared."
+  [db]
+  ;; skills-init, not skills.api: seeding resolves against the larger registry.
+  (skills-init/ensure-initialized!)
+  (let [available (agents/available-skill-graph-ids)
+        by-id #(into {} (map (juxt :id identity)) %)
+        stored (by-id (list-agents db))
+        declared (by-id (agents/builtin-agent-definitions))]
+    (->> (into (set (keys stored)) (keys declared))
+         sort
+         (mapv (fn [agent-id]
+                 (assoc (agents/agent-drift {:stored (get stored agent-id)
+                                             :declared (get declared agent-id)
+                                             :available-skill-graphs available})
+                        :stored (get stored agent-id)
+                        :declared (get declared agent-id)))))))

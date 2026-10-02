@@ -60,6 +60,7 @@
                    ;; `/config/skill-graphs` silently resolves to the group
                    ;; default (Config) — a wrong tab rather than an error. #171.
                    {:id :skills :segment "skills" :legacy-segments #{"skill-graphs"}}
+                   {:id :agents :segment "agents"}
                    {:id :diagnostics :segment "diagnostics"}
                    {:id :global :segment "global"}]
             :default :config}
