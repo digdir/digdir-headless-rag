@@ -102,12 +102,16 @@
                   {:docs-collection (:docs-collection conversation-pipeline)
                    :filter-map filter-map})
    (if-let [ts-config (ts-utils/make-ts-settings opts)]
-     (let [multi-search (filters/filter-map->typesense-facet-multi-search
-                         filter-map
-                         (:docs-collection conversation-pipeline))]
+     ;; Named `searches`, not `multi-search`: that name shadowed the function
+     ;; below, the call invoked a map with three arguments, and every facet
+     ;; fetch failed into the catch. inspect_filters then showed the agent no
+     ;; options at all.
+     (let [searches (filters/filter-map->typesense-facet-multi-search
+                     filter-map
+                     (:docs-collection conversation-pipeline))]
        (try
          (let [response (multi-search
-                         ts-config multi-search {:query_by "doc_num"})
+                         ts-config searches {:query_by "doc_num"})
                results (:results response)
                facet-opts (options results)]
            (assoc filter-map :ui/fields
@@ -116,7 +120,7 @@
                            filter-field (facet-opts (:field filter-field))))
                         (:fields filter-map))))
          (catch Exception e
-           (log/warn e "Error in fetch-facets" {:multi-search multi-search})
+           (log/warn e "Error in fetch-facets" {:multi-search searches})
            filter-map)))
      (do
        (log/warn "fetch-facets skipped: Typesense config is nil")

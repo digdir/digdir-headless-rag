@@ -427,7 +427,11 @@
        vec))
 
 (defn format-filter-inspection-result
-  "Format inspect_filters results for the agent."
+  "Format inspect_filters results for the agent.
+
+   An option is `{:value :count}`, the shape `rag/fetch-facets` returns. It
+   used to read `:name`, which no option has, so the agent would have been
+   shown counts under empty names."
   [{:keys [available-fields facet-options]}]
   (let [field-lines (->> available-fields
                          (map (fn [{:keys [field value-type typesense-type]}]
@@ -439,7 +443,7 @@
                         (map (fn [[field options]]
                                (str "- " field ": "
                                     (if (seq options)
-                                      (str/join ", " (map #(str "\"" (:name %) "\"(" (:count %) ")") options))
+                                      (str/join ", " (map #(str "\"" (:value %) "\"(" (:count %) ")") options))
                                       "(no options found)")))
                              facet-options)))]
     (str "Available filter fields:\n"
@@ -1392,7 +1396,7 @@
                         (map (fn [{:keys [field options]}]
                                [field (->> options
                                            (take max-options)
-                                           (map #(select-keys % [:name :count]))
+                                           (map #(select-keys % [:value :count]))
                                            vec)]))
                         (:ui/fields facets))))]
           (format-filter-inspection-result
