@@ -160,36 +160,19 @@
 
 (defn- flip-ownership!
   [conn path ownership]
-  (d/transact conn
-              {:tx-data [{:db/id [:config-def/path path]
-                          :config-def/ownership ownership}]}))
+  (config-db/transact! conn
+                       {:tx-data [{:db/id [:config-def/path path]
+                                   :config-def/ownership ownership}]}))
 
 ;; =============================================================================
 ;; Promotion
 ;; =============================================================================
 
-(defn promote-to-global!
-  "Promote a fork-owned definition to :inherit-owned.
-
-   The candidate-value becomes the global baseline. Each existing tenant's
-   effective value is preserved unless `:non-matching-strategy` overrides:
-
-     :pin-all (default) — tenants whose current value differs from the candidate
-        keep their value (stamped with :pin-of-version so the override is
-        traceable). Tenants whose value already equals the candidate have their
-        direct value retracted and inherit from global.
-     :revert-all — every tenant's direct value is retracted, so all tenants
-        inherit the candidate value on next read.
-
-   Opts:
-     :path              - required string
-     :candidate-value   - required value (decoded) — becomes the new global
-     :non-matching-strategy :pin-all | :revert-all (default :pin-all)
-     :changelog         - required string for the version-bump audit trail
-     :master-key        - required for encrypted definitions
-     :user-id :user-email :ip-address - audit metadata
-
-   Returns {:version :pinned <tenants> :reverted <tenants> :inherited <tenants>}."
+(defn- promote-on!
+  "The promotion's writes, against `conn`: a real connection, or a
+   `config-db/speculation` that records them. Every write goes through
+   `config-db/transact!` (or a writer that does), so nothing here commits
+   on its own when `conn` is a speculation."
   [conn {:keys [path candidate-value non-matching-strategy changelog master-key
                 user-id user-email ip-address]
          :or {non-matching-strategy :pin-all}}]
@@ -242,10 +225,10 @@
       (doseq [{:keys [tenant node-id value-entity]} non-matching]
         (case non-matching-strategy
           :pin-all
-          (do (d/transact conn
-                          {:tx-data [{:db/id [:config.value/id (:config.value/id value-entity)]
-                                      :config.value/pin-of-version version
-                                      :config.value/updated-at now}]})
+          (do (config-db/transact! conn
+                                   {:tx-data [{:db/id [:config.value/id (:config.value/id value-entity)]
+                                               :config.value/pin-of-version version
+                                               :config.value/updated-at now}]})
               (swap! pinned conj tenant))
 
           :revert-all
@@ -269,6 +252,45 @@
        :reverted (vec (distinct @reverted))
        :inherited (vec (distinct @inherited))
        :strategy non-matching-strategy})))
+
+(defn promote-to-global!
+  "Promote a fork-owned definition to :inherit-owned.
+
+   The candidate-value becomes the global baseline. Each existing tenant's
+   effective value is preserved unless `:non-matching-strategy` overrides:
+
+     :pin-all (default) — tenants whose current value differs from the candidate
+        keep their value (stamped with :pin-of-version so the override is
+        traceable). Tenants whose value already equals the candidate have their
+        direct value retracted and inherit from global.
+     :revert-all — every tenant's direct value is retracted, so all tenants
+        inherit the candidate value on next read.
+
+   Opts:
+     :path              - required string
+     :candidate-value   - required value (decoded) — becomes the new global
+     :non-matching-strategy :pin-all | :revert-all (default :pin-all)
+     :changelog         - required string for the version-bump audit trail
+     :master-key        - required for encrypted definitions
+     :user-id :user-email :ip-address - audit metadata
+
+   Returns {:version :pinned <tenants> :reverted <tenants> :inherited <tenants>}.
+
+   ONE TRANSACTION. The ownership flip, the global write, the version
+   bump, every tenant's pin or retraction and the audit row are computed
+   against a speculation and committed together. So a promotion REFUSED at
+   any step (the deployment-specific guard in `set-node-value!` refuses only
+   AFTER the flip) leaves nothing behind. It used to commit the flip first,
+   in its own transaction: one refused attempt left the path :inherit-owned
+   for good, disarming the very check (\"Global writes require an
+   :inherit-owned definition\") that the next write relies on."
+  [conn opts]
+  (let [spec (config-db/speculation @conn)
+        result (promote-on! spec opts)
+        tx-data (config-db/speculation-tx-data spec)]
+    (when (seq tx-data)
+      (d/transact conn {:tx-data tx-data}))
+    result))
 
 ;; =============================================================================
 ;; Demotion
@@ -432,7 +454,9 @@
   "Promote every :fork-owned definition that has a candidate value (derived
    from __platform-defaults__ if available, otherwise the modal tenant-value
    cluster). Uses :pin-all so no tenant's effective value changes. Returns
-   {:promoted [...] :skipped [...] :errors [...]}."
+   {:promoted [...] :skipped [...] :errors [...]}. Each :errors entry carries
+   the failure's message and, when it has one, its ex-data :reason, so a
+   caller can tell a refusal from a failure."
   [conn {:keys [master-key user-id changelog-prefix]
          :or {changelog-prefix "bulk promote: retire __platform-defaults__"}}]
   (let [db @conn
@@ -456,7 +480,7 @@
                   :inherited (count (:inherited result))}))
         (catch Exception e
           (swap! results update :errors conj
-                 {:path path :error (.getMessage e)}))))
+                 {:path path :error (.getMessage e) :reason (:reason (ex-data e))}))))
     (doseq [skipped-entry (remove :promote? report)]
       (swap! results update :skipped conj
              {:path (:path skipped-entry)

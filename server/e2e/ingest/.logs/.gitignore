@@ -1,0 +1,3 @@
+# Server logs the ingest harness saves per scenario (see harness.clj, logs-dir).
+*
+!.gitignore

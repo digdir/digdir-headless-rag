@@ -53,9 +53,10 @@
    Order matters and is the whole point: run after and the report describes a
    system that no longer exists, listing values the operator has in fact
    already supplied. A newcomer's gap is credentials, and a snapshot cannot
-   carry those - the ones it does carry are sealed with a master key a fresh
-   checkout does not have (#279). This is the step that makes setting
-   environment variables sufficient.
+   carry those: the shipped one carries no secret values since the snapshot encrypted-secrets issue. For an
+   imported file that carries tenants, this is the step that makes setting
+   environment variables sufficient. The shipped snapshot carries none, so on
+   the documented path it is `bb demo-tenant`'s own bridge that does it.
 
    Never fails the import, for the same reason verification does not. Errors
    are collected and returned rather than dropped: a silently skipped

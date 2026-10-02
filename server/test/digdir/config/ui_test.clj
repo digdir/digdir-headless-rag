@@ -99,32 +99,19 @@
                            :value "kudos"}))))
 
 (defmacro with-runtime-ui-context
-  "Point the process-global config conn at `conn` for the duration of `body`.
+  "Aim the config connection at `conn` for the duration of `body`.
 
    The UI fns under test read `config-db/get-conn` instead of taking a conn, so
-   the global is the only way to aim them at a test database.
-
-   Restores the previous conn rather than nil-ing it: `get-conn` falls back to
-   the file-backed application DB when the global is nil, so nil-ing it leaves
-   later readers silently pointed at the real database instead of failing
-   loudly. Same pattern as the fixture in `digdir.config.api-keys-test`.
-
-   Mutating a process-global is only safe because nothing else writes it
-   concurrently. One thing did: the `digdir.config.cache-invalidation` poller
-   calls `data.db/reconnect!` from a daemon thread, which reassigns this global
-   and was the cause of this namespace's intermittent
-   \"Config node not found runtime-frontpage\". That poller is disabled in test
-   JVMs (-Ddigdir.config.poller=false in the :test alias) for exactly that
-   reason."
+   this binds `config-db/*conn*`. A binding restores itself and cannot leak.
+   The `set-conn!`/restore pair it replaces restored whatever `get-conn`
+   returned. Once the config-connection isolation fix stopped boot pinning a process-global override, that
+   value is the main connection, so the \"restore\" CREATED an override that
+   silently defeated every later `with-redefs` of `data.db/get-conn`."
   [conn & body]
-  `(let [previous# (config-db/get-conn)]
-     (config-db/set-conn! ~conn)
-     (try
-       (with-redefs [core/use-db-config? (constantly true)
-                     core/get-master-key (constantly nil)]
-         ~@body)
-       (finally
-         (config-db/set-conn! previous#)))))
+  `(binding [config-db/*conn* ~conn]
+     (with-redefs [core/use-db-config? (constantly true)
+                   core/get-master-key (constantly nil)]
+       ~@body)))
 
 ;; =============================================================================
 ;; parse-value-by-type Tests
@@ -818,25 +805,22 @@
 
 (deftest test-create-config-tree-binding-rejected
   (testing "Editable tree helper rejects binding creation now that bindings are deprecated"
-    (let [conn (create-test-db)
-          ;; Restore rather than nil — see with-runtime-ui-context (#88).
-          previous-conn (config-db/get-conn)]
+    (let [conn (create-test-db)]
       (try
         (seed-runtime-tree! conn)
-        (config-db/set-conn! conn)
-        (with-redefs [perms/is-admin? (fn [_ _] true)]
-          (is (thrown-with-msg?
-               clojure.lang.ExceptionInfo
-               #"Binding metadata is deprecated"
-               (ui/create-config-tree-binding!
-                "ka"
-                :runtime
-                "runtime-base"
-                :runtime-profile
-                "default-base"
-                "user-1"))))
+        (binding [config-db/*conn* conn]
+          (with-redefs [perms/is-admin? (fn [_ _] true)]
+            (is (thrown-with-msg?
+                 clojure.lang.ExceptionInfo
+                 #"Binding metadata is deprecated"
+                 (ui/create-config-tree-binding!
+                  "ka"
+                  :runtime
+                  "runtime-base"
+                  :runtime-profile
+                  "default-base"
+                  "user-1")))))
         (finally
-          (config-db/set-conn! previous-conn)
           (delete-test-db conn))))))
 
 (deftest test-get-binding-preview-data-rejected
@@ -910,157 +894,148 @@
 
 (deftest test-mutate-config-tree-node-lifecycle-success
   (testing "Generic tree mutation helper supports create, update, and delete for nodes"
-    (let [conn (create-test-db)
-          ;; Restore rather than nil — see with-runtime-ui-context (#88).
-          previous-conn (config-db/get-conn)]
+    (let [conn (create-test-db)]
       (try
         (seed-runtime-tree! conn)
-        (config-db/set-conn! conn)
-        (with-redefs [perms/is-admin? (fn [_ _] true)]
-          (is (= :ok
-                 (ui/mutate-config-tree!
-                  {:op :create-node
-                   :tenant "ka"
-                   :root :runtime
-                   :node-id "runtime-leaf"
-                   :label "Leaf"
-                   :tenant-config-key "leaf"
-                   :parent-id "runtime-frontpage"
-                   :enabled? true
-                   :user-id "user-1"})))
-          (is (= "runtime-frontpage"
-                 (get-in (config-db/get-config-node @conn "runtime-leaf")
-                         [:config.node/parent :config.node/id])))
-          (is (= :ok
-                 (ui/mutate-config-tree!
-                  {:op :set-node-parent
-                   :tenant "ka"
-                   :root :runtime
-                   :node-id "runtime-leaf"
-                   :parent-id "runtime-base"
-                   :user-id "user-1"})))
-          (is (= "runtime-base"
-                 (get-in (config-db/get-config-node @conn "runtime-leaf")
-                         [:config.node/parent :config.node/id])))
-          (is (= :ok
-                 (ui/mutate-config-tree!
-                  {:op :update-node
-                   :tenant "ka"
-                   :root :runtime
-                   :node-id "runtime-leaf"
-                   :label "Leaf v2"
-                   :enabled? false
-                   :user-id "user-1"})))
-          (let [node (config-db/get-config-node @conn "runtime-leaf")]
-            (is (= "Leaf v2" (:config.node/label node)))
-            (is (false? (:config.node/enabled? node))))
-          (is (= :ok
-                 (ui/mutate-config-tree!
-                  {:op :clear-node-parent
-                   :tenant "ka"
-                   :root :runtime
-                   :node-id "runtime-leaf"
-                   :user-id "user-1"})))
-          (is (nil? (get-in (config-db/get-config-node @conn "runtime-leaf")
-                            [:config.node/parent :config.node/id])))
-          (is (= :ok
-                 (ui/mutate-config-tree!
-                  {:op :delete-node
-                   :tenant "ka"
-                   :root :runtime
-                   :node-id "runtime-leaf"
-                   :user-id "user-1"})))
-          (is (nil? (config-db/get-config-node @conn "runtime-leaf"))))
-        (finally
-          (config-db/set-conn! previous-conn)
-          (delete-test-db conn))))))
-
-(deftest test-mutate-config-tree-binding-and-value-success
-  (testing "Generic tree mutation helper supports node value set/reset without compatibility mutations"
-    (let [conn (create-test-db)
-          ;; Restore rather than nil — see with-runtime-ui-context (#88).
-          previous-conn (config-db/get-conn)]
-      (try
-        (seed-runtime-tree! conn)
-        (config-db/set-conn! conn)
-        (with-redefs [perms/is-admin? (fn [_ _] true)]
-          (is (= :ok
-                 (ui/mutate-config-tree!
-                  {:op :set-node-value
-                   :tenant "ka"
-                   :root :runtime
-                   :node-id "runtime-base"
-                   :path "skills.retrieval.top-k"
-                   :raw-value "42"
-                   :user-id "user-1"})))
-          (is (= 42
-                 (config-db/decode-value
-                  (:config.value/raw (config-db/get-node-value @conn :runtime "ka" "runtime-base" "skills.retrieval.top-k"))
-                  :number
-                  false
-                  nil)))
-          (is (= :ok
-                 (ui/mutate-config-tree!
-                  {:op :delete-node-value
-                   :tenant "ka"
-                   :root :runtime
-                   :node-id "runtime-base"
-                   :path "skills.retrieval.top-k"
-                   :user-id "user-1"})))
-          (is (nil? (config-db/get-node-value @conn :runtime "ka" "runtime-base" "skills.retrieval.top-k")))
-          (is (= #{"compat-runtime-agent-default" "compat-runtime-dataset-default"}
-                 (set (d/q '[:find [?id ...]
-                             :in $ ?tenant ?root
-                             :where
-                             [?e :config.compatibility/id ?id]
-                             [?e :config.compatibility/tenant ?tenant]
-                             [?e :config.compatibility/root ?root]]
-                           @conn
-                           "ka"
-                           :runtime)))))
-        (finally
-          (config-db/set-conn! previous-conn)
-          (delete-test-db conn))))))
-
-(deftest test-mutate-config-tree-destructive-ops-export-snapshot
-  (testing "Destructive tree mutations export a tenant snapshot before commit"
-    (let [conn (create-test-db)
-          ;; Restore rather than nil — see with-runtime-ui-context (#88).
-          previous-conn (config-db/get-conn)]
-      (try
-        (seed-runtime-tree! conn)
-        (config-db/set-conn! conn)
-        (let [snapshot-calls (atom [])]
-          (with-redefs [perms/is-admin? (fn [_ _] true)
-                        ops-sync/export-to-file (fn [_ file-path opts]
-                                             (swap! snapshot-calls conj {:file-path file-path
-                                                                         :opts opts})
-                                             {:file-path file-path})]
+        (binding [config-db/*conn* conn]
+          (with-redefs [perms/is-admin? (fn [_ _] true)]
             (is (= :ok
                    (ui/mutate-config-tree!
-                    {:op :update-node
+                    {:op :create-node
                      :tenant "ka"
                      :root :runtime
-                     :node-id "runtime-frontpage"
-                     :label "Frontpage v2"
+                     :node-id "runtime-leaf"
+                     :label "Leaf"
+                     :tenant-config-key "leaf"
+                     :parent-id "runtime-frontpage"
                      :enabled? true
                      :user-id "user-1"})))
+            (is (= "runtime-frontpage"
+                   (get-in (config-db/get-config-node @conn "runtime-leaf")
+                           [:config.node/parent :config.node/id])))
             (is (= :ok
                    (ui/mutate-config-tree!
                     {:op :set-node-parent
                      :tenant "ka"
                      :root :runtime
-                     :node-id "runtime-frontpage"
+                     :node-id "runtime-leaf"
                      :parent-id "runtime-base"
                      :user-id "user-1"})))
-            (is (= 1 (count @snapshot-calls)))
-            (is (= {:tenant "ka"
-                    :include-audit? false}
-                   (:opts (first @snapshot-calls))))
-            (is (every? #(str/includes? (:file-path %) "server/state/config-tree-snapshots/ka/")
-                        @snapshot-calls))))
+            (is (= "runtime-base"
+                   (get-in (config-db/get-config-node @conn "runtime-leaf")
+                           [:config.node/parent :config.node/id])))
+            (is (= :ok
+                   (ui/mutate-config-tree!
+                    {:op :update-node
+                     :tenant "ka"
+                     :root :runtime
+                     :node-id "runtime-leaf"
+                     :label "Leaf v2"
+                     :enabled? false
+                     :user-id "user-1"})))
+            (let [node (config-db/get-config-node @conn "runtime-leaf")]
+              (is (= "Leaf v2" (:config.node/label node)))
+              (is (false? (:config.node/enabled? node))))
+            (is (= :ok
+                   (ui/mutate-config-tree!
+                    {:op :clear-node-parent
+                     :tenant "ka"
+                     :root :runtime
+                     :node-id "runtime-leaf"
+                     :user-id "user-1"})))
+            (is (nil? (get-in (config-db/get-config-node @conn "runtime-leaf")
+                              [:config.node/parent :config.node/id])))
+            (is (= :ok
+                   (ui/mutate-config-tree!
+                    {:op :delete-node
+                     :tenant "ka"
+                     :root :runtime
+                     :node-id "runtime-leaf"
+                     :user-id "user-1"})))
+            (is (nil? (config-db/get-config-node @conn "runtime-leaf")))))
         (finally
-          (config-db/set-conn! previous-conn)
+          (delete-test-db conn))))))
+
+(deftest test-mutate-config-tree-binding-and-value-success
+  (testing "Generic tree mutation helper supports node value set/reset without compatibility mutations"
+    (let [conn (create-test-db)]
+      (try
+        (seed-runtime-tree! conn)
+        (binding [config-db/*conn* conn]
+          (with-redefs [perms/is-admin? (fn [_ _] true)]
+            (is (= :ok
+                   (ui/mutate-config-tree!
+                    {:op :set-node-value
+                     :tenant "ka"
+                     :root :runtime
+                     :node-id "runtime-base"
+                     :path "skills.retrieval.top-k"
+                     :raw-value "42"
+                     :user-id "user-1"})))
+            (is (= 42
+                   (config-db/decode-value
+                    (:config.value/raw (config-db/get-node-value @conn :runtime "ka" "runtime-base" "skills.retrieval.top-k"))
+                    :number
+                    false
+                    nil)))
+            (is (= :ok
+                   (ui/mutate-config-tree!
+                    {:op :delete-node-value
+                     :tenant "ka"
+                     :root :runtime
+                     :node-id "runtime-base"
+                     :path "skills.retrieval.top-k"
+                     :user-id "user-1"})))
+            (is (nil? (config-db/get-node-value @conn :runtime "ka" "runtime-base" "skills.retrieval.top-k")))
+            (is (= #{"compat-runtime-agent-default" "compat-runtime-dataset-default"}
+                   (set (d/q '[:find [?id ...]
+                               :in $ ?tenant ?root
+                               :where
+                               [?e :config.compatibility/id ?id]
+                               [?e :config.compatibility/tenant ?tenant]
+                               [?e :config.compatibility/root ?root]]
+                             @conn
+                             "ka"
+                             :runtime))))))
+        (finally
+          (delete-test-db conn))))))
+
+(deftest test-mutate-config-tree-destructive-ops-export-snapshot
+  (testing "Destructive tree mutations export a tenant snapshot before commit"
+    (let [conn (create-test-db)]
+      (try
+        (seed-runtime-tree! conn)
+        (binding [config-db/*conn* conn]
+          (let [snapshot-calls (atom [])]
+            (with-redefs [perms/is-admin? (fn [_ _] true)
+                          ops-sync/export-to-file (fn [_ file-path opts]
+                                               (swap! snapshot-calls conj {:file-path file-path
+                                                                           :opts opts})
+                                               {:file-path file-path})]
+              (is (= :ok
+                     (ui/mutate-config-tree!
+                      {:op :update-node
+                       :tenant "ka"
+                       :root :runtime
+                       :node-id "runtime-frontpage"
+                       :label "Frontpage v2"
+                       :enabled? true
+                       :user-id "user-1"})))
+              (is (= :ok
+                     (ui/mutate-config-tree!
+                      {:op :set-node-parent
+                       :tenant "ka"
+                       :root :runtime
+                       :node-id "runtime-frontpage"
+                       :parent-id "runtime-base"
+                       :user-id "user-1"})))
+              (is (= 1 (count @snapshot-calls)))
+              (is (= {:tenant "ka"
+                      :include-audit? false}
+                     (:opts (first @snapshot-calls))))
+              (is (every? #(str/includes? (:file-path %) "server/state/config-tree-snapshots/ka/")
+                          @snapshot-calls)))))
+        (finally
           (delete-test-db conn))))))
 
 ;; =============================================================================
@@ -1218,14 +1193,15 @@
   [f]
   (skills-api/reset-skills!)
   (skills-api/initialize!)
-  (let [conn (create-test-db)
-        previous-conn (config-db/get-conn)]
+  (let [conn (create-test-db)]
     (try
       (config-db/ensure-schema! conn)
-      (config-db/set-conn! conn)
-      (f conn)
+      ;; a binding cannot leak; a set-conn!/restore pair left the
+      ;; override set and aborted every later namespace that redefines the
+      ;; main connection.
+      (binding [config-db/*conn* conn]
+        (f conn))
       (finally
-        (config-db/set-conn! previous-conn)
         (skills-api/reset-skills!)
         (delete-test-db conn)))))
 

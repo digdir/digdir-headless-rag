@@ -158,28 +158,29 @@ weren't previously written down together.
 
 1. **Boot minimum is set** (§3): `DATAHIKE_FILE_PATH`, `CONFIG_MASTER_KEY`,
    `JWT_SECRET`.
-2. **Import the committed config snapshot** — config definitions and the
-   built-in agents, but **no tenant, no dataset and no API key**:
-
-   ```sh
-   bb migration-import config/system-import.normalized.20260821.json
-   ```
-
-   ⚠️ **The snapshot ships no tenant, so this is two commands rather than one.**
-   It used to carry the `digdir` and `public-sector-knowledge` tenants — our own
-   deployment's configuration, which does not belong in the product. Give
-   yourself the shipped demo tenant:
+2. **Give yourself the shipped demo tenant.** A store that has only booted has
+   no tenant:
 
    ```sh
    bb demo-tenant
    ```
 
-   The demo tenant is **deliberately seeded by a command rather than authored
-   into the snapshot**: the snapshot is a generated export, so hand-written rows
-   in it would survive only until somebody regenerated it, and then vanish
-   without a sound.
+   The demo tenant is **deliberately seeded by a command rather than shipped as
+   data**: a committed export is generated, so hand-written rows in it would
+   survive only until somebody regenerated it, and then vanish without a sound.
 
-   After these two you have a working tenant and **no datasets**, which is the
+   **This step no longer imports the committed config snapshot.** On a
+   store that has booted, that import added no tenant, dataset, API key or
+   config value, and the only definitions it added were 17 that boot
+   deliberately retracts. Its one useful effect was a side effect — seeding
+   the built-in agents and the default permissions — and both still happen
+   without it: step 3's `maybe-seed!` seeds the agents, and the admin-user step
+   the admin-UI path below already requires (`bb setup`, which reads
+   `ADMIN_USER_EMAILS`) seeds the agents and the permissions. The file is now a
+   test fixture; see
+   [`config/README.md`](../config/README.md).
+
+   After this you have a working tenant and **no datasets**, which is the
    intended state — asking a question returns a `404` naming the next step. That
    is deliberate: seeding a dataset whose corpus has not been fetched answers
    unhelpfully with no sign that a step remains (#473), which is worse than an
@@ -191,9 +192,8 @@ weren't previously written down together.
    bb demo-seed       # the demo tenant AND its dataset
    ```
 
-   The import also **writes whatever service config you already have in the
-   environment** into each imported tenant, and then names what is still
-   missing — the variable per missing value, not just the path. So
+   `bb demo-tenant` **writes whatever service config you already have in the
+   environment** into the demo tenant, and prints which paths it wrote. So
    `TYPESENSE_API_KEY_ADMIN` set before this step needs no `bb config-set`
    afterwards. The mapping is `digdir.config.env-bridge`.
 
@@ -251,9 +251,12 @@ weren't previously written down together.
 
    **What success looks like:** a JSON-RPC result whose `tools` array is
    non-empty, each entry named `<agent>__<mode>` — for example
-   `builtin.agent-rag-agent__agent-rag-graph-bundled`. Those come from the
-   agents in the snapshot you imported in step 2, so an empty list means the
-   import did not take, not that the call failed.
+   `builtin.agent-rag-agent__agent-rag-graph-bundled`. Those are the built-in
+   agents. On this path `bb dev`'s `maybe-seed!` seeds them in step 3, because
+   `E2E_API_KEY` is set, and adds two `e2e/*` fixture agents; on the admin-UI
+   path, `bb setup`'s admin-user step (from `ADMIN_USER_EMAILS`) seeds them. So
+   an empty list means neither
+   ran, not that the call failed.
 
    ```json
    {"jsonrpc":"2.0","id":1,"result":{"tools":[
@@ -270,15 +273,16 @@ weren't previously written down together.
    **Where this recipe stops on a fresh install — read this before running a
    `tools/call`.** The `tools/list` above succeeds. A `tools/call` gets further
    than you might expect and then stops: the agent graph executes and retrieval
-   runs (§3 configured that), and **the first LLM call fails**, because the
-   snapshot ships no value for `services.azure-openai.api-key` — #279 removed
-   the five secrets it used to carry encrypted, under a key no fresh checkout
-   has. No change to this recipe fixes that — the key is not in the repo and
+   runs (§3 configured that), and **the first LLM call fails**, because
+   nothing in this recipe supplies `services.azure-openai.api-key`, and the repo
+   ships no value for it: the snapshot encrypted-secrets issue removed the five secrets the committed config
+   snapshot used to carry encrypted, under a key no fresh checkout has. No
+   change to this recipe fixes that — the key is not in the repo and
    is not meant to be. **If you have Azure OpenAI
    credentials of your own**, set `TENANT=digdir` together with the
    `AZURE_OPENAI_*` variables before `bb dev`: the same auto-seed as step 3
    (`digdir.e2e.seed/seed-azure-config-from-env!`) writes them onto that
-   tenant's platform node, supplying the value the snapshot no longer carries,
+   tenant's platform node, supplying the value nothing else in this recipe does,
    exactly as the `api-key-admin` line in §3 does. **Without them, [§4a](#4a-run-with-a-local-model--no-cloud-credentials-at-all)
    is the other way past, and it needs no cloud account at all:** point the
    tenant's LLM settings at an OpenAI-compatible server on your own machine. Verified
@@ -493,8 +497,9 @@ still override enrichment's model and reasoning effort.
 
 **Every value in the table is per-tenant config, and none of it is read from
 the environment.** `OPENAI_API_ENDPOINT` and `OPENAI_API_KEY` still exist, but
-only as seeding inputs: `bb migration-import`, `bb demo-tenant` and the E2E
-boot seed (step 3) copy them into `services.llm.*`. A missing value refuses at
+only as seeding inputs: `bb demo-tenant`, the E2E boot seed (step 3) and
+`bb migration-import` (for each tenant the imported file carries; the shipped
+snapshot carries none) copy them into `services.llm.*`. A missing value refuses at
 the first call, naming its path. There is no fallback to the process
 environment, or to the public OpenAI API.
 
@@ -580,9 +585,10 @@ It writes to each tenant's own platform `default` node — the same place
 `bb config-set <path> <value> <tenant> platform default` writes — and *not* to
 the `__platform-defaults__` seed tree that the wizard's other sections use.
 That tree is copied into a tenant only when the tenant is created, so a write
-there would report success and change nothing for the tenants the snapshot
-already brought in. The section seeds it too, as a separate line in its output,
-so a tenant you create later inherits the choice instead of reverting to Azure.
+there would report success and change nothing for tenants that already exist,
+such as the one `bb demo-tenant` creates. The section seeds it too, as a
+separate line in its output, so a tenant you create later inherits the choice
+instead of reverting to Azure.
 
 ### Step 2 — or the explicit way: four config writes
 
@@ -632,17 +638,15 @@ digdir.e2e.seed :e2e/seeded {... :azure-paths-written
    "services.llm.api-endpoint" "services.llm.api-key"] ...}
 ```
 
-**If you are running §4 step 2's import anyway, you do not need this step for
-these values.** The env-var → config-path mapping now lives in
-`digdir.config.env-bridge`, and `bb migration-import` applies it to every
-imported tenant: ungated, and for every service rather than only
-`AZURE_OPENAI_*`. So all four variables, if set before the import, land without
-`E2E_API_KEY` or `TENANT`, and the import tells you what is still missing by
-variable name.
+**If you ran §4 step 2 anyway, you do not need this step for these values.**
+The env-var → config-path mapping now lives in `digdir.config.env-bridge`, and
+step 2's `bb demo-tenant` applies it to the demo tenant: ungated, and for every
+service rather than only `AZURE_OPENAI_*`. So all four variables, if set before
+`bb demo-tenant`, land without `E2E_API_KEY` or `TENANT`.
 
-What this step still gives you that the import does not: it re-applies on
-**every boot**, so you can change a variable and restart instead of
-re-importing.
+What this step still gives you that `bb demo-tenant` does not: it re-applies on
+**every boot**, so you can change a variable and restart instead of re-running
+`bb demo-tenant`.
 
 ### What each failure looks like
 
@@ -672,7 +676,7 @@ is gone: an unset endpoint now refuses by name.
 LM Studio 0.4.21: a `/chat/completions` request naming
 `definitely-not-a-real-model-xyz` was answered normally, with `"model":
 "qwen/qwen3-8b"` in the response — the id the server actually used. So a
-model left over from the snapshot can appear to work here. Whether some
+stale model id, left over from earlier configuration, can appear to work here. Whether some
 other server would reject it was **not** tested — only LM Studio's laxity was —
 so the useful conclusion is narrow: on LM Studio this field is not a check, and
 you cannot rely on it telling you that you got the model wrong. Set it to an id
@@ -861,7 +865,7 @@ almost everything you'll need in your first days:
 | `bb test-config` | Run just the config-resolution test namespaces (faster inner loop for config work). |
 | `bb lint` | Run `clj-kondo`. |
 | `bb config-get` / `bb config-set` | Read/write a single resolved config value against the running config DB — `bb config-set` also pokes `bb dev`'s in-memory cache so changes show up within ~5s without a restart. |
-| `bb dump-import` | Import a full system dump (YAML/JSONL) from a directory — the bulk counterpart to the single-file `bb migration-import` used in §4. |
+| `bb dump-import` | Import a full system dump (YAML/JSONL) from a directory — the bulk counterpart to the single-file `bb migration-import`. |
 
 ## 6. Where to look when stuck
 
@@ -896,14 +900,16 @@ and has a fix tracked in the packaging plan:
 - **§4 gets you to a live `/api/mcp` surface and stops at the first LLM
   call.** Measured on a clean-room run of the recipe, not inferred: `tools/list`
   returns the documented tools, `tools/call` executes the agent graph, and the
-  first LLM call fails because the committed snapshot ships no LLM credentials
-  at all — #279 removed the five secrets it used to carry encrypted, none of
-  which a fresh install could open. The recipe supplies exactly one of them —
+  first LLM call fails because no step supplies an LLM credential and the repo
+  ships none — the snapshot encrypted-secrets issue removed the five secrets the committed config snapshot used
+  to carry encrypted, none of which a fresh install could open. (That run
+  predates the snapshot cold-start issue and still imported the snapshot. A store built without the
+  import differs only in the 17 definitions boot retracts and the five default
+  permissions, measured in the snapshot cold-start issue.) The recipe supplies exactly one of those five —
   `services.typesense.api-key-admin`, in §3 — which is why the failure lands at
-  the LLM boundary rather than earlier. A clean import flags only that one
-  (`1 unresolvable / 0 undecryptable` per tenant, `0 / 0` once §3 has run);
-  `services.azure-openai.api-key` is not on the runtime's required-paths list,
-  so its absence surfaces here, at the first LLM call, rather than at import.
+  the LLM boundary rather than earlier. `services.azure-openai.api-key` is not
+  on the runtime's required-paths list, so its absence surfaces here, at the
+  first LLM call, rather than earlier.
   **This is a harder stop than the item above:** that one is a wrong name you
   can correct, this one is a resource a newcomer does not inherit. There are two
   ways past it: bringing your own Azure OpenAI credentials (§4 step 5), or

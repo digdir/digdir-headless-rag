@@ -6,7 +6,8 @@
             [datahike.api :as d]
             [digdir.config.db :as config-db]
             [digdir.config.ops.bootstrap :as ops-bootstrap]
-            [digdir.config.ops.util :as ops-util])
+            [digdir.config.ops.util :as ops-util]
+            [digdir.config.schema :as schema])
   (:import [java.time Instant]
            [java.time.format DateTimeFormatter]))
 
@@ -621,7 +622,7 @@
                     {:tx [] :created 0 :updated 0 :skipped 0}
                     node-values)]
     (when (seq (:tx res))
-      (d/transact conn {:tx-data (:tx res)}))
+      (config-db/transact! conn {:tx-data (:tx res)}))
     (dissoc res :tx)))
 
 (defn- deserialize-audit
@@ -636,29 +637,195 @@
              {}
              audit-map))
 
+(def ^:private audit-reference-attributes
+  "The audit attributes that are references, read from the schema. A restore
+   never copies one: `:audit/config-def` is re-created only when the target
+   defines the path, and the export never writes either."
+  (into #{}
+        (comp (filter #(= "audit" (some-> (:db/ident %) namespace)))
+              (filter #(= :db.type/ref (:db/valueType %)))
+              (map :db/ident))
+        schema/config-migration-schema))
+
+(defn- importable-audit-attribute?
+  "Whether a restore carries attribute `k` over: every exported `:audit/*`
+   except the references. Deliberately not a list of attributes. A list that
+   must be extended whenever an attribute is added IS the mechanism of the dropped audit-fields issue:
+   a hand-kept eleven dropped eight the export writes (among them the key id,
+   name and pipeline of API-key rows, and the changelog and version of global
+   edits), and the next attribute would have been dropped the same way."
+  [k]
+  (and (= "audit" (namespace k))
+       (not (contains? audit-reference-attributes k))))
+
+(defn- audit-tx-data
+  "Transaction data for `audit-records`, landing in `db`.
+
+   The `:audit/config-def` reference is re-created only when `db` DEFINES the
+   record's path. A definition-retraction migration keeps its audit rows
+   on purpose and drops only their reference, so such a row has no reference
+   in its source. Re-creating one on import is the unfaithful act: the lookup
+   finds no definition and the whole audit transaction throws. Omitting it is
+   the faithful round trip; `:audit/config-path` still carries the history.
+
+   `db` must be the database AS THE ROWS WILL LAND IN IT, definitions phase
+   included. Today that is @conn after the earlier phases commit; under an
+   atomic import it is the speculated db. Asked of a db from before the
+   definitions phase, this drops the reference of every definition that
+   arrives in the same backup, silently.
+   `digdir.config.audit-round-trip-test` has the arm that goes red."
+  [db audit-records]
+  (mapv (fn [record]
+          (let [path (:audit/config-path record)]
+            (cond-> (into {} (filter (comp importable-audit-attribute? key)) record)
+              (and path (config-db/get-definition db path))
+              (assoc :audit/config-def [:config-def/path path]))))
+        audit-records))
+
 (defn- import-audit!
-  "Import audit records into the database."
-  [conn audit-records]
-  (let [tx-data (when (seq audit-records)
-                  (mapv (fn [record]
-                          (-> record
-                              (select-keys [:audit/id
-                                            :audit/timestamp
-                                            :audit/action
-                                            :audit/config-path
-                                            :audit/tenant
-                                            :audit/tenant-config-key
-                                            :audit/previous-value
-                                            :audit/new-value
-                                            :audit/user-email
-                                            :audit/user-id
-                                            :audit/ip-address])
-                              (cond-> (:audit/config-path record)
-                                (assoc :audit/config-def [:config-def/path (:audit/config-path record)]))))
-                        audit-records))]
+  "Import audit records into the database. `db` is the database they land in;
+   see `audit-tx-data` for why it is an argument."
+  [conn db audit-records]
+  (let [tx-data (audit-tx-data db audit-records)]
     (when (seq tx-data)
-      (d/transact conn {:tx-data tx-data}))
-    {:imported (count audit-records)}))
+      (config-db/transact! conn {:tx-data tx-data}))
+    {:imported (count audit-records)
+     :without-definition (count (remove :audit/config-def (filter :audit/config-path tx-data)))}))
+
+(defn- import-payload
+  "The entities of an import envelope, deserialized as the phases take them.
+   One copy: `import-data` and the tests that check it both read it here."
+  [data]
+  (let [raw (fn [k] (get-in data [:data k] (get-in data ["data" (name k)])))]
+    {:definitions (mapv deserialize-definition (raw :definitions))
+     :nodes (mapv deserialize-config-tree-entity (or (raw :nodes) []))
+     :bindings (mapv deserialize-config-tree-entity (or (raw :bindings) []))
+     :compatibilities (mapv deserialize-config-tree-entity (or (raw :compatibilities) []))
+     :datasets (mapv deserialize-config-tree-entity (or (raw :datasets) []))
+     :dataset-pipelines (mapv deserialize-config-tree-entity (or (raw :dataset-pipelines) []))
+     :node-values (mapv deserialize-config-tree-entity (or (raw :node-values) []))
+     :audit-records (mapv deserialize-audit (or (raw :audit) []))}))
+
+(defn- import-phases!
+  "Every phase of an import, in order, against `conn`. `import-data` passes a
+   `config-db/speculation`, so the phases' REAL code runs and nothing is
+   written until `import-data` commits once. Each phase reads `@conn`, which
+   is then the database AS IT WILL BE after the phases before it."
+  [conn {:keys [definitions nodes datasets dataset-pipelines node-values audit-records
+                master-key export-password on-conflict progress-atom]}]
+  (when progress-atom
+    (swap! progress-atom assoc
+           :phase :definitions
+           :message (str "Importing " (count definitions) " definitions...")))
+  (let [def-result (import-definitions! conn definitions)]
+    (when progress-atom
+      (swap! progress-atom assoc :definitions-result def-result))
+    (register-tenants-from-nodes! conn nodes)
+    (when progress-atom
+      (swap! progress-atom assoc
+             :phase :nodes
+             :message (str "Importing "
+                           (count nodes)
+                           " nodes and "
+                           (count node-values)
+                           " node values...")))
+    (let [node-result (import-config-nodes! conn nodes on-conflict)
+          dataset-result (import-datasets! conn datasets on-conflict)
+          dataset-pipelines-result (import-dataset-pipelines! conn dataset-pipelines on-conflict)
+          node-value-result (import-node-values! conn node-values master-key export-password on-conflict)
+          ;; @conn HERE is the speculated database, definitions phase included:
+          ;; the audit reference follows what the target WILL define.
+          ;; A db from before the definitions phase would drop the reference of
+          ;; every definition arriving in the same import, silently;
+          ;; audit-round-trip-test's same-backup arm goes red on exactly that.
+          audit-result (when (seq audit-records)
+                         (import-audit! conn @conn audit-records))]
+      {:definitions def-result
+       :nodes node-result
+       :bindings {:created 0
+                  :updated 0
+                  :skipped 0}
+       :compatibilities {:created 0
+                         :updated 0
+                         :skipped 0}
+       :datasets dataset-result
+       :dataset-pipelines dataset-pipelines-result
+       :dataset-pipeline-result dataset-pipelines-result
+       :node-values node-value-result
+       :audit audit-result})))
+
+(defn- entity-ids
+  "Every value of the identity attribute `attr` in `db`."
+  [db attr]
+  (set (d/q [:find '[?v ...] :where ['_ attr '?v]] db)))
+
+(defn- import-problems
+  "Every orphan in `payload` against the target AS IT WILL BE, for the REFUSAL
+   MESSAGE only. The import is atomic whatever this finds: a rule missing here
+   costs a less specific message, never a partial store.
+
+   As it will be: the definitions phase upserts and never removes (the
+   payload's root wins), and nodes and datasets are created or kept, so each
+   \"after\" set is the target's plus the payload's. An audit row naming a path
+   with no definition is NOT a problem: the retraction migrations keep such
+   rows on purpose, and the restore leaves them without a reference."
+  [db {:keys [definitions nodes datasets dataset-pipelines node-values]}]
+  (let [roots-after (merge (into {} (map (juxt :config-def/path :config-def/root)) (config-db/get-all-definitions db))
+                           (into {} (map (juxt :path :root)) definitions))
+        nodes-after (into (entity-ids db :config.node/id) (map :config.node/id) nodes)
+        datasets-after (into (entity-ids db :dataset/id) (map :dataset/id) datasets)]
+    (vec
+     (concat
+      (for [v node-values
+            :let [path (:config.value/definition-path v)
+                  node-id (:config.value/node-id v)
+                  root (get roots-after path)]
+            problem [(when-not root
+                       (str "value " path " at node " node-id
+                            ": no definition for it, in the target or in the import"))
+                     (when (and root (not= root (:config.value/root v)))
+                       (str "value " path " at node " node-id ": its root is "
+                            (:config.value/root v) " but the definition's is " root))
+                     (when-not (contains? nodes-after node-id)
+                       (str "value " path ": its node " node-id " is in neither the target nor the import"))]
+            :when problem]
+        problem)
+      (for [n nodes
+            :let [parent-id (:config.node/parent-id n)]
+            :when (and parent-id (not (contains? nodes-after parent-id)))]
+        (str "node " (:config.node/id n) ": its parent " parent-id
+             " is in neither the target nor the import"))
+      (for [pl dataset-pipelines
+            :let [dataset-id (or (:dataset.pipeline/dataset-id pl)
+                                 (get-in pl [:dataset.pipeline/dataset :dataset/id]))]
+            :when (and dataset-id (not (contains? datasets-after dataset-id)))]
+        (str "pipeline " (:dataset.pipeline/id pl) ": its dataset " dataset-id
+             " is in neither the target nor the import"))))))
+
+(defn- import-refusal
+  "The exception an import is refused with. Nothing from THIS import was
+   written: its phases ran against a speculation, and its one commit either
+   happened or did not. That is `import-data`'s own guarantee and no wider. A
+   caller that writes before calling it is outside it: the system restore and
+   the dump restore run `init-config-db!` first (it writes any builtin agent a
+   booted store lacks, and reconciles the others' skill graphs), and those
+   writes stand after a refusal. So the message says
+   \"nothing from this import\", not \"nothing\".
+
+   Names every problem `import-problems` can find, not only the first one the
+   phases stopped at, and keeps that first refusal as the cause."
+  [cause db payload]
+  (let [problems (try (import-problems db payload) (catch Exception _ []))]
+    (ex-info (str "Import refused; nothing from this import was written. "
+                  (if (seq problems)
+                    (str (count problems) " problem(s): " (str/join "; " problems)
+                         ". Fix them in the import (remove the offending entries, or add what they "
+                         "refer to), then import again.")
+                    (ex-message cause)))
+             {:problems problems
+              :refused-with (ex-message cause)
+              :refused-with-data (ex-data cause)}
+             cause)))
 
 (defn import-data
   "Import data from a backup."
@@ -704,14 +871,8 @@
                            " node values, "
                            (count raw-nodes)
                            " nodes")))
-    (let [definitions (mapv deserialize-definition raw-definitions)
-          nodes (mapv deserialize-config-tree-entity (or raw-nodes []))
-          bindings (mapv deserialize-config-tree-entity (or raw-bindings []))
-          compatibilities (mapv deserialize-config-tree-entity (or raw-compatibilities []))
-          datasets (mapv deserialize-config-tree-entity (or raw-datasets []))
-          dataset-pipelines (mapv deserialize-config-tree-entity (or raw-dataset-pipelines []))
-          node-values (mapv deserialize-config-tree-entity (or raw-node-values []))
-          audit-records (mapv deserialize-audit (or raw-audit []))]
+    (let [{:keys [definitions nodes bindings compatibilities datasets dataset-pipelines
+                  node-values audit-records]} (import-payload data)]
       (when (seq bindings)
         (throw (ex-info "Legacy config bindings are no longer importable"
                         {:binding-count (count bindings)})))
@@ -745,49 +906,36 @@
                                    :status :complete
                                    :result result}))
           result)
-        (do
+        (let [spec (config-db/speculation db)
+              payload {:definitions definitions
+                       :nodes nodes
+                       :datasets datasets
+                       :dataset-pipelines dataset-pipelines
+                       :node-values node-values
+                       :audit-records audit-records}
+              result (try
+                       (import-phases! spec (assoc payload
+                                                   :master-key master-key
+                                                   :export-password export-password
+                                                   :on-conflict on-conflict
+                                                   :progress-atom progress-atom))
+                       (catch Exception e
+                         (throw (import-refusal e db payload))))
+              tx-data (config-db/speculation-tx-data spec)]
+          ;; ONE transaction for the whole import: a failure commits
+          ;; nothing, so a refused import leaves the target exactly as it was.
+          (when (seq tx-data)
+            (try
+              (d/transact conn {:tx-data tx-data})
+              (catch Exception e
+                (throw (import-refusal e @conn payload)))))
+          (log/info "Import completed successfully" result)
           (when progress-atom
-            (swap! progress-atom assoc
-                   :phase :definitions
-                   :message (str "Importing " (count definitions) " definitions...")))
-          (let [def-result (import-definitions! conn definitions)]
-            (when progress-atom
-              (swap! progress-atom assoc :definitions-result def-result))
-            (register-tenants-from-nodes! conn nodes)
-            (when progress-atom
-              (swap! progress-atom assoc
-                     :phase :nodes
-                     :message (str "Importing "
-                                   (count nodes)
-                                   " nodes and "
-                                   (count node-values)
-                                   " node values...")))
-            (let [node-result (import-config-nodes! conn nodes on-conflict)
-                  dataset-result (import-datasets! conn datasets on-conflict)
-                  dataset-pipelines-result (import-dataset-pipelines! conn dataset-pipelines on-conflict)
-                  node-value-result (import-node-values! conn node-values master-key export-password on-conflict)
-                  audit-result (when (seq audit-records)
-                                 (import-audit! conn audit-records))
-                  result {:definitions def-result
-                          :nodes node-result
-                          :bindings {:created 0
-                                     :updated 0
-                                     :skipped 0}
-                          :compatibilities {:created 0
-                                            :updated 0
-                                            :skipped 0}
-                          :datasets dataset-result
-                          :dataset-pipelines dataset-pipelines-result
-                          :dataset-pipeline-result dataset-pipelines-result
-                          :node-values node-value-result
-                          :audit audit-result}]
-              (log/info "Import completed successfully" result)
-              (when progress-atom
-                (reset! progress-atom {:phase :complete
-                                       :status :complete
-                                       :result result
-                                       :message "Import completed successfully"}))
-              result)))))))
+            (reset! progress-atom {:phase :complete
+                                   :status :complete
+                                   :result result
+                                   :message "Import completed successfully"}))
+          result)))))
 
 (defn export-to-file
   "Export data and write to a JSON file."

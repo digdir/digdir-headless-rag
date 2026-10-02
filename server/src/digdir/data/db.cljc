@@ -672,14 +672,18 @@
           vec)))
 
 #?(:clj
-   (defn share-connection-with-config-db!
-     "Register the main app connection as the config DB connection.
-      This keeps the two logical roles on one physical Datahike connection by default.
-      Re-callable: invoked again by `reconnect!` so config reads always go through
-      the freshest connection."
-     [conn]
+   (defn- with-config-conn-bound
+     "Run `f` with config work bound to `conn` for its DYNAMIC extent.
+      Boot needs config operations to reach the connection it is still
+      initialising, before `!conn` is published. This used to be
+      `config-db/set-conn!`, which pinned a process-global override for the rest
+      of the process. In a test JVM that silently defeated every later
+      `with-redefs` of `get-conn` for config work. A binding leaves
+      nothing behind; afterwards config work follows `get-conn`, and so
+      `reconnect!` needs no counterpart."
+     [conn f]
      (require 'digdir.config.db)
-     ((resolve 'digdir.config.db/set-conn!) conn)))
+     (with-bindings {(resolve 'digdir.config.db/*conn*) conn} (f))))
 
 #?(:clj
    (def all-schemas
@@ -864,6 +868,55 @@
        (count eids))))
 
 #?(:clj
+   (defn prepare-store!
+     "Everything boot does to a connected store before publishing it: register
+      the schemas, apply the schema repairs, and run the config boot steps
+      (migrations, invariants, definitions) with config work bound to `conn`.
+      `init-db!` is its production caller.
+
+      It is a function of its own so that seeded-read-paths guard issue's guard
+      (`digdir.config.read-paths-seeded-test`) builds its fresh-install
+      catalogue with boot's OWN code. A copy of these steps in the test would
+      be a second door: correct today, and silently stale the day boot gains a
+      step that retracts a definition."
+     [conn]
+     (transact-registered-schemas! conn)
+     (let [db @conn
+           schema-tx (vec (concat
+                           (or (ensure-user-preferred-language-schema-tx db) [])
+                           (or (ensure-canonical-dataset-identity-schema-tx db) [])
+                           (or (ensure-conversation-folder-schema-tx db) [])
+                           (or (ensure-conversation-tag-schema-tx db) [])
+                           (or (ensure-api-key-grant-schema-tx db) [])))]
+       (when (seq schema-tx)
+         (timbre/info "Applying batched schema migrations...")
+         (d/transact conn {:tx-data schema-tx})))
+     (with-config-conn-bound
+       conn
+       (fn []
+         (apply-config-one-shot-migrations! conn)
+         (audit-uniqueness-invariants! conn)
+         (ensure-config-definitions-on-boot!)
+         (apply-config-post-definition-migrations! conn)
+         (let [purged-count
+               (purge-legacy-plaintext-confirmation-codes! conn)]
+           (when (pos? purged-count)
+             (timbre/info "Purged legacy plaintext confirmation codes"
+                          {:count purged-count})))
+         ;; Load dynamically to avoid the compile-time cycle:
+         ;; config.api-keys depends on this namespace for get-conn.
+         ;; This runs after the digest schema is registered and
+         ;; before the connection is published, so no request can
+         ;; observe dormant plaintext credentials after startup.
+         (let [migrate-api-keys!
+               (requiring-resolve
+                'digdir.config.api-keys/migrate-legacy-api-key-storage!)
+               migrated-count (migrate-api-keys! conn)]
+           (when (pos? migrated-count)
+             (timbre/info "Migrated legacy API keys to hashed storage"
+                          {:count migrated-count})))))))
+
+#?(:clj
    ;; ⚠️ `:keep-history? false` APPLIES HERE TOO, and this is the file people
    ;; check to find out. It is set once in
    ;; `digdir.config.core/load-bootstrap-config` — which builds the store config
@@ -921,39 +974,7 @@
                        _ (when-not (d/database-exists? cfg)
                            (d/create-database cfg))
                        conn (d/connect cfg)]
-                   (transact-registered-schemas! conn)
-                   (let [db @conn
-                         schema-tx (vec (concat
-                                         (or (ensure-user-preferred-language-schema-tx db) [])
-                                         (or (ensure-canonical-dataset-identity-schema-tx db) [])
-                                         (or (ensure-conversation-folder-schema-tx db) [])
-                                         (or (ensure-conversation-tag-schema-tx db) [])
-                                         (or (ensure-api-key-grant-schema-tx db) [])))]
-                     (when (seq schema-tx)
-                       (timbre/info "Applying batched schema migrations...")
-                       (d/transact conn {:tx-data schema-tx})))
-                   (share-connection-with-config-db! conn)
-                   (apply-config-one-shot-migrations! conn)
-                   (audit-uniqueness-invariants! conn)
-                   (ensure-config-definitions-on-boot!)
-                   (apply-config-post-definition-migrations! conn)
-                   (let [purged-count
-                         (purge-legacy-plaintext-confirmation-codes! conn)]
-                     (when (pos? purged-count)
-                       (timbre/info "Purged legacy plaintext confirmation codes"
-                                    {:count purged-count})))
-                   ;; Load dynamically to avoid the compile-time cycle:
-                   ;; config.api-keys depends on this namespace for get-conn.
-                   ;; This runs after the digest schema is registered and
-                   ;; before the connection is published, so no request can
-                   ;; observe dormant plaintext credentials after startup.
-                   (let [migrate-api-keys!
-                         (requiring-resolve
-                          'digdir.config.api-keys/migrate-legacy-api-key-storage!)
-                         migrated-count (migrate-api-keys! conn)]
-                     (when (pos? migrated-count)
-                       (timbre/info "Migrated legacy API keys to hashed storage"
-                                    {:count migrated-count})))
+                   (prepare-store! conn)
                    (reset! !conn conn)
                    ;; Spawn the cross-process invalidation poller so external
                    ;; writes (`bb config-set`, `bb dump-import`) propagate
@@ -993,7 +1014,6 @@
                 (catch Exception e
                   (timbre/warn e "reconnect! release threw, continuing")))
            (let [conn (d/connect cfg)]
-             (share-connection-with-config-db! conn)
              (reset! !conn conn)
              conn))))))
 
@@ -1002,6 +1022,13 @@
      "Return the shared datahike connection, running init-db! on first access."
      []
      (or @!conn (init-db!))))
+
+#?(:clj
+   (def get-conn-as-defined
+     "`get-conn` as this namespace defines it. A test's `with-redefs` replaces
+      `get-conn`'s root and not this var, so `digdir.config.db/get-conn` can tell
+      a redefined main connection from the real one."
+     get-conn))
 
 ;; (e/def db) ; injected database ref; Electric defs are always dynamic
 ;; (e/def auth-conn)
