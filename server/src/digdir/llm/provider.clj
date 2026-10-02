@@ -307,7 +307,8 @@
     (when (str/blank? (some-> v str))
       (throw (ex-info (str path " is unset for tenant " (pr-str tenant)
                            ", so its LLM calls cannot be made. Set it with `bb config-set "
-                           path " <value> " tenant " platform default`.")
+                           path " '\"<value>\"' " tenant " platform default`, the value "
+                           "inside the quotes: it is read as an EDN string.")
                       {:path path :tenant tenant})))
     [v {:from :config :path path}]))
 

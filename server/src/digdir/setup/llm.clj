@@ -153,7 +153,7 @@
   (println "  bb config-set services.llm.api-key '\"local\"' <tenant> platform default")
   (println "It must be NON-EMPTY even though a local server ignores it - any placeholder")
   (println "works. (OPENAI_API_KEY in the environment reaches config only by seeding - the")
-  (println "tenant seeder, an import, or the E2E boot seed; LLM calls no longer read the environment.)"))
+  (println "demo tenant's `bb demo-tenant`, an import, or the E2E boot seed; LLM calls no longer read the environment.)"))
 
 (defn- choose-tenants
   "Which tenants to write to. Defaults to all of them, because the snapshot

@@ -237,6 +237,16 @@
   []
   (override-engaged? (secrets/*env-lookup* credentials-override-env-var)))
 
+(defn seed-command
+  "The `bb config-set` command that seeds `path` for `tenant` from the variable
+   `env-var`, as an operator types it with the server's environment loaded.
+   `bb config-set` reads its value as EDN, so the variable's value must reach it
+   as an EDN STRING: the shell turns `\"\\\"$VAR\\\"\"` into `\"<value>\"`. Unquoted, a
+   key is read as a symbol, the command fails, and the error prints the key. The
+   variable's NAME is in the command, never its value."
+  [path env-var tenant]
+  (str "bb config-set " path " \"\\\"$" env-var "\\\"\" " tenant " platform default"))
+
 (defn check!
   "Refuse to start when any tenant supplies Azure credentials and no switch.
 
@@ -272,7 +282,10 @@
      (when (seq credential-violations)
        (let [listing (str/join "; " (map (fn [{:keys [tenant path env-var]}]
                                            (str tenant ": " path " (" env-var " is set)"))
-                                         credential-violations))]
+                                         credential-violations))
+             commands (str/join "; " (map (fn [{:keys [tenant path env-var]}]
+                                            (str "`" (seed-command path env-var tenant) "`"))
+                                          credential-violations))]
          (if (credentials-override-engaged?)
            (log/warn (str "UNSEEDED LLM CREDENTIALS, allowed by " credentials-override-env-var
                           "=true: " listing ". These tenants' LLM calls will refuse: since the provider-resolver change "
@@ -283,8 +296,9 @@
                          "them is set in the environment - " listing ". Since the provider-resolver change the runtime "
                          "reads these per tenant from config and no longer borrows the process "
                          "environment, so these tenants' LLM calls would refuse. Seed them with "
-                         "the server stopped: re-run the tenant seeder, or `bb config-set <path> "
-                         "<value> <tenant> platform default` for each. To boot anyway, set "
+                         "the server stopped and its environment loaded, one command each: "
+                         commands ". Keep the value quoted exactly as shown: `bb config-set` reads "
+                         "it as EDN, and unquoted it fails and prints the value. To boot anyway, set "
                          credentials-override-env-var "=true.")
                     {:credential-violations credential-violations
                      :checked (count examined)
@@ -311,13 +325,17 @@
                      ". Unset means NOT Azure, so every query would take the "
                      "OpenAI-compatible path and fail asking for "
                      "`services.llm.api-key`, which names a provider "
-                     "you did not configure. Choose the provider: `bb config-set "
-                     "services.llm.provider :azure <tenant> platform default` (or "
-                     ":openai-compatible if you meant to run against an "
-                     "OpenAI-compatible server), or its legacy variable "
-                     switch-env-var "=true / " switch-env-var "=false and "
-                     "re-run the tenant seeder with the server stopped. To boot "
-                     "anyway, set " override-env-var "=true.")
+                     "you did not configure. Choose the provider with the server "
+                     "stopped: "
+                     (str/join "; " (map #(str "`bb config-set services.llm.provider :azure " %
+                                               " platform default`")
+                                         violations))
+                     " (or :openai-compatible if you meant to run against an "
+                     "OpenAI-compatible server). Its legacy variable "
+                     switch-env-var "=true / " switch-env-var "=false sets the same "
+                     "choice only where the environment is seeded: an import, or "
+                     "`bb demo-tenant` for the demo tenant. To boot anyway, set "
+                     override-env-var "=true.")
                 {:violations violations
                  :checked (count examined)
                  :unreadable (- (count tenants) (count examined))

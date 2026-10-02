@@ -514,8 +514,12 @@ about where the telling stops:
   an **absent** one is named before you run anything.
 - A variable can be set while the config value it seeds is not; an install
   upgraded from before the provider-resolver change is in that state. For a tenant configured for LLM
-  use, the server then refuses to boot and names both the path and the
-  variable. `DIGDIR_ALLOW_UNSEEDED_LLM_CREDENTIALS=true` boots anyway.
+  use, the server then refuses to boot, names both the path and the
+  variable, and prints the command that seeds each from its variable. Run them
+  with the server stopped and its environment loaded, quoted exactly as printed:
+  `bb config-set services.azure-openai.api-key "\"$AZURE_OPENAI_API_KEY\"" <tenant> platform default`.
+  Unquoted, `bb config-set` reads the value as EDN, fails, and prints the value.
+  `DIGDIR_ALLOW_UNSEEDED_LLM_CREDENTIALS=true` boots anyway.
 
 **What nothing checks is whether they are right.** Every check in the path is a
 presence check: blank or not blank. An endpoint with a typo, an endpoint
@@ -653,10 +657,10 @@ taken:
 
 | What is wrong | What you see |
 | --- | --- |
-| Nothing chosen yet — no `services.llm.provider` and no legacy switch, which means the OpenAI-compatible path, not Azure | ``LLM request failed at iteration 0: services.llm.api-key is unset for tenant "<tenant>", so its LLM calls cannot be made. Set it with `bb config-set services.llm.api-key <value> <tenant> platform default`.`` |
-| `:azure`, no Azure key (before the provider-resolver change, a bare `status 401`) | ``LLM request failed at iteration 0: services.azure-openai.api-key is unset for tenant "<tenant>", so its LLM calls cannot be made. Set it with `bb config-set services.azure-openai.api-key <value> <tenant> platform default`.`` |
+| Nothing chosen yet — no `services.llm.provider` and no legacy switch, which means the OpenAI-compatible path, not Azure | ``LLM request failed at iteration 0: services.llm.api-key is unset for tenant "<tenant>", so its LLM calls cannot be made. Set it with `bb config-set services.llm.api-key '"<value>"' <tenant> platform default`, the value inside the quotes: it is read as an EDN string.`` |
+| `:azure`, no Azure key (before the provider-resolver change, a bare `status 401`) | ``LLM request failed at iteration 0: services.azure-openai.api-key is unset for tenant "<tenant>", so its LLM calls cannot be made. Set it with `bb config-set services.azure-openai.api-key '"<value>"' <tenant> platform default`, the value inside the quotes: it is read as an EDN string.`` |
 | `:openai-compatible`, **neither** `services.llm` value set | the `services.llm.api-key` line above. The key is checked first. |
-| key set, **`services.llm.api-endpoint` missing** | ``LLM request failed at iteration 0: services.llm.api-endpoint is unset for tenant "<tenant>", so its LLM calls cannot be made. Set it with `bb config-set services.llm.api-endpoint <value> <tenant> platform default`.`` |
+| key set, **`services.llm.api-endpoint` missing** | ``LLM request failed at iteration 0: services.llm.api-endpoint is unset for tenant "<tenant>", so its LLM calls cannot be made. Set it with `bb config-set services.llm.api-endpoint '"<value>"' <tenant> platform default`, the value inside the quotes: it is read as an EDN string.`` |
 | Everything set correctly | a real answer |
 
 The fourth row used to be the one that cost time. With no endpoint, the client

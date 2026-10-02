@@ -464,7 +464,8 @@
     (cond
       (nil? env-var)
       (str id " — no environment variable supplies this; set it with "
-           "`bb config-set " id " <value> <tenant> platform default`")
+           "`bb config-set " id " <edn-value> <tenant> platform default` "
+           "(a text value keeps its quotes: '\"text\"')")
 
       (= :environment destination)
       (str env-var " — " what)
