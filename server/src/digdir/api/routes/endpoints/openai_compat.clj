@@ -25,6 +25,7 @@
             [digdir.rag.formatting :as formatting]
             [digdir.skills.builtin.agent.workspace :as workspace]
             [digdir.skills.invoke :as invoke]
+            [digdir.skills.usage :as usage]
             [nano-id.core :refer [nano-id]]
             [ring.core.protocols :as ring-proto]
             [ring.util.response :as res]
@@ -404,47 +405,12 @@
                                                   (str title " › " breadcrumb))))]})
                          resolved)}))
 
-(defn- stage-timings
-  "The agent surfaces per-LLM-call stage timings in a few places depending on
-   skill-graph topology. Mirrors `digdir.sweep.runner/find-stage-timings`,
-   which lives in src-dev and so is not on a production classpath."
-  [result]
-  (or (not-empty (get-in result [:diagnostics :stage-timings]))
-      (not-empty (get-in result [:diagnostics :outputs :trace :stage-timings]))
-      (not-empty (get-in result [:diagnostics :outputs :workspace-final :stage-timings]))
-      (not-empty (get-in result [:trace :stage-timings]))
-      (not-empty (:stage-timings result))))
-
-(defn- token-count
-  "Read a usage number under either casing — providers return snake_case,
-   internal code sometimes normalises to kebab."
-  [usage snake kebab]
-  (or (get usage snake) (get usage kebab) 0))
-
-(defn- agent-usage
-  "Token usage summed across the agent's LLM calls, or **nil** when the agent
-   reported none.
-
-   nil means the caller omits `usage` entirely. Reporting zeros instead would
-   be a fabricated value that a cost-tracking client believes and acts on —
-   `0` and `unknown` are not the same claim. Only emitted when at least one
-   call actually carried a token count."
-  [result]
-  (when-let [timings (stage-timings result)]
-    (let [usages (keep :usage timings)
-          reported? (fn [u] (or (contains? u :prompt_tokens) (contains? u :prompt-tokens)
-                                (contains? u :completion_tokens) (contains? u :completion-tokens)))]
-      (when (some reported? usages)
-        (let [prompt (reduce + 0 (map #(token-count % :prompt_tokens :prompt-tokens) usages))
-              completion (reduce + 0 (map #(token-count % :completion_tokens :completion-tokens) usages))]
-          {:prompt_tokens prompt
-           :completion_tokens completion
-           :total_tokens (reduce + 0 (map (fn [u]
-                                            (or (get u :total_tokens)
-                                                (get u :total-tokens)
-                                                (+ (token-count u :prompt_tokens :prompt-tokens)
-                                                   (token-count u :completion_tokens :completion-tokens))))
-                                          usages))})))))
+;; `stage-timings`, `token-count` and `agent-usage` MOVED to
+;; `digdir.skills.usage`. They were duplicated here and in
+;; `digdir.sweep.runner` — this file's own docstring said so, calling itself a
+;; "mirror" of the src-dev copy — and Langfuse tracing needed a third. Same
+;; consolidation #500 made for the Azure switch, and for the same reason: a
+;; mirror is a copy that nothing checks.
 
 (defn- chat-completion-response
   "Wrap an agent's response text in OpenAI's chat.completion shape.
@@ -468,7 +434,8 @@
                                          :error "stop"
                                          :needs-clarification "stop"
                                          "stop")}]}
-      ;; Present only when the agent actually reported tokens — see agent-usage.
+      ;; Present only when the agent actually reported tokens — see
+      ;; digdir.skills.usage/agent-usage.
       usage (assoc :usage usage)
       (seq perplexity) (assoc :citations perplexity)
       (seq owui-sources) (assoc :sources owui-sources))))
@@ -696,7 +663,7 @@
                                                                   (:response result)
                                                                   (:status result)
                                                                   (build-citations result)
-                                                                  (agent-usage result)))))))))))))
+                                                                  (usage/agent-usage result)))))))))))))
     (catch Throwable t
       (t/log! :error [:openai-compat/chat-completion-failed
                       {:error (.getMessage t)}])
