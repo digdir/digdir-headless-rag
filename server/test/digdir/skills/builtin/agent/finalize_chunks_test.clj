@@ -78,3 +78,17 @@
     (testing "the internal workspace is still available for diagnostics"
       (is (map? (get-in out [:workspace-final :chunks]))
           "publishing a vector must not change how the workspace itself is stored"))))
+
+(deftest finalize-publishes-search-attributions
+  (testing "both outer graphs and the finalize step declare :search-attributions"
+    (doseq [graph [(:graph graphs/agent-rag-graph-bundled) (:graph graphs/agent-rag-graph-faithful)]]
+      (is (contains? (set (:outputs graph)) :search-attributions)))
+    (is (contains? (set (:outputs graphs/agent-finalize-metadata)) :search-attributions)))
+  (testing "the finalize step emits the workspace's attributions at the top level"
+    (let [attribution {:filter-applied {:fields [{:field "type" :selected-options ["Evaluering"]}]}
+                       :filter-source :explicit}]
+      (is (= [attribution]
+             (:search-attributions
+              (finalize-outputs {:response "Real answer."
+                                 :terminal-state :finalize
+                                 :workspace-out (assoc workspace-out :search-attributions [attribution])})))))))

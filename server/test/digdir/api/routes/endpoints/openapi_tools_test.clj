@@ -190,3 +190,16 @@
     (let [resp (sut/tool-call-handler {:path-params {:tool-name tool-name} :body ""})]
       (is (= 500 (:status resp)))
       (is (= "boom" (get-in (json/parse-string (:body resp) true) [:error :message]))))))
+
+(deftest an-oversized-body-is-a-413-not-a-read-into-memory
+  (let [resp (sut/tool-call-handler {:path-params {:tool-name tool-name}
+                                     :body (apply str (repeat (inc (* 1024 1024)) "x"))})]
+    (is (= 413 (:status resp)))
+    (is (= "body_too_large" (get-in (json/parse-string (:body resp) true) [:error :code])))))
+
+(deftest result-body-carries-the-filters-retrieval-applied
+  (let [applied [{:filter {:fields [{:field "type" :selected-options ["Evaluering"]}]}
+                  :source "explicit"}]]
+    (is (= applied (:filters_applied (sut/tool-result->body
+                                      {:content [{:type "text" :text "Svar."}]
+                                       :structuredContent {:filters_applied applied}}))))))
