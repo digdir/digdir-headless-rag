@@ -28,9 +28,8 @@
    prefix stripped."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
-            [digdir.config.accessor :as cfg]
+            [digdir.llm.provider :as provider]
             [digdir.demo.altinn-release-notes :as release-notes]
-            [digdir.llm.openai :as llm]
             [digdir.rag.retrieval :as rag-retrieval]
             [digdir.rag.skills.core :as skills]
             [digdir.skills.templates.core :as templates]
@@ -334,9 +333,8 @@
     {:error "tenant is required for LLM credential lookup"}
 
     :else
-    (let [model (if (llm/use-azure-openai tenant)
-                  (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-                  (cfg/get {:tenant tenant} :services :azure-openai :model-name))
+    (let [spec (provider/resolve tenant)
+          model (:model spec)
           pairs-block (format-pairs-block pairs
                                           (cond-> {}
                                             side-char-limit (assoc :side-char-limit side-char-limit)))
@@ -347,13 +345,7 @@
                    :tool_choice {:type "function" :function {:name "emitDriftReport"}}
                    :temperature temperature}
           response (try
-                     (if (llm/use-azure-openai tenant)
-                       (openai/create-chat-completion
-                        request
-                        {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-                         :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-                         :impl :azure})
-                       (openai/create-chat-completion request))
+                     (openai/create-chat-completion request spec)
                      (catch Throwable t
                        (timbre/warn t "translation-drift-synthesis LLM call failed")
                        {:error (.getMessage t)}))]

@@ -37,7 +37,7 @@
             ;; Not aliased to `str`: this namespace uses clojure.core/str
             ;; heavily and the shadow would be a silent footgun.
             [clojure.string]
-            [digdir.config.accessor :as cfg]
+            [digdir.llm.provider :as provider]
             [digdir.skills.usage :as usage]
             [taoensso.telemere :as t])
   (:import [java.security SecureRandom]
@@ -174,8 +174,8 @@
    writer of `:llm-model` guards on the response carrying one.
 
    Resolved the way the RUNTIME resolves it, per tenant, via
-   `cfg/use-azure-openai?` — deliberately the one read of that switch (#500).
-   Mirrors `digdir.llm.openai/create-chat-completion`.
+   `provider/model-for`: the one resolution of a tenant's default model, which
+   reads the provider switch in one place.
 
    ⚠️ Being run-level, it reports the same value for every call, so a
    per-skill model override is invisible here. That is exactly why it is the
@@ -186,9 +186,7 @@
   [tenant]
   (try
     (when tenant
-      (if (cfg/use-azure-openai? tenant)
-        (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-        (cfg/get {:tenant tenant} :services :azure-openai :model-name)))
+      (provider/model-for tenant))
     (catch Exception _ nil)))
 
 ;; --- span construction ---------------------------------------------------

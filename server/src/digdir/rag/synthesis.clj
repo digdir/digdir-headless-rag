@@ -1,7 +1,6 @@
 (ns digdir.rag.synthesis
   "LLM-based synthesis and generation logic for RAG."
-  (:require [digdir.llm.openai :as llm]
-            [digdir.config.accessor :as cfg]
+  (:require [digdir.llm.provider :as provider]
             [digdir.llm.client :as openai]
             [digdir.data.db :as db]))
 
@@ -17,26 +16,18 @@
 (defn rag-generate [_!dh-conn convo-id extract-search-queries full-prompt params]
   (let [start-time (System/currentTimeMillis)
         tenant (or (:tenant params) (:tenant (:dataset-ref params)))
-        selected-model (or (:selected-model params)
-                            (if (llm/use-azure-openai tenant)
-                              (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-                              (cfg/get {:tenant tenant} :services :azure-openai :model-name)))
+        spec (provider/resolve tenant {:model (:selected-model params)})
+        selected-model (:model spec)
         chat-response
-        (if (llm/use-azure-openai tenant)
-          (openai/create-chat-completion
-           {:model selected-model
-            :messages [{:role "system" :content (system-prompt-with-date)}
-                       {:role "user" :content full-prompt}]
-            :temperature 0.1}
-           {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-            :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-            :impl :azure})
-          (openai/create-chat-completion
-           {:model selected-model
-            :messages [{:role "system" :content (system-prompt-with-date)}
-                       {:role "user" :content full-prompt}]
-            :temperature 0.1
-            :stream false}))
+        (openai/create-chat-completion
+         (cond-> {:model selected-model
+                  :messages [{:role "system" :content (system-prompt-with-date)}
+                             {:role "user" :content full-prompt}]
+                  :temperature 0.1}
+           ;; Only the generic-OpenAI arm of this site ever sent it; kept
+           ;; byte-for-byte rather than added to the Azure body.
+           (= :openai-compatible (:provider spec)) (assoc :stream false))
+         spec)
         end-time (System/currentTimeMillis)
         duration (- end-time start-time)
         _ (println (str "RAG query duration: " duration " ms"))
@@ -61,30 +52,17 @@
 
 (defn simplify-convo-topic [params]
   (let [tenant (or (:tenant params) (:tenant (:dataset-ref params)))
-        selected-model (or (:selected-model params)
-                           (if (llm/use-azure-openai tenant)
-                             (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-                             (cfg/get {:tenant tenant} :services :azure-openai :model-name)))
+        spec (provider/resolve tenant {:model (:selected-model params)})
+        selected-model (:model spec)
         summary-response
-        (if (llm/use-azure-openai tenant)
-          (openai/create-chat-completion
-           {:model selected-model
-            :messages [{:role "system"
-                        :content "Provide a 3 to 5 word summary of the user's query, use the same language as the user."}
-                       {:role "user"
-                        :content (str "<USER_QUERY>" (:original_user_query params) "</USER_QUERY>")}]
-            :temperature 0.1
-            :max_tokens 30}
-           {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-            :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-            :impl :azure})
-          (openai/create-chat-completion
-           {:model selected-model
-            :messages [{:role "system"
-                        :content "Provide a 3 to 5 word summary of the user's query, use the same language as the user."}
-                       {:role "user"
-                        :content (str "<USER_QUERY>" (:original_user_query params) "</USER_QUERY>")}]
-            :temperature 0.1
-            :max_tokens 30}))
+        (openai/create-chat-completion
+         {:model selected-model
+          :messages [{:role "system"
+                      :content "Provide a 3 to 5 word summary of the user's query, use the same language as the user."}
+                     {:role "user"
+                      :content (str "<USER_QUERY>" (:original_user_query params) "</USER_QUERY>")}]
+          :temperature 0.1
+          :max_tokens 30}
+         spec)
         summary (-> summary-response :choices first :message :content)]
     (db/rename-convo-topic (db/get-conn) (:conversation-id params) summary)))

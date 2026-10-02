@@ -20,6 +20,9 @@
             [digdir.llm.client :as client]
             [digdir.llm.model-params :as model-params]
             [digdir.llm.openai :as llm]
+            [digdir.llm.provider :as provider]
+            [digdir.llm.provider-fixtures :as fx]
+            [digdir.secrets :as secrets]
             [wkok.openai-clojure.api :as wkok]))
 
 (def ^:private messages [{:role "user" :content "hi"}])
@@ -91,27 +94,67 @@
 
 (defn- capture-direct-body
   "Run `client/create-chat-completion` down the non-Azure branch, returning the
-   decoded JSON request body that would have been POSTed."
-  [params]
-  (let [!body (atom nil)]
-    (with-redefs [http/post (fn [_url opts]
-                              (reset! !body (json/parse-string (:body opts) true))
-                              {:body {:choices []}})]
-      (client/create-chat-completion params {:api-key "k" :api-endpoint "http://localhost"}))
-    @!body))
+   decoded JSON request body that would have been POSTed. `opts` defaults to a
+   hand-built direct-branch map; pass `provider/resolve`'s spec to exercise the
+   resolver's output instead."
+  ([params] (capture-direct-body params {:api-key "k" :api-endpoint "http://localhost"}))
+  ([params opts]
+   (let [!body (atom nil)]
+     (with-redefs [http/post (fn [_url opts]
+                               (reset! !body (json/parse-string (:body opts) true))
+                               {:body {:choices []}})]
+       (client/create-chat-completion params opts))
+     @!body)))
 
 (defn- capture-azure-params
   "Run `client/create-chat-completion` down the `:impl :azure` branch, returning
-   the params handed to wkok."
-  [params]
-  (let [!params (atom nil)]
-    (with-redefs [wkok/create-chat-completion (fn [p _opts]
-                                                (reset! !params p)
-                                                {:choices []})]
-      (client/create-chat-completion params {:api-key "k"
-                                             :api-endpoint "http://localhost"
-                                             :impl :azure}))
-    @!params))
+   the params handed to wkok. `opts` as for `capture-direct-body`."
+  ([params] (capture-azure-params params {:api-key "k"
+                                          :api-endpoint "http://localhost"
+                                          :impl :azure}))
+  ([params opts]
+   (let [!params (atom nil)]
+     (with-redefs [wkok/create-chat-completion (fn [p _opts]
+                                                 (reset! !params p)
+                                                 {:choices []})]
+       (client/create-chat-completion params opts))
+     @!params)))
+
+(def ^:private resolver-install
+  {"services.azure-openai.api-key" "az-key"
+   "services.azure-openai.api-endpoint" "https://azure.model-params.invalid"
+   "services.azure-openai.deployment-name" "gpt-5.5"
+   "services.azure-openai.model-name" "gpt-5.5"})
+
+(defn- spec-for
+  "`provider/resolve`'s spec for a tenant whose switch is `switch`."
+  [switch]
+  (fx/with-install (assoc resolver-install "services.azure-openai.use-azure-openai-api" switch)
+    #(provider/resolve "model-params-tenant")))
+
+(deftest the-chokepoint-normalizes-on-the-resolvers-spec-on-both-branches
+  ;; The provider-resolver change's third done-condition: the same assertions as the hand-built-opts tests above,
+  ;; with opts coming from `provider/resolve` — so the mapping is proven to reach
+  ;; the wire on whatever the resolver actually produces, on both providers.
+  (testing "absolute: the resolver chose the branch each case is about"
+    (is (= :azure (:impl (spec-for true))))
+    (is (= :openai (:impl (spec-for false)))))
+  (testing "Azure spec: GPT-5 params are normalized before wkok"
+    (let [params (capture-azure-params {:model "gpt-5.5" :messages messages
+                                        :max_tokens 30 :temperature 0.1}
+                                       (spec-for true))]
+      (is (= 30 (:max_completion_tokens params)))
+      (is (not (contains? params :max_tokens)))
+      (is (not (contains? params :temperature)))))
+  (testing "openai-compatible spec: GPT-5 params are normalized on the wire"
+    (with-redefs [secrets/get! (constantly "s")]
+      (let [body (capture-direct-body {:model "gpt-5.5" :messages messages
+                                       :max_tokens 30 :temperature 0.1}
+                                      (assoc (spec-for false) :api-endpoint "http://localhost"))]
+        (is (= 30 (:max_completion_tokens body)))
+        (is (not (contains? body :max_tokens)))
+        (is (not (contains? body :temperature)))
+        (is (not (contains? body :provider/source)) "the spec's tag never reaches the wire")))))
 
 (deftest client-normalizes-on-the-direct-branch
   (testing "GPT-5 request reaches the wire with max_completion_tokens, no max_tokens"

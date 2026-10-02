@@ -20,6 +20,26 @@
 ;; OpenAI Configuration
 ;; ============================================================================
 
+(defn- required
+  "`v`, or a throw naming `path` - never nil.
+
+   The :openrouter arm cannot pass nil on. A nil model can only fail at the
+   vendor, one layer from its cause: OpenRouter has no \"whatever model is
+   loaded\" default the way LM Studio does. And a nil key is WORSE than a
+   failure: `digdir.llm.client` fills a nil `:api-key` from the OPENAI_API_KEY
+   secret, which would send the process-global OpenAI-compatible key to
+   openrouter.ai. Both paths were unreachable until the OpenRouter model-registration issue registered
+   `services.openrouter.model`; this closes what that made reachable.
+
+   Names the path and tenant only, never a value."
+  [tenant path v]
+  (if (str/blank? (some-> v str))
+    (throw (ex-info (str path " is unset for tenant " (pr-str tenant)
+                         ", so search-phrases cannot use :openrouter. Set it with"
+                         " `bb config-set " path " <value> " tenant " platform default`.")
+                    {:path path :tenant tenant}))
+    v))
+
 (defn openai-implementation
   "Resolve OpenAI implementation config on demand from runtime config.
    `impl` is one of `:azure-openai`, `:openrouter`, `:lmstudio`."
@@ -32,7 +52,8 @@
      :request {:timeout 30000}}
 
     :openrouter
-    {:api-key (cfg/get {:tenant tenant} :services :openrouter :api-key)
+    {:api-key (required tenant "services.openrouter.api-key"
+                        (cfg/get {:tenant tenant} :services :openrouter :api-key))
      :api-endpoint "https://openrouter.ai/api/v1"
      :request {:timeout 30000}}
 
@@ -71,7 +92,8 @@
   [tenant provider]
   (case provider
     :azure-openai (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-    :openrouter   (cfg/get {:tenant tenant} :services :openrouter :model)
+    :openrouter   (required tenant "services.openrouter.model"
+                            (cfg/get {:tenant tenant} :services :openrouter :model))
     :lmstudio     (cfg/get {:tenant tenant} :services :lmstudio :model)))
 
 (defn create-chat-completion

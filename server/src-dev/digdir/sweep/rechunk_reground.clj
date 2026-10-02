@@ -10,6 +10,7 @@
             [digdir.rag.core :as rag]
             [digdir.rag.chunking :as ck]
             [digdir.config.accessor :as cfg]
+            [digdir.llm.provider :as provider]
             [clojure.string :as str]
             [clojure.data.json :as json]
             [clojure.pprint :as pp]
@@ -18,14 +19,20 @@
 
 (defn- chunk-id [content] (->> content valuehash.api/sha-256-str (take 12) (apply str)))
 
-(defn- call-model [tenant messages model]
-  (if (cfg/get {:tenant tenant} :services :azure-openai :use-azure-openai-api)
+(defn- call-model
+  "Straight to wkok, deliberately not `digdir.llm.client`: moving it would
+   start applying the client's `OPENAI_*` overrides and normalisation to a
+   path that has never had them (Phase 1 of the provider-resolver change keeps behaviour). The provider
+   decision and the credentials come from `provider/resolve` like every other
+   call; on openai-compatible they are nil, so wkok reads its env exactly as it
+   did when this passed no options at all."
+  [tenant messages model]
+  (let [spec (provider/resolve tenant {:model model})]
     (api/create-chat-completion
-     {:model model :messages messages}
-     {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-      :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-      :impl :azure})
-    (api/create-chat-completion {:model model :messages messages :stream false})))
+     (cond-> {:model model :messages messages}
+       ;; Only the generic-OpenAI arm ever sent it; kept byte-for-byte.
+       (= :openai-compatible (:provider spec)) (assoc :stream false))
+     spec)))
 
 (defn- pick-parts
   "LLM: which numbered passage(s) answer the question? Returns a vector of indices."

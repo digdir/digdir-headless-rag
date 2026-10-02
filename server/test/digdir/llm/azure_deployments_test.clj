@@ -4,7 +4,7 @@
             [clojure.data.json :as json]
             [digdir.config.accessor :as cfg]
             [digdir.llm.azure-deployments :as az]
-            [digdir.llm.openai :as openai]))
+            [digdir.llm.provider :as provider]))
 
 (defn- clear-cache [f]
   (az/invalidate-cache!)
@@ -22,14 +22,14 @@
 (deftest list-deployment-names-returns-nil-for-non-azure-tenant
   (testing "Tenant that doesn't use Azure short-circuits to nil — no HTTP call attempted"
     (let [http-called? (atom false)]
-      (with-redefs [openai/use-azure-openai (fn [_] false)
+      (with-redefs [provider/selected-provider (fn [_] :openai-compatible)
                     http/get (fn [& _] (reset! http-called? true) (throw (ex-info "should not be called" {})))]
         (is (nil? (az/list-deployment-names "non-azure-tenant")))
         (is (false? @http-called?))))))
 
 (deftest list-deployment-names-parses-azure-response
   (testing "200 response with :data list yields a sorted vector of :id strings"
-    (with-redefs [openai/use-azure-openai (fn [_] true)
+    (with-redefs [provider/selected-provider (fn [_] :azure)
                   cfg/get (fn [_ & path]
                             (case (last path)
                               :api-endpoint "https://example.openai.azure.com/"
@@ -47,7 +47,7 @@
 
 (deftest list-deployment-names-degrades-on-non-200
   (testing "Non-200 response degrades to nil — caller falls back to hardcoded list"
-    (with-redefs [openai/use-azure-openai (fn [_] true)
+    (with-redefs [provider/selected-provider (fn [_] :azure)
                   cfg/get (fn [_ & path]
                             (case (last path)
                               :api-endpoint "https://example.openai.azure.com"
@@ -58,7 +58,7 @@
 
 (deftest list-deployment-names-degrades-on-thrown-exception
   (testing "Exception during HTTP call degrades to nil"
-    (with-redefs [openai/use-azure-openai (fn [_] true)
+    (with-redefs [provider/selected-provider (fn [_] :azure)
                   cfg/get (fn [_ & path]
                             (case (last path)
                               :api-endpoint "https://example.openai.azure.com"
@@ -70,7 +70,7 @@
 (deftest list-deployment-names-caches-within-ttl
   (testing "Subsequent calls within TTL return cached value without re-hitting HTTP"
     (let [call-count (atom 0)]
-      (with-redefs [openai/use-azure-openai (fn [_] true)
+      (with-redefs [provider/selected-provider (fn [_] :azure)
                     cfg/get (fn [_ & path]
                               (case (last path)
                                 :api-endpoint "https://example.openai.azure.com"
@@ -95,7 +95,7 @@
   ;; 2024-08-01-preview, 2024-10-21 and 2025-04-01-preview all answer 404.
   (testing "the deployments list is requested on an api-version that answers"
     (let [!url (atom nil)]
-      (with-redefs [openai/use-azure-openai (fn [_] true)
+      (with-redefs [provider/selected-provider (fn [_] :azure)
                     cfg/get (fn [_ & path]
                               (case (last path)
                                 :api-endpoint "https://example.openai.azure.com/"

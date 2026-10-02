@@ -5,8 +5,7 @@
    and Azure OpenAI."
   (:require [digdir.rag.core :as rag]
             [digdir.rag.skills.core :as skills]
-            [digdir.config.accessor :as cfg]
-            [digdir.llm.openai :as llm]
+            [digdir.llm.provider :as provider]
             [digdir.llm.prompt-fragments :as prompt-fragments]
             [digdir.llm.client :as openai]
             [clojure.string :as str]
@@ -228,10 +227,8 @@
                        context-docs)
 
         ;; Resolve model
-        selected-model (or model
-                          (if (llm/use-azure-openai tenant)
-                            (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-                            (cfg/get {:tenant tenant} :services :azure-openai :model-name)))
+        spec (provider/resolve tenant {:model model})
+        selected-model (:model spec)
 
         ;; Build citation index
         citation-index (build-citation-index context-docs)
@@ -248,13 +245,9 @@
                                 :temperature (or temperature 0.1)}
                          max-tokens (assoc :max_tokens max-tokens))
         chat-response
-        (if (llm/use-azure-openai tenant)
-          (openai/create-chat-completion
-            request-params
-            {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-             :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-             :impl :azure})
-          (openai/create-chat-completion request-params))
+        (openai/create-chat-completion
+          request-params
+          spec)
 
         response-text (-> chat-response :choices first :message :content)
 

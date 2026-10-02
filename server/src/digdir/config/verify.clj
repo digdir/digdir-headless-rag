@@ -41,6 +41,7 @@
    this namespace already exists to remove."
   (:require [clojure.string :as str]
             [digdir.config.accessor :as accessor]
+            [digdir.llm.provider :as provider]
             [digdir.config.db :as config-db]
             [digdir.config.env-bridge :as env-bridge]
             [taoensso.telemere :as t]))
@@ -173,12 +174,14 @@
 (defn- selected-provider
   "Which LLM path `tenant` is configured for: :azure or :openai-compatible.
 
-   Defaults to :azure when the switch is absent or unreadable, because that is
-   what the shipped snapshot sets (`raw=true` for both tenants). Defaulting the
-   other way would quietly stop asking for the Azure credentials on exactly the
-   installs that need them."
+   Answers `:openai-compatible` when the switch is UNSET — the runtime's rule,
+   `digdir.llm.provider/selected-provider` — and when it cannot be read
+   at all, since a verifier must report rather than throw. (This docstring used
+   to claim the opposite default, `:azure`, citing a snapshot that sets the
+   switch; that was the behaviour from before the Azure-switch default mismatch, and the shipped snapshot sets no
+   provider value at all.)"
   [tenant]
-  ;; #500: reads through the SAME function the runtime uses, so the verifier
+  ;; asks the SAME function the runtime routes by, so the verifier
   ;; cannot report a provider the runtime will not use. It previously asked with
   ;; `{:default true}` and answered :azure on an unset switch, while the runtime
   ;; answered generic-OpenAI on the same value — so a deployment could be verified
@@ -187,10 +190,8 @@
   ;; be decrypted must be reported, not thrown, or the report never renders. The
   ;; provider decision itself still comes from the one shared read, so this cannot
   ;; disagree with the runtime about a switch that IS readable.
-  (if (try (accessor/use-azure-openai? tenant)
-           (catch Exception _ false))
-    :azure
-    :openai-compatible))
+  (try (provider/selected-provider tenant)
+       (catch Exception _ :openai-compatible)))
 
 (defn unsupplied-first-query-config
   "Config a first real query needs for `tenant` that has no usable value.

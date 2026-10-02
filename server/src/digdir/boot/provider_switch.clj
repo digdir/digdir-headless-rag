@@ -17,8 +17,8 @@
 
    ## ⚠️ WHY THIS READS CONFIG AND NOT THE ENVIRONMENT
 
-   `digdir.config.accessor/use-azure-openai-api?` resolves the switch from the
-   CONFIG DATABASE, per tenant. The environment is a WRITE path — the env-bridge
+   `digdir.llm.provider/switch-value` — the ONE read of the switch, which the
+   runtime routes by too — resolves it from the CONFIG DATABASE, per tenant. The environment is a WRITE path — the env-bridge
    seeds `AZURE_OPENAI_USE_AZURE` to `services.azure-openai.use-azure-openai-api`
    and the runtime never reads the variable again.
 
@@ -50,7 +50,8 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [digdir.config.accessor :as accessor]
-            [digdir.config.db :as config-db]))
+            [digdir.config.db :as config-db]
+            [digdir.llm.provider :as provider]))
 
 (def azure-credential-paths
   "The three values that together mean somebody intended to use Azure.
@@ -60,9 +61,6 @@
   ["services.azure-openai.api-key"
    "services.azure-openai.api-endpoint"
    "services.azure-openai.deployment-name"])
-
-(def switch-path
-  "services.azure-openai.use-azure-openai-api")
 
 (def switch-env-var
   "The variable an operator actually sets. Named in the refusal because
@@ -108,7 +106,7 @@
                         azure-credential-paths)
      ;; No :default — a default here would erase the difference between
      ;; "unset" and "chosen false", which is the whole discrimination.
-     :switch (accessor/get-platform-value switch-path {:tenant tenant})}
+     :switch (provider/switch-value tenant)}
     (catch Throwable _ nil)))
 
 (defn- read-tenants

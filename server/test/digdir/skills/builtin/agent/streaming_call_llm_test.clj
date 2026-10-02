@@ -4,13 +4,14 @@
   (:require [clojure.test :refer [deftest testing is]]
             [digdir.llm.client :as llm-client]
             [digdir.llm.openai :as llm]
+            [digdir.llm.provider :as provider]
             [digdir.skills.builtin.agent.loop :as agent-loop]))
 
 (defn- with-stub-streaming
   "Stub `streaming-chat-completion` to call `on-content-delta` with each
    element of `deltas` in order, then return `final-response`."
   [deltas final-response f]
-  (with-redefs [llm/use-azure-openai (constantly false)
+  (with-redefs [provider/selected-provider (constantly :openai-compatible)
                 llm/streaming-chat-completion
                 (fn [_params {:keys [on-content-delta]}]
                   (when on-content-delta
@@ -43,7 +44,7 @@
   (testing "Omitting progress-fn must keep the legacy blocking semantics"
     (let [streamed? (atom false)
           blocking? (atom false)]
-      (with-redefs [llm/use-azure-openai (constantly false)
+      (with-redefs [provider/selected-provider (constantly :openai-compatible)
                     llm/streaming-chat-completion
                     (fn [& _]
                       (reset! streamed? true)

@@ -21,8 +21,7 @@
    and the register!/seed-agents! wiring."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
-            [digdir.config.accessor :as cfg]
-            [digdir.llm.openai :as llm]
+            [digdir.llm.provider :as provider]
             [digdir.rag.skills.core :as skills]
             [digdir.skills.templates.core :as templates]
             [digdir.llm.client :as openai]
@@ -179,9 +178,8 @@
     {:error "tenant is required for LLM credential lookup"}
 
     :else
-    (let [model (if (llm/use-azure-openai tenant)
-                  (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-                  (cfg/get {:tenant tenant} :services :azure-openai :model-name))
+    (let [spec (provider/resolve tenant)
+          model (:model spec)
           prompt (build-todo-prompt release-notes-text context-yaml)
           request {:model model
                    :messages [{:role "user" :content prompt}]
@@ -189,13 +187,7 @@
                    :tool_choice {:type "function" :function {:name "emitReleaseTodos"}}
                    :temperature temperature}
           response (try
-                     (if (llm/use-azure-openai tenant)
-                       (openai/create-chat-completion
-                        request
-                        {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-                         :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-                         :impl :azure})
-                       (openai/create-chat-completion request))
+                     (openai/create-chat-completion request spec)
                      (catch Throwable t
                        (timbre/warn t "release-todo-synthesis LLM call failed")
                        {:error (.getMessage t)}))]
@@ -244,7 +236,7 @@
    :outputs [:response :todo-list]
    :parameters {:model :string
                 :temperature :number}
-   ;; Honest declaration — credentials resolved via cfg/get at use site;
+   ;; Honest declaration — credentials resolved via provider/resolve at use site;
    ;; check-required-services exempts the use-site-resolved-services set.
    :required-services #{:azure-openai}
    :version "1.0.0"

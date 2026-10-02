@@ -4,8 +4,7 @@
    Uses LLM to generate summaries of documents or chunks
    at various compression levels."
   (:require [digdir.rag.skills.core :as skills]
-            [digdir.config.accessor :as cfg]
-            [digdir.llm.openai :as llm]
+            [digdir.llm.provider :as provider]
             [digdir.llm.client :as openai]
             [clojure.string :as str]))
 
@@ -131,29 +130,19 @@
         {:keys [model temperature _max-length _style _bullet-points]} parameters
         tenant (:tenant skill-params)
 
-        selected-model (or model
-                          (if (llm/use-azure-openai tenant)
-                            (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-                            (cfg/get {:tenant tenant} :services :azure-openai :model-name)))
+        spec (provider/resolve tenant {:model model})
+        selected-model (:model spec)
 
         formatted-content (format-content content)
         prompt (build-summarization-prompt formatted-content parameters)
 
         response
-        (if (llm/use-azure-openai tenant)
-          (openai/create-chat-completion
-            {:model selected-model
-             :messages [{:role "system" :content "You are a skilled summarizer."}
-                        {:role "user" :content prompt}]
-             :temperature (or temperature 0.3)}
-            {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-             :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-             :impl :azure})
-          (openai/create-chat-completion
-            {:model selected-model
-             :messages [{:role "system" :content "You are a skilled summarizer."}
-                        {:role "user" :content prompt}]
-             :temperature (or temperature 0.3)}))
+        (openai/create-chat-completion
+          {:model selected-model
+           :messages [{:role "system" :content "You are a skilled summarizer."}
+                      {:role "user" :content prompt}]
+           :temperature (or temperature 0.3)}
+          spec)
 
         summary (-> response :choices first :message :content)
         key-points (extract-key-points (or summary ""))]

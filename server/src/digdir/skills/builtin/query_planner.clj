@@ -4,10 +4,9 @@
    This skill expands a user query into multiple search phrases
    using LLM-based query relaxation."
   (:require [digdir.rag.skills.core :as skills]
-            [digdir.config.accessor :as cfg]
             [digdir.rag.retrieval :as retrieval]
             [digdir.llm.client :as client]
-            [digdir.llm.openai :as llm]
+            [digdir.llm.provider :as provider]
             [clojure.data.json :as json]
             [clojure.string :as str]))
 
@@ -301,7 +300,7 @@
   "Forced-tool-call completion for the planner, routed through `digdir.llm.client`
    (migrated off litellm-azure so the planner runs on the same model as the rest of
    the pipeline — Qwen3.6 MTP locally, or Azure). Builds an OpenAI body, routes
-   azure-vs-local via `use-azure-openai-api`, and normalizes the response's
+   it with `provider/resolve`'s call spec, and normalizes the response's
    `:tool_calls` → `:tool-calls` so the existing parsing is unchanged.
 
    `req` mirrors the old litellm call's request map: `{:messages :tools :tool-choice
@@ -311,24 +310,21 @@
    there, the cloud planner falls back via the caller's try/catch; local (the
    target config) passes the body verbatim."
   [tenant deployment {:keys [messages tools tool-choice temperature]}]
-  (let [azure? (llm/use-azure-openai tenant)
+  (let [spec (provider/resolve tenant {:model deployment})
         ;; The planner is non-reasoning, but it runs INSIDE the (thinking) agent
         ;; process, so process-global `OPENAI_DISABLE_THINKING` can't single it out.
         ;; So prefill a closed think block here (local path only) — forces
         ;; non-thinking on Qwen3.6 GGUF regardless of env; validated to compose with
         ;; forced tool-calling. Azure path leaves messages untouched.
         messages (cond-> (vec messages)
-                   (not azure?) (conj {:role "assistant" :content "<think></think>"}))
+                   (= :openai-compatible (:provider spec))
+                   (conj {:role "assistant" :content "<think></think>"}))
         body (cond-> {:model deployment
                       :messages messages
                       :temperature (or temperature 0.0)}
                (seq tools) (assoc :tools tools)
                tool-choice (assoc :tool_choice (name tool-choice)))
-        opts (when azure?
-               {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-                :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-                :impl :azure})
-        resp (client/create-chat-completion body opts)]
+        resp (client/create-chat-completion body spec)]
     (if-let [tcs (get-in resp [:choices 0 :message :tool_calls])]
       (assoc-in resp [:choices 0 :message :tool-calls] tcs)
       resp)))
@@ -610,13 +606,7 @@
 
       ;; Single-call variant: skip the blind-expansion LLM call entirely.
       one-call?
-      (let [deployment (or model
-                           ;; Match the agent loop (agent/loop.clj): when azure is OFF
-                           ;; (local/OpenAI-compatible endpoints) the deployment-name is a
-                           ;; stale azure value that 404s — use model-name instead.
-                           (if (llm/use-azure-openai tenant)
-                             (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-                             (cfg/get {:tenant tenant} :services :azure-openai :model-name)))
+      (let [deployment (provider/model-for tenant model)
             result (corpus-aware-expand-one-call
                      {:tenant tenant
                       :deployment deployment
@@ -653,13 +643,7 @@
             default-prompt (build-default-prompt message-string corpus-language salient-noun?)
             full-prompt (-> (or prompt default-prompt)
                             (str/replace "{messages}" message-string))
-            deployment (or model
-                           ;; Match the agent loop (agent/loop.clj): when azure is OFF
-                           ;; (local/OpenAI-compatible endpoints) the deployment-name is a
-                           ;; stale azure value that 404s — use model-name instead.
-                           (if (llm/use-azure-openai tenant)
-                             (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-                             (cfg/get {:tenant tenant} :services :azure-openai :model-name)))
+            deployment (provider/model-for tenant model)
             ;; Wrapped in with-llm-retries to handle Azure flakiness
             ;; (HttpTimeoutException, 429, 5xx). Up to 3 attempts with
             ;; exponential backoff. Persistent failure falls through to

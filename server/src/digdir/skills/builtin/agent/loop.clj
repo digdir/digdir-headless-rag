@@ -7,8 +7,8 @@
             [digdir.skills.builtin.synthesis :as synthesis]
             [digdir.skills.events :as events]
             [digdir.rag.skills.core :as skills]
-            [digdir.config.accessor :as cfg]
             [digdir.llm.openai :as llm]
+            [digdir.llm.provider :as provider]
             [digdir.llm.client :as openai]
             [clojure.data.json :as json]
             [clojure.string :as str]))
@@ -77,32 +77,22 @@ After each tool call, the system runs a sufficiency gate. If it rejects, follow 
 ;; LLM Orchestration
 ;; =============================================================================
 
-(defn- llm-opts
-  "Build the wkok options map for Azure when configured; nil otherwise."
-  [tenant]
-  (when (llm/use-azure-openai tenant)
-    {:api-key (cfg/get {:tenant tenant} :services :azure-openai :api-key)
-     :api-endpoint (cfg/get {:tenant tenant} :services :azure-openai :api-endpoint)
-     :impl :azure}))
-
 (defn- stream-call!
   "Streaming branch of call-llm. Pipes per-token content deltas through a
    paragraph-or-timeout chunker, emitting :response/chunk events for each
    coherent unit. Returns the assembled OpenAI response in the same shape
-   as the blocking path."
-  [tenant params progress-fn]
+   as the blocking path.
+
+   `spec` is `provider/resolve`'s call spec, handed to the streaming client as
+   its options on both providers."
+  [spec params progress-fn]
   (let [emit-chunk (fn [chunk]
                      (events/emit-progress! progress-fn
                                             (events/response-chunk chunk)))
         chunker (streaming/make-chunker {:on-chunk emit-chunk})
-        wkok-opts (llm-opts tenant)
-        result (if wkok-opts
-                 (llm/streaming-chat-completion
-                   params
-                   (assoc wkok-opts :on-content-delta (:on-delta chunker)))
-                 (llm/streaming-chat-completion
-                   params
-                   {:on-content-delta (:on-delta chunker)}))]
+        result (llm/streaming-chat-completion
+                 params
+                 (assoc spec :on-content-delta (:on-delta chunker)))]
     ((:close chunker))
     result))
 
@@ -124,23 +114,14 @@ After each tool call, the system runs a sufficiency gate. If it rejects, follow 
   ([tenant messages tools model temperature]
    (call-llm tenant messages tools model temperature nil))
   ([tenant messages tools model temperature {:keys [progress-fn]}]
-   (let [selected-model (or model
-                            (if (llm/use-azure-openai tenant)
-                              (cfg/get {:tenant tenant} :services :azure-openai :deployment-name)
-                              (cfg/get {:tenant tenant} :services :azure-openai :model-name)))
-         params (cond-> {:model selected-model
+   (let [spec (provider/resolve tenant {:model model})
+         params (cond-> {:model (:model spec)
                          :messages messages
                          :temperature (or temperature 0.3)}
                   (seq tools) (assoc :tools tools))]
-     (cond
-       progress-fn
-       (stream-call! tenant params progress-fn)
-
-       (llm/use-azure-openai tenant)
-       (openai/create-chat-completion params (llm-opts tenant))
-
-       :else
-       (openai/create-chat-completion params)))))
+     (if progress-fn
+       (stream-call! spec params progress-fn)
+       (openai/create-chat-completion params spec)))))
 
 (defn summarize-llm-exception
   "Build a compact error string from an LLM exception."

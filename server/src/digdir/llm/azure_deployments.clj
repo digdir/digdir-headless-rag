@@ -11,7 +11,7 @@
             [clojure.data.json :as json]
             [clojure.string :as str]
             [digdir.config.accessor :as cfg]
-            [digdir.llm.openai :as openai]
+            [digdir.llm.provider :as provider]
             [taoensso.telemere :as t]))
 
 (def ^:private cache-ttl-ms 60000)
@@ -85,7 +85,7 @@
    Callers should treat nil as 'fall back to a hardcoded list'."
   [tenant]
   (when (and (not (str/blank? tenant))
-             (try (openai/use-azure-openai tenant) (catch Exception _ false)))
+             (try (= :azure (provider/selected-provider tenant)) (catch Exception _ false)))
     (let [cached (get @!cache tenant)]
       (if (fresh? cached)
         (:names cached)
