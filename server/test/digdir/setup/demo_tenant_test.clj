@@ -87,14 +87,10 @@
                                 :master-key nil})))
 
 (defmacro ^:private with-accessor-context [conn & body]
-  `(do
-     (config-db/set-conn! ~conn)
-     (try
-       (with-redefs [config-core/use-db-config? (constantly true)
-                     config-core/get-master-key (constantly nil)]
-         ~@body)
-       (finally
-         (config-db/set-conn! nil)))))
+  `(binding [config-db/*conn* ~conn]
+     (with-redefs [config-core/use-db-config? (constantly true)
+                   config-core/get-master-key (constantly nil)]
+       ~@body)))
 
 (deftest demo-tenant-resolves-its-own-typesense-settings
   (let [conn (create-test-db)]

@@ -77,7 +77,9 @@
     (throw (ex-info "Global-version bump requires a changelog" {})))
   (let [version (inc (current-global-version @conn))
         now (System/currentTimeMillis)]
-    (d/transact conn
+    ;; `transact!`, not `d/transact`: a promotion runs this against a
+    ;; speculation and commits once.
+    (config-db/transact! conn
                 {:tx-data [{:config.global/version version
                             :config.global/created-at now
                             :config.global/created-by created-by

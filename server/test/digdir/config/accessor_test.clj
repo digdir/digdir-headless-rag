@@ -180,36 +180,24 @@
 
 (defmacro with-runtime-accessor-context
   [conn & body]
-  `(do
-     (config-db/set-conn! ~conn)
-     (try
-       (with-redefs [core/use-db-config? (constantly true)
-                     core/get-master-key (constantly nil)]
-         ~@body)
-       (finally
-         (config-db/set-conn! nil)))))
+  `(binding [config-db/*conn* ~conn]
+     (with-redefs [core/use-db-config? (constantly true)
+                   core/get-master-key (constantly nil)]
+       ~@body)))
 
 (defmacro with-platform-accessor-context
   [conn & body]
-  `(do
-     (config-db/set-conn! ~conn)
-     (try
-      (with-redefs [core/use-db-config? (constantly true)
-                     core/get-master-key (constantly nil)]
-         ~@body)
-       (finally
-         (config-db/set-conn! nil)))))
+  `(binding [config-db/*conn* ~conn]
+     (with-redefs [core/use-db-config? (constantly true)
+                   core/get-master-key (constantly nil)]
+       ~@body)))
 
 (defmacro with-dataset-accessor-context
   [conn & body]
-  `(do
-     (config-db/set-conn! ~conn)
-     (try
-      (with-redefs [core/use-db-config? (constantly true)
-                     core/get-master-key (constantly nil)]
-         ~@body)
-       (finally
-         (config-db/set-conn! nil)))))
+  `(binding [config-db/*conn* ~conn]
+     (with-redefs [core/use-db-config? (constantly true)
+                   core/get-master-key (constantly nil)]
+       ~@body)))
 
 (deftest test-get-runtime-value-with-trace-decodes-and-reports-ancestry
   (testing "Runtime V2 accessor decodes values and exposes trace metadata"
@@ -566,14 +554,11 @@
                                        :encrypted? true})
         (config-db/register-tenant! conn "empty" {:name "Empty"})
 
-        (config-db/set-conn! conn)
-        (try
+        (binding [config-db/*conn* conn]
           (with-redefs [core/use-db-config? (constantly true)
                         core/get-master-key (constantly nil)]
             (is (thrown? clojure.lang.ExceptionInfo
-                         (accessor/get {:tenant "empty"} :services :azure-openai :api-key))))
-          (finally
-            (config-db/set-conn! nil)))
+                         (accessor/get {:tenant "empty"} :services :azure-openai :api-key)))))
         (finally
           (delete-test-db conn))))))
 
@@ -591,13 +576,10 @@
                                        :sensitivity :internal
                                        :function :settings})
 
-        (config-db/set-conn! conn)
-        (try
+        (binding [config-db/*conn* conn]
           (with-redefs [core/use-db-config? (constantly true)
                         core/get-master-key (constantly nil)]
             (is (thrown? clojure.lang.ExceptionInfo
-                         (accessor/get {:tenant "ka"} :services :typesense :collection-prefix))))
-          (finally
-            (config-db/set-conn! nil)))
+                         (accessor/get {:tenant "ka"} :services :typesense :collection-prefix)))))
         (finally
           (delete-test-db conn))))))

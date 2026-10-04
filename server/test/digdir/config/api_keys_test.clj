@@ -1,5 +1,5 @@
 (ns digdir.config.api-keys-test
-  (:require [clojure.test :refer [deftest testing is use-fixtures]]
+  (:require [clojure.test :refer [deftest testing is]]
             [clojure.string :as str]
             [datahike.api :as d]
             [nano-id.core :as nano-id]
@@ -8,14 +8,6 @@
             [digdir.config.db :as config-db]
             [digdir.config.schema :as config-schema]
             [digdir.data.db :as data-db]))
-
-(use-fixtures :each
-  (fn [f]
-    (let [previous-config-conn (config-db/get-conn)]
-      (try
-        (f)
-        (finally
-          (config-db/set-conn! previous-config-conn))))))
 
 ;; ===== generate-api-key tests =====
 
@@ -393,48 +385,48 @@
       (try
         (d/transact conn {:tx-data data-db/dh-schema})
         (d/transact config-conn {:tx-data config-schema/config-migration-schema})
-        (config-db/set-conn! config-conn)
-        (config-db/create-config-node! config-conn
-                                       {:root :runtime
-                                        :tenant "ka"
-                                        :node-id "runtime/ka/default"
-                                        :label "Default"
-                                        :tenant-config-key "default"})
-        (config-db/create-config-node! config-conn
-                                       {:root :dataset
-                                        :tenant "ka"
-                                        :node-id "dataset/ka/default"
-                                        :label "Dataset Default"
-                                        :tenant-config-key "default"})
-        (let [{:keys [api-key-id]} (api-keys/store-api-key conn
-                                                           "rag_real_db_test"
-                                                           "Real DB Test"
-                                                           "user-1"
-                                                           {:dataset-scopes [{:tenant "ka"
-                                                                            :tenant-config-key "prod"}]
-                                                            :allowed-config-keys [{:root :runtime
-                                                                               :tenant "ka"
-                                                                               :tenant-config-key "default"}
-                                                                              {:root :dataset
-                                                                               :tenant "ka"
-                                                                               :tenant-config-key "default"}]})
-              stored (api-keys/get-api-key-info conn api-key-id)]
-          (let [raw (d/pull @conn '[:api-key/key :api-key/key-digest
-                                    :api-key/prefix :api-key/last-four]
-                            [:api-key/id api-key-id])]
-            (is (nil? (:api-key/key raw)))
-            (is (= (api-keys/api-key-digest "rag_real_db_test")
-                   (:api-key/key-digest raw)))
-            (is (= "rag_real" (:api-key/prefix raw)))
-            (is (= "test" (:api-key/last-four raw))))
-          (is (= api-key-id
-                 (:api-key-id (api-keys/validate-api-key conn "rag_real_db_test"))))
-          (is (not (contains? stored :api-key/key-digest)))
-          (is (= 1 (count (:api-key/dataset-scopes stored))))
-          (is (= 2 (count (:api-key/allowed-config-keys stored))))
-          (is (= ["dataset/ka/default" "runtime/ka/default"]
-                 (sort (map :api-key.allowed-config-key/node-id
-                            (:api-key/allowed-config-keys stored))))))
+        (binding [config-db/*conn* config-conn]
+          (config-db/create-config-node! config-conn
+                                         {:root :runtime
+                                          :tenant "ka"
+                                          :node-id "runtime/ka/default"
+                                          :label "Default"
+                                          :tenant-config-key "default"})
+          (config-db/create-config-node! config-conn
+                                         {:root :dataset
+                                          :tenant "ka"
+                                          :node-id "dataset/ka/default"
+                                          :label "Dataset Default"
+                                          :tenant-config-key "default"})
+          (let [{:keys [api-key-id]} (api-keys/store-api-key conn
+                                                             "rag_real_db_test"
+                                                             "Real DB Test"
+                                                             "user-1"
+                                                             {:dataset-scopes [{:tenant "ka"
+                                                                              :tenant-config-key "prod"}]
+                                                              :allowed-config-keys [{:root :runtime
+                                                                                 :tenant "ka"
+                                                                                 :tenant-config-key "default"}
+                                                                                {:root :dataset
+                                                                                 :tenant "ka"
+                                                                                 :tenant-config-key "default"}]})
+                stored (api-keys/get-api-key-info conn api-key-id)]
+            (let [raw (d/pull @conn '[:api-key/key :api-key/key-digest
+                                      :api-key/prefix :api-key/last-four]
+                              [:api-key/id api-key-id])]
+              (is (nil? (:api-key/key raw)))
+              (is (= (api-keys/api-key-digest "rag_real_db_test")
+                     (:api-key/key-digest raw)))
+              (is (= "rag_real" (:api-key/prefix raw)))
+              (is (= "test" (:api-key/last-four raw))))
+            (is (= api-key-id
+                   (:api-key-id (api-keys/validate-api-key conn "rag_real_db_test"))))
+            (is (not (contains? stored :api-key/key-digest)))
+            (is (= 1 (count (:api-key/dataset-scopes stored))))
+            (is (= 2 (count (:api-key/allowed-config-keys stored))))
+            (is (= ["dataset/ka/default" "runtime/ka/default"]
+                   (sort (map :api-key.allowed-config-key/node-id
+                              (:api-key/allowed-config-keys stored)))))))
         (finally
           (d/release conn)
           (d/delete-database cfg)

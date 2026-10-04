@@ -31,11 +31,12 @@
 
 (deftest poller-must-not-run-in-test-jvms
   (testing "the marker poller is disabled here, and the wiring that disables it is in place"
-    ;; The poller calls data.db/reconnect! from a daemon thread, which reassigns
-    ;; the process-global config conn. In a long-running server that is the
-    ;; point; in a test JVM it takes the conn away from tests that set it
-    ;; deliberately, which is what made digdir.config.ui-test fail
-    ;; intermittently with "Config node not found runtime-frontpage".
+    ;; The poller calls data.db/reconnect! from a daemon thread, which releases
+    ;; and replaces the process-global main connection. In a long-running server
+    ;; that is the point; in a test JVM it pulls the connection out from under
+    ;; running tests. Until the config-connection isolation fix it also re-pinned the config override, which is
+    ;; what made digdir.config.ui-test fail intermittently with "Config node not
+    ;; found runtime-frontpage".
     ;;
     ;; The :test alias in server/deps.edn sets -Ddigdir.config.poller=false.
     ;; Asserting it here means deleting that jvm-opt fails loudly, instead of

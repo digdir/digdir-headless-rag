@@ -71,10 +71,12 @@
 
    The poller exists to keep a *long-running* server fresh against external
    writers. A batch JVM - the test suite, a one-shot bb task - gains nothing
-   from it and is actively harmed by it: `reconnect!` reassigns the
-   process-global config conn from a daemon thread, so it can take that conn
-   away from code that had just pointed it somewhere on purpose. The test
-   suite sets this to false (see the :test alias in server/deps.edn)."
+   from it and is actively harmed by it: `reconnect!` releases the
+   process-global main connection and replaces it, from a daemon thread, under
+   code that may still hold the old one. (Until the config-connection isolation fix it also re-pinned a
+   process-global config override, which took the config connection away from
+   code that had just pointed it somewhere on purpose.) The test suite sets
+   this to false (see the :test alias in server/deps.edn)."
   []
   (not= "false" (System/getProperty poller-property)))
 
@@ -103,7 +105,7 @@
    are no-ops. Called from `data.db/init-db!` after migrations complete.
 
    No-ops when `poller-enabled?` is false, which is how test JVMs keep a
-   background thread from reassigning the process-global config conn."
+   background thread from replacing the process-global main connection."
   []
   (when (and (poller-enabled?) (nil? @!poller) (some? (marker-file)))
     (let [file (marker-file)

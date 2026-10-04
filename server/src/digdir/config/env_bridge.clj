@@ -17,8 +17,10 @@
    `env-config-bindings` is the single source of truth. Three surfaces read it
    and none of them keeps its own list:
 
-     1. `seed-config-from-env!` — writes env-supplied values into the config DB
-        on the import path, so setting variables is sufficient.
+     1. `seed-config-from-env!` — writes env-supplied values into the config DB,
+        so setting variables is sufficient. Its callers: `bb demo-tenant`, the
+        E2E boot seed, and the import for each tenant the imported file carries
+        (the shipped snapshot carries none).
      2. `digdir.config.verify` — turns \"this value cannot be resolved\" into
         \"set THIS variable\", so the check hands over a shopping list.
      3. `digdir.setup.common/check-env-vars` — the MISSING/OK table. It used to

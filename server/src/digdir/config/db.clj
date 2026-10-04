@@ -24,22 +24,75 @@
 
 (defonce ^:private !config-conn (atom nil))
 
+(defonce ^:private !config-conn-set-at
+  ;; Where the override was last set: the frames a refusal names, so a leak is
+  ;; reported with its SETTER rather than only where it did damage.
+  (atom nil))
+
+(def ^:dynamic *conn*
+  "The config connection for a DYNAMIC extent. Wins over the override and the
+   delegate, and cannot outlive the extent that bound it.
+
+   Boot binds it (`digdir.data.db/init-db!`) while the main connection is being
+   initialised and not yet published. It used to call `set-conn!` instead,
+   which pinned the override for the rest of the process. In a test JVM that
+   meant every later `with-redefs` of `digdir.data.db/get-conn` was silently
+   ignored for config work."
+  nil)
+
 (declare get-tenant
          list-tenants)
 
 (defn set-conn!
-  "Set or override the Datahike connection for config operations.
-   In normal runtime the config role shares the main app connection."
+  "Set or clear an explicit, process-global override of the config connection.
+   Nothing sets it in normal runtime: config work follows
+   `digdir.data.db/get-conn`. Prefer binding `*conn*`, which cannot leak."
   [conn]
+  (reset! !config-conn-set-at
+          (when conn
+            (->> (.getStackTrace (Thread/currentThread))
+                 (map str)
+                 (filter #(re-find #"digdir" %))
+                 (remove #(re-find #"set_conn_BANG_" %))
+                 (take 3)
+                 vec)))
   (reset! !config-conn conn))
 
+(defn- delegate-var []
+  (require 'digdir.data.db)
+  (resolve 'digdir.data.db/get-conn))
+
 (defn get-conn
-  "Get the Datahike connection for config operations.
-   Returns the shared main app connection unless an explicit override has been set."
+  "Get the Datahike connection for config operations: a bound `*conn*`, else an
+   explicit override, else the main app connection (`digdir.data.db/get-conn`).
+
+   REFUSES when an override is set and `digdir.data.db/get-conn` has been
+   redefined to return a DIFFERENT connection. A test that redefines the main
+   connection to isolate itself would otherwise have its config work land on the
+   override's connection, silently. The refusal names where the override
+   was set. It cannot fire in normal runtime, where nothing redefines the
+   delegate."
   []
-  (or @!config-conn
-      (do (require 'digdir.data.db)
-          ((resolve 'digdir.data.db/get-conn)))))
+  (or *conn*
+      (let [override @!config-conn
+            delegate @(delegate-var)]
+        (if (nil? override)
+          (delegate)
+          (do (when-not (identical? delegate @(resolve 'digdir.data.db/get-conn-as-defined))
+                (let [delegated (delegate)]
+                  (when-not (identical? override delegated)
+                    (throw (ex-info (str "config-db/get-conn: DELIBERATE ISOLATION GUARD, not a harness "
+                                         "or test-runner fault.\n"
+                                         "A config override set by config-db/set-conn! at "
+                                         (or (first @!config-conn-set-at) "an unrecorded frame")
+                                         " was never undone. It would silently replace the connection"
+                                         " digdir.data.db/get-conn has been redefined to return, so this"
+                                         " config work would land on another database.\n"
+                                         "Fix: undo that set-conn!, or use (binding [config-db/*conn* conn] ...),"
+                                         " which cannot leak. All recorded frames: "
+                                         (pr-str @!config-conn-set-at))
+                                    {:override-set-at @!config-conn-set-at})))))
+              override)))))
 
 (defn ensure-schema!
   "Ensure config schema is transacted to the database.
@@ -51,6 +104,43 @@
       ;; Ignore "attribute already exists" errors
       (when-not (re-find #"already exists" (str (.getMessage e)))
         (throw e)))))
+
+;; =============================================================================
+;; Speculation: run the real writers without writing
+;; =============================================================================
+
+(deftype Speculation [!state]
+  clojure.lang.IDeref
+  (deref [_] (:db @!state)))
+
+(defn speculation
+  "A stand-in for a connection that the config writers accept. Deref gives the
+   database AS IT WILL BE, and `transact!` applies each transaction to it with
+   `d/with` and records the tx-data, writing nothing.
+
+   `ops.sync/import-data` runs every phase's REAL code against one, and then
+   commits everything it recorded in ONE transaction. So every refusal
+   in every phase, enumerated or not, happens before anything is written, and
+   a validation read sees what the earlier phases will have written."
+  [db]
+  (->Speculation (atom {:db db :tx-data []})))
+
+(defn speculation-tx-data
+  "Everything transacted against `spec`, in order."
+  [^Speculation spec]
+  (:tx-data @(.-!state spec)))
+
+(defn transact!
+  "`d/transact` for the writers an import reaches. Against a `speculation`,
+   the transaction is applied to its database and recorded, not written."
+  [conn arg]
+  (let [tx-data (if (map? arg) (:tx-data arg) arg)]
+    (if (instance? Speculation conn)
+      (let [state (.-!state ^Speculation conn)
+            report (d/with (:db @state) {:tx-data tx-data})]
+        (swap! state #(-> % (assoc :db (:db-after report)) (update :tx-data into tx-data)))
+        report)
+      (d/transact conn {:tx-data tx-data}))))
 
 ;; =============================================================================
 ;; One-shot data migrations
@@ -494,7 +584,7 @@
         tx-data (build-definition-tx-data definition created-at)]
     (if (definition-matches? existing tx-data)
       existing
-      (do (d/transact conn {:tx-data [tx-data]})
+      (do (transact! conn {:tx-data [tx-data]})
           (get-definition @conn path)))))
 
 (defn ensure-definition-root!
@@ -533,7 +623,7 @@
                           (build-definition-tx-data definition created-at)))
                       definitions)]
     (when (seq tx-data)
-      (d/transact conn {:tx-data tx-data}))
+      (transact! conn {:tx-data tx-data}))
     (mapv #(get-definition @conn (:path %)) definitions)))
 
 ;; =============================================================================
@@ -989,7 +1079,7 @@
                parent-id (assoc :config.node/parent [:config.node/id parent-id]))]
     (when parent
       (validate-config-node-parent! db node parent))
-    (d/transact conn {:tx-data [node]})
+    (transact! conn {:tx-data [node]})
     (get-config-node @conn node-id)))
 
 (defn update-config-node!
@@ -1024,7 +1114,7 @@
                   (contains? opts :tenant-config-key) (assoc :config.node/tenant-config-key tenant-config-key)
                   (contains? opts :system-managed?) (assoc :config.node/system-managed? (boolean system-managed?))
                   (contains? opts :enabled?) (assoc :config.node/enabled? enabled?))]
-    (d/transact conn {:tx-data [tx-data]})
+    (transact! conn {:tx-data [tx-data]})
     (get-config-node @conn (:config.node/id existing))))
 
 (defn set-config-node-parent!
@@ -1038,7 +1128,7 @@
         parent (or (get-config-node db parent-id)
                    (throw (ex-info "Config node parent not found" {:parent-id parent-id})))]
     (validate-config-node-parent! db node parent)
-    (d/transact conn {:tx-data [{:db/id [:config.node/id node-id]
+    (transact! conn {:tx-data [{:db/id [:config.node/id node-id]
                                  :config.node/parent [:config.node/id parent-id]
                                  :config.node/updated-at (System/currentTimeMillis)}]})
     (get-config-node @conn node-id)))
@@ -1245,7 +1335,7 @@
         _ (when (get-dataset-record db dataset-id)
             (throw (ex-info "Dataset already exists" {:dataset-id dataset-id})))
         now (System/currentTimeMillis)]
-    (d/transact conn {:tx-data [(cond-> {:dataset/id dataset-id
+    (transact! conn {:tx-data [(cond-> {:dataset/id dataset-id
                                          :dataset/name name
                                          :dataset/enabled? enabled?
                                          :dataset/created-at (or created-at now)
@@ -1268,7 +1358,7 @@
                   (contains? opts :name) (assoc :dataset/name name)
                   (contains? opts :description) (assoc :dataset/description description)
                   (contains? opts :enabled?) (assoc :dataset/enabled? enabled?))]
-    (d/transact conn {:tx-data [tx-data]})
+    (transact! conn {:tx-data [tx-data]})
     (get-dataset-record @conn (:dataset/id existing))))
 
 (defn get-dataset-pipeline
@@ -1479,7 +1569,7 @@
         _ (or (get-dataset-record db dataset-id)
               (throw (ex-info "Dataset not found" {:dataset-id dataset-id})))
         now (System/currentTimeMillis)]
-    (d/transact conn {:tx-data [(cond-> {:dataset.pipeline/id pipeline-id
+    (transact! conn {:tx-data [(cond-> {:dataset.pipeline/id pipeline-id
                                          :dataset.pipeline/dataset [:dataset/id dataset-id]
                                          :dataset.pipeline/enabled? enabled?
                                          :dataset.pipeline/created-at (or created-at now)
@@ -1503,7 +1593,7 @@
                   created-at (assoc :dataset.pipeline/created-at created-at)
                   (contains? opts :dataset-id) (assoc :dataset.pipeline/dataset [:dataset/id dataset-id])
                   (contains? opts :enabled?) (assoc :dataset.pipeline/enabled? enabled?))]
-    (d/transact conn {:tx-data [tx-data]})
+    (transact! conn {:tx-data [tx-data]})
     (get-dataset-pipeline @conn (:dataset.pipeline/id existing))))
 
 (defn get-node-value
@@ -1632,7 +1722,7 @@
                              [:config.value/id value-id]
                              :config.value/deleted-at
                              (:config.value/deleted-at existing)]))]
-        (d/transact conn {:tx-data tx-data})))
+        (transact! conn {:tx-data tx-data})))
     action))
 
 (defn delete-node-value!
@@ -1645,9 +1735,11 @@
   (let [existing (get-node-value @conn root tenant node-id path)]
     (when existing
       (let [now (System/currentTimeMillis)]
-        (d/transact conn {:tx-data [{:db/id [:config.value/id (make-node-value-id root tenant node-id path)]
-                                     :config.value/deleted-at now
-                                     :config.value/updated-at now}]}))
+        ;; `transact!`: a promotion retracts tenant values against a
+        ;; speculation.
+        (transact! conn {:tx-data [{:db/id [:config.value/id (make-node-value-id root tenant node-id path)]
+                                    :config.value/deleted-at now
+                                    :config.value/updated-at now}]}))
       true)))
 
 (defn- ensure-legacy-dataset-pipeline-projection-definitions!
@@ -1745,7 +1837,7 @@
                                      (:dataset.pipeline/source-type legacy-record)])))
           legacy-attrs-retracted (count retract-tx-data)]
       (when (seq retract-tx-data)
-        (d/transact conn {:tx-data retract-tx-data}))
+        (transact! conn {:tx-data retract-tx-data}))
       {:pipeline-id pipeline-id
        :materialization-nodes (count contexts)
        :values-backfilled values-backfilled
@@ -2379,7 +2471,7 @@
    (let [db @conn]
      ;; Only create if not already registered
      (when-not (get-tenant db tenant-id)
-       (d/transact conn [{:tenant/id tenant-id
+       (transact! conn [{:tenant/id tenant-id
                           :tenant/name (or name tenant-id)
                           :tenant/created-at (java.util.Date.)
                           :tenant/created-by created-by}])))))
@@ -2855,14 +2947,17 @@
   (ensure-schema! conn)
   (migrate-legacy-dataset-pipeline-projections! conn)
   (when seed-permissions?
+    ;; :permission/id is unique/identity, so seeding an existing id UPSERTS
+    ;; it: the rest of the default is rewritten, which is what converges a
+    ;; default changed in code onto stores that already hold it. Only
+    ;; created-at is left alone once set, so it stays a creation time.
+    ;; An upsert never raises a uniqueness error, so no catch is needed.
     (let [now (System/currentTimeMillis)]
       (doseq [perm schema/default-permissions]
-        (try
-          (d/transact conn {:tx-data [(assoc perm :permission/created-at now)]})
-          (catch Exception e
-            ;; Ignore "already exists" errors for idempotency
-            (when-not (re-find #"unique constraint" (str (.getMessage e)))
-              (throw e)))))))
+        (let [exists? (some? (d/q '[:find ?e . :in $ ?id :where [?e :permission/id ?id]]
+                                  @conn (:permission/id perm)))]
+          (d/transact conn {:tx-data [(cond-> perm
+                                        (not exists?) (assoc :permission/created-at now))]})))))
   (when seed-agents?
     (require 'digdir.agents.db)
     (when-let [seed-agents-fn (resolve 'digdir.agents.db/reconcile-skill-graphs!)]

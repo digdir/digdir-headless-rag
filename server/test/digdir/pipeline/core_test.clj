@@ -33,26 +33,14 @@
         ;; test DB must know those config definitions. It previously got away
         ;; with a subset because the API asked for less than execution did.
         ;;
-        ;; ⚠️ AND THE REDEF ABOVE IS NOT ENOUGH ON ITS OWN (yardarm-544errors).
-        ;; `config-db/get-conn` returns `@!config-conn` FIRST and only falls
-        ;; through to `data.db/get-conn` when that override is unset. Several
-        ;; config test namespaces call `config-db/set-conn!`, and one that does
-        ;; not restore it leaves the override set for the rest of the JVM — so
-        ;; the seeding below silently writes to THAT connection and this test's
-        ;; own conn never gets the definitions. The symptom is
-        ;; "Config definition not found: pipeline.source.kudos.use-preprod" at
-        ;; `set-node-value!`, and it appears ONLY in a full-suite run, which is
-        ;; exactly why running these namespaces alone did not catch it.
-        ;;
-        ;; Setting it explicitly makes this fixture independent of what ran
-        ;; before it, rather than of what it happens to run after.
-        (let [previous (config-db/get-conn)]
-          (try
-            (config-db/set-conn! conn)
-            (setup-config/ensure-pipeline-config-definitions!)
-            (f)
-            (finally
-              (config-db/set-conn! (when-not (identical? previous conn) previous))))))
+        ;; Until the config-connection isolation fix this redef was NOT enough on its own (yardarm-544errors):
+        ;; boot pinned a process-global config override, which silently took
+        ;; precedence, so the seeding below landed on another connection. Boot
+        ;; now binds its config connection instead of pinning it, and
+        ;; `config-db/get-conn` REFUSES an override that disagrees with this
+        ;; redef. So the ordinary isolation holds whatever ran before.
+        (setup-config/ensure-pipeline-config-definitions!)
+        (f))
       (finally
         (cleanup-test-db conn)))))
 
