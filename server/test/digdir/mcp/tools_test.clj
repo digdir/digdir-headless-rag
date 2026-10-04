@@ -232,7 +232,7 @@
                      :api-key/skill-graphs []
                      :api-key/client-id "x"}
                     "builtin.rag-agent__agent-rag-graph-bundled"
-                    {"query" "Hello"}
+                    {"query" "Hello" "tenant" "altinn-docs"}
                     nil)]
               (is (nil? error) "Should not error when API key has a scope")
               (is (= "altinn-docs" (get-in @captured-invoke [:execution-scope :tenant])))
@@ -359,7 +359,7 @@
                    :api-key/skill-graphs []
                    :api-key/client-id "test-client"}
                   "builtin.docs-agent__self-improve-graph"
-                  {"query" "Hva er Digdir?"}
+                  {"query" "Hva er Digdir?" "tenant" "altinn-docs"}
                   nil)]
             ;; A tool result, not a JSON-RPC error: the call was dispatched
             ;; fine, the agent is what failed.
@@ -422,7 +422,7 @@
                      :api-key/skill-graphs []
                      :api-key/client-id "test-client"}
                     "builtin.docs-agent__self-improve-graph"
-                    {"query" "What changed?"}
+                    {"query" "What changed?" "tenant" "altinn-docs"}
                     nil)]
               (is (nil? error))
               (is (false? (:isError result)))
@@ -549,7 +549,9 @@
       (fn []
         (let [declared (first (mcp-tools/list-tools {}))]
           (is (contains? (get-in declared [:inputSchema "properties"]) "query"))
-          (is (= ["query"] (get-in declared [:inputSchema "required"]))))))))
+          ;; `tenant` is required on every call, so it is advertised
+          ;; alongside `query` whichever path built the schema.
+          (is (= ["query" "tenant"] (get-in declared [:inputSchema "required"]))))))))
 
 (deftest query-aliases-are-accepted-and-documented
   (testing "both names still work, and the alias is documented where it is met"
@@ -591,7 +593,8 @@
                   {:api-key/agent-refs ["builtin/docs-agent"]
                    :api-key/dataset-scopes [{:tenant "altinn-docs" :dataset-config-key "dev"}]}
                   "builtin.docs-agent__self-improve-graph"
-                  (merge {"query" "q"} arguments)
+                  ;; every call names its tenant.
+                  (merge {"query" "q" "tenant" "altinn-docs"} arguments)
                   nil)
                  :params @params-seen
                  :invoked? @invoked?))))))

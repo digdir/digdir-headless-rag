@@ -134,21 +134,14 @@
           (is (= :refused (:verdict (rest-verdict case-row)))
               (str "REST granted a dataset outside the key's scopes — " label)))))))
 
-(deftest known-divergence-a-key-with-no-scopes
-  ;; NOT parity, and deliberately so. A key with NO dataset-scopes is
-  ;; UNRESTRICTED on the MCP surface — its convention on every other axis
-  ;; (`:agent-refs`, `:skill-graphs`, `:allowed-config-keys` are all
-  ;; "empty means no restriction") — while REST answers 401.
-  ;;
-  ;; Pinned rather than fixed: closing it would silently revoke MCP access from
-  ;; every key without scopes, including the documented `TENANT` /
-  ;; `DATASET_CONFIG_KEY` single-tenant deployment. That is a policy decision
-  ;; with real blast radius, recorded on #464 and not taken here.
-  ;;
-  ;; This test exists so the divergence is DECLARED. If someone closes it, this
-  ;; fails and points at the decision instead of letting it land unremarked.
+(deftest a-key-with-no-scopes-is-refused-on-both-surfaces
+  ;; This WAS the known divergence: MCP treated an empty grant as unrestricted
+  ;; while REST answered 401. The tenant-scope fix closed it, as this test's earlier version
+  ;; said it would point at: the project owner's decision made the tenant axis FAIL CLOSED, and
+  ;; the deliberate breadth is the explicit all-tenant marker (the documented
+  ;; single-tenant deployment marks its key; see digdir.api.auth-test).
   (let [scopeless {:key [] :agent [] :request {:tenant "any" :dataset-config-key "thing"}}]
-    (testing "MCP treats an empty grant as unrestricted"
-      (is (= :granted (:verdict (mcp-verdict scopeless)))))
-    (testing "REST treats an empty grant as no access"
+    (testing "MCP refuses an empty grant"
+      (is (= :refused (:verdict (mcp-verdict scopeless)))))
+    (testing "REST refuses an empty grant"
       (is (= :refused (:verdict (rest-verdict scopeless)))))))

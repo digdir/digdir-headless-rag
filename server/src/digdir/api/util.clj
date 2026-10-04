@@ -36,9 +36,13 @@
   conversation)
 
 (defn find-api-conversation!
-  [conn convo-id external-user-id]
+  "The conversation, only if it belongs to `tenant` AND to `external-user-id`.
+   The tenant scope is `db/conversation-in-tenant`, the lookup every public
+   door uses (the MCP tool path calls it too); `conversation-by-id` is global
+   and is not reached from here."
+  [conn convo-id tenant external-user-id]
   (require-api-conversation-owner!
-   (db/conversation-by-id @conn convo-id)
+   (db/conversation-in-tenant @conn convo-id tenant)
    convo-id
    external-user-id))
 

@@ -4,6 +4,15 @@ Manage conversation history for RAG queries.
 
 `X-User-Id` is a caller-supplied external identifier used only for public API conversation scoping. It is treated as opaque data and is unrelated to Playground/internal user accounts.
 
+## Tenant scope
+
+Every conversation belongs to one **tenant**, and it is addressed by the **pair** (tenant, conversation id), never by its id alone.
+
+- **`tenant` is required on every conversation request, for every API key** — in the body of `POST /api/conversations`, and as the `tenant` query parameter on the other endpoints. Without it the request is refused with `400`. Nothing is derived from the key.
+- A key with dataset scopes may name only a tenant it is granted; any other is refused with `403`.
+- A key with **no** dataset scopes is a superuser by allocation: it may name any tenant, but it must name one.
+- A conversation in another tenant answers `404`, exactly as one that does not exist.
+
 ## Authentication
 
 All endpoints require API key in `X-API-Key` header.
@@ -40,7 +49,7 @@ When `tags` is supplied, the list only returns conversations that include every 
 ### Example Request
 
 ```bash
-curl -X GET "https://rag.digdir.cloud/api/conversations?page_size=10&page_index=0&tags=alpha,beta" \
+curl -X GET "https://rag.digdir.cloud/api/conversations?tenant=digdir&page_size=10&page_index=0&tags=alpha,beta" \
   -H "X-API-Key: rag_your_api_key" \
   -H "X-User-Id: customer-user-123"
 ```
@@ -96,6 +105,7 @@ Create a new conversation.
 | `title` | string | No | Conversation title |
 | `filterValue` | object | No | Filter configuration |
 | `tags` | array<string> | No | Conversation tags |
+| `tenant` | string | Yes | The tenant the conversation belongs to — see [Tenant scope](#tenant-scope). |
 | `agent-id` | string | Sometimes | Which agent the conversation belongs to. Required when the key does not resolve to exactly one agent — see below. `agentId` is accepted as an alias. |
 
 ### Example Request
@@ -106,6 +116,7 @@ curl -X POST https://rag.digdir.cloud/api/conversations \
   -H "X-API-Key: rag_your_api_key" \
   -H "X-User-Id: customer-user-123" \
   -d '{
+    "tenant": "digdir",
     "title": "My New Conversation",
     "tags": ["alpha", "beta"]
   }'
@@ -171,7 +182,7 @@ Get a specific conversation with all its messages.
 ### Example Request
 
 ```bash
-curl -X GET "https://rag.digdir.cloud/api/conversations/dPPIA0UWuF4JPMGBUDbjD?include_diagnostics=true" \
+curl -X GET "https://rag.digdir.cloud/api/conversations/dPPIA0UWuF4JPMGBUDbjD?tenant=digdir&include_diagnostics=true" \
   -H "X-API-Key: rag_your_api_key" \
   -H "X-User-Id: customer-user-123"
 ```
@@ -274,7 +285,7 @@ Update a conversation (e.g., rename).
 ### Example Request
 
 ```bash
-curl -X PUT https://rag.digdir.cloud/api/conversations/dPPIA0UWuF4JPMGBUDbjD \
+curl -X PUT "https://rag.digdir.cloud/api/conversations/dPPIA0UWuF4JPMGBUDbjD?tenant=digdir" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: rag_your_api_key" \
   -H "X-User-Id: customer-user-123" \
@@ -318,7 +329,7 @@ Delete a conversation and all its messages.
 ### Example Request
 
 ```bash
-curl -X DELETE https://rag.digdir.cloud/api/conversations/dPPIA0UWuF4JPMGBUDbjD \
+curl -X DELETE "https://rag.digdir.cloud/api/conversations/dPPIA0UWuF4JPMGBUDbjD?tenant=digdir" \
   -H "X-API-Key: rag_your_api_key" \
   -H "X-User-Id: customer-user-123"
 ```
@@ -373,7 +384,8 @@ curl -X DELETE https://rag.digdir.cloud/api/conversations/dPPIA0UWuF4JPMGBUDbjD 
 - `POST` and `PUT` wrap the conversation in a `conversation` key; `DELETE` returns `{"success": true}`
 - Conversations are automatically created when using `POST /api/mcp` `tools/call` without a `conversation_id`
 - `X-User-Id` is required for all public conversation endpoints; there is no unscoped list-all mode
-- A conversation can only be fetched, updated, or deleted by the same external `X-User-Id` that owns it
+- A conversation is addressed by its tenant and id together, and only by the same external `X-User-Id` that owns it; the list is scoped the same way. See [Tenant scope](#tenant-scope)
+- `POST /api/mcp` `tools/call` names its `tenant` on every call too (`tenant_required` without it), and continues a `conversation_id` only within that tenant; any other id, including one that does not exist, is refused with `conversation_not_found`
 - The `topic` is auto-generated from the first question if not provided
 - Deleting a conversation removes all associated messages and chunk references
 - Messages are ordered chronologically (oldest first)

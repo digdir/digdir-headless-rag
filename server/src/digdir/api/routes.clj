@@ -42,9 +42,9 @@
   (api-util/require-api-conversation-owner! conversation convo-id external-user-id))
 
 (defn find-api-conversation!
-  "Find a conversation by ID and verify ownership."
-  [conn convo-id external-user-id]
-  (api-util/find-api-conversation! conn convo-id external-user-id))
+  "Find a conversation by ID within `tenant`, and verify ownership."
+  [conn convo-id tenant external-user-id]
+  (api-util/find-api-conversation! conn convo-id tenant external-user-id))
 
 (defn camel->kebab-keyword
   "Convert a camelCase string to a kebab-case keyword."
@@ -247,7 +247,7 @@
   (handlers/revoke-api-key-handler ring-req))
 
 (defn update-api-key-allowed-config-keys-handler
-  "Replace the allowed config keys for an API key owned by the authenticated user."
+  "Replace the allowed config keys for an API key. Any admin may, on any key."
   [ring-req]
   (handlers/update-api-key-allowed-config-keys-handler ring-req))
 

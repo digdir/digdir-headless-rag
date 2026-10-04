@@ -4,6 +4,7 @@
    [cheshire.core :as json]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
+   [digdir.api.auth :as api-auth]
    [digdir.api.context :as api-ctx]
    [digdir.config.structure :as structure]
    [digdir.api.util :refer [api-error-body
@@ -225,13 +226,22 @@
                     :pipelines (get pipelines-by-dataset-id dataset-id [])})))
          vec)))
 
+(defn- authorized-dataset-refs
+  "the key's dataset scopes that THE one decision
+   (`api-auth/authorize-scope!`) authorizes - the datasets a listing may show."
+  [ring-req]
+  (filterv #(try (api-auth/authorize-scope! ring-req {:dataset-ref %}) true
+                 (catch clojure.lang.ExceptionInfo e
+                   (if (#{:tenant-not-granted :dataset-not-granted} (:reason (ex-data e))) false (throw e))))
+           (api-ctx/normalize-dataset-scopes! (or (:api-key/dataset-scopes ring-req) []))))
+
 (defn list-public-datasets-handler
   "List the datasets visible to the current API key through dataset scopes."
   [ring-req]
   (try
     (let [conn (db/get-conn)
           db @conn
-          dataset-refs (api-ctx/normalize-dataset-scopes! (or (:api-key/dataset-scopes ring-req) []))
+          dataset-refs (authorized-dataset-refs ring-req)
           datasets (mapv (fn [{:keys [dataset-record pipelines]}]
                            (summarize-public-dataset-record db dataset-refs dataset-record pipelines))
                          (visible-public-dataset-records db dataset-refs))]
@@ -252,7 +262,7 @@
     (let [dataset-id (:dataset-id (request-path-params ring-req))
           conn (db/get-conn)
           db @conn
-          dataset-refs (api-ctx/normalize-dataset-scopes! (or (:api-key/dataset-scopes ring-req) []))
+          dataset-refs (authorized-dataset-refs ring-req)
           visible-dataset (->> (visible-public-dataset-records db dataset-refs)
                                (some (fn [{:keys [dataset-record] :as visible}]
                                        (when (= dataset-id (:dataset/id dataset-record))
@@ -304,6 +314,8 @@
           tenant (param-value query-params :tenant)
           _ (when (str/blank? tenant)
               (throw (ex-info "Missing tenant" {:status 400})))
+          ;; the one tenant decision (the axis fails closed).
+          _ (api-auth/authorize-scope! ring-req {:tenant tenant})
           root (request-config-root! ring-req)
           conn (db/get-conn)
           allowed-config-keys (vec (or (:api-key/allowed-config-keys ring-req) []))
@@ -351,6 +363,19 @@
           (res/status 500)
           (res/content-type "application/json")))))
 
+(defn- refuse-dataset-id-mismatch!
+  "a body `dataset-id` must EQUAL the id of the
+   dataset the request selects and was authorized for, else 400
+   `:dataset-id-mismatch`, naming both. Not ignored: a client that sends it
+   believes it selects something. Absent is fine."
+  [params authorized-dataset-id]
+  (when-let [asked (api-ctx/param-value params :dataset-id)]
+    (when (not= asked authorized-dataset-id)
+      (throw (ex-info (str "The request's dataset-id " (pr-str asked) " is not the dataset it selects"
+                           (when authorized-dataset-id (str " (" (pr-str authorized-dataset-id) ")"))
+                           ". Select the dataset with tenant and dataset-config-key.")
+                      {:status 400 :reason :dataset-id-mismatch :dataset-id asked :selected authorized-dataset-id})))))
+
 (defn resolve-runtime-config-handler
   "Resolve runtime config explicitly against a tenant runtime config key."
   [ring-req]
@@ -370,20 +395,37 @@
           _ (when (= dataset-ref api-ctx/invalid-dataset-ref)
               (throw (ex-info "Dataset selection must include tenant and dataset-config-key" {:status 400})))
           conn (db/get-conn)
+          ;; the dataset is the one the request
+          ;; SELECTS - its ref, or a raw dataset-id resolved within the named
+          ;; tenant (a dataset id resolves as its key) - and it is
+          ;; resolved, authorized, and the ONLY dataset the loader is handed.
+          selected-ref (or dataset-ref
+                           (when-let [raw-id (api-ctx/param-value params :dataset-id)]
+                             {:tenant tenant :dataset-config-key raw-id}))
+          selected (when selected-ref
+                     (or (config-db/get-dataset-by-ref @conn selected-ref (config-core/get-master-key))
+                         (throw (ex-info "Dataset not found" {:status 404 :dataset-ref selected-ref}))))
+          ;; the one decision - the tenant, and the dataset axis when a
+          ;; dataset is selected, which a :dataset config grant
+          ;; on that dataset's node also satisfies on this CONFIG door.
+          _ (api-auth/authorize-scope!
+             ring-req
+             (cond-> {:tenant tenant}
+               selected (assoc :dataset-ref {:tenant (:tenant selected) :dataset-config-key (:dataset-config-key selected)}
+                               :dataset-node {:conn conn :node-id (:dataset-node-id selected)})))
+          authorized-dataset-id (:dataset-id selected)
+          _ (refuse-dataset-id-mismatch! params authorized-dataset-id)
           {:keys [node matched-allowed-config-key]} (api-ctx/resolve-request-config-node! ring-req conn
                                                                                            {:tenant tenant
                                                                                             :root :runtime
                                                                                             :tenant-config-key tenant-config-key})
-          dataset-id (or (api-ctx/param-value params :dataset-id)
-                         (some-> (and dataset-ref
-                                      (config-db/resolve-dataset-ref-materializations @conn dataset-ref))
-                                 :dataset-id))
+          dataset-id authorized-dataset-id
           paths (normalize-request-paths params)
           {:keys [config traces]} (cfg/load-runtime-config-v2-with-trace
                                    (cond-> {:tenant tenant
                                             :tenant-config-key tenant-config-key
                                             :agent-id agent-id}
-                                     dataset-id (assoc :dataset-id dataset-id)
+                                     authorized-dataset-id (assoc :dataset-id authorized-dataset-id)
                                      (seq paths) (assoc :paths paths)))
           response-data {:root "runtime"
                          :tenant tenant
@@ -432,17 +474,27 @@
                                              {:status 404
                                               :dataset-ref dataset-ref})))
           tenant-config-key (:dataset-config-key dataset-config)
+          ;; the RESOLVED tenant and dataset are authorized, not the
+          ;; string the client sent (an old key resolves as the dataset id).
+          _ (api-auth/authorize-scope! ring-req {:dataset-ref {:tenant (:tenant dataset-config)
+                                                               :dataset-config-key tenant-config-key}
+                                                 ;; a CONFIG door
+                                                 :dataset-node {:conn conn :node-id (:dataset-node-id dataset-config)}})
           {:keys [node matched-allowed-config-key]} (api-ctx/resolve-request-config-node! ring-req conn
                                                                                            {:tenant (:tenant dataset-config)
                                                                                             :root :dataset
                                                                                             :tenant-config-key tenant-config-key
                                                                                             :node-id (:dataset-node-id dataset-config)})
-          dataset-id (or (api-ctx/param-value params :dataset-id)
-                         (:dataset-id dataset-config))
+          ;; the loader is handed ONLY the authorized
+          ;; dataset; a body dataset-id that names another is refused, never
+          ;; silently served (it used to override the authorized ref's id).
+          authorized-dataset-id (:dataset-id dataset-config)
+          _ (refuse-dataset-id-mismatch! params authorized-dataset-id)
+          dataset-id authorized-dataset-id
           paths (normalize-request-paths params)
           {:keys [config traces]} (cfg/load-dataset-config-v2-with-trace
                                    (cond-> {:tenant (:tenant dataset-config)
-                                            :dataset-id dataset-id
+                                            :dataset-id authorized-dataset-id
                                             :dataset-config-key tenant-config-key}
                                      (seq paths) (assoc :paths paths)))
           response-data {:root "dataset"

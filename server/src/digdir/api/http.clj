@@ -9,6 +9,7 @@
    [digdir.api.util :as api-util]
    [digdir.config.core :as config-core]
    [digdir.config.permissions :as perms]
+   [digdir.config.ui.common :as common]
    [digdir.data.db :as db]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
@@ -198,8 +199,9 @@
               user (auth/user-by-id user-id)
               user-email (:user/email user)
               user-language (auth/user-preferred-language user)
-              is-admin? (perms/is-admin? db user-id)]
-          (if is-admin?
+              ;; the ONE console guard's verdict (`ensure-config-ui-admin!`)
+              admin? (common/config-ui-admin? db user-id)]
+          (if admin?
             (api/console-api-router (assoc ring-req
                                            :user/id user-id
                                            :user/email user-email

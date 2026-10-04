@@ -147,7 +147,7 @@
 (deftest the-detector-is-wired-into-the-real-api-router
   (testing "a request through api-router with an undeclared field emits exactly one line"
     (let [{:keys [signals]} (through-the-real-router
-                              "{\"title\":\"t\",\"undeclared-in-schema\":\"v\"}")
+                              "{\"tenant\":\"t\",\"title\":\"t\",\"undeclared-in-schema\":\"v\"}")
           discarded (some->> signals
                              (filter #(= ::endpoints/request-fields-discarded (:id %)))
                              first :data :discarded-field-names)]
@@ -156,7 +156,7 @@
            direct-invocation tests above report")))
 
   (testing "and a clean request through the same router emits none"
-    (let [{:keys [signals]} (through-the-real-router "{\"title\":\"t\"}")]
+    (let [{:keys [signals]} (through-the-real-router "{\"tenant\":\"t\",\"title\":\"t\"}")]
       (is (empty? (filter #(= ::endpoints/request-fields-discarded (:id %)) signals))))))
 
 (deftest a-camelcase-alias-is-not-reported-as-discarded
@@ -165,7 +165,7 @@
   ;; the count the flip decision depends on — a false positive here is not
   ;; noise, it is a wrong input to a decision.
   (let [{:keys [signals]} (through-the-real-router
-                            "{\"title\":\"t\",\"filterValue\":\"x\"}")]
+                            "{\"tenant\":\"t\",\"title\":\"t\",\"filterValue\":\"x\"}")]
     (is (empty? (filter #(= ::endpoints/request-fields-discarded (:id %)) signals))
         "filterValue normalises to the declared filter-value and must not count")))
 
@@ -174,7 +174,7 @@
   ;; measured too. Stated because whoever reads the counts must not assume
   ;; every line was a 2xx.
   (let [{:keys [value signals]} (through-the-real-router
-                                  "{\"title\":\"t\",\"undeclared-in-schema\":\"v\"}")]
+                                  "{\"tenant\":\"t\",\"title\":\"t\",\"undeclared-in-schema\":\"v\"}")]
     (is (some #(= ::endpoints/request-fields-discarded (:id %)) signals))
     (is (not= 200 (:status value))
         "this request is rejected downstream — and was still measured")))

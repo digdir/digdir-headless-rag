@@ -463,7 +463,7 @@
          ;; (`ensure-config-ui-admin!`), so hiding the controls is the
          ;; explanation, not the enforcement.
          admin? (e/server (boolean (when-let [conn (config-db/get-conn)]
-                                     (perms/is-admin? @conn (:user/id e/http-request)))))]
+                                     (ui-common/config-ui-admin? @conn (:user/id e/http-request)))))]
      (dom/div
       (dom/props {:style {:background "white"
                           :border "1px solid #e5e7eb"

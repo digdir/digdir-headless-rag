@@ -243,6 +243,17 @@
   [dataset-scopes]
   (->> dataset-scopes (map :tenant) distinct vec))
 
+(defn granted-tenants
+  "THE granted-tenant set, the UNION of
+   every source that grants a tenant - explicit tenants, the tenants of dataset
+   scopes, and the tenants of config-node grants (`allowed-config-keys`), of the
+   key and of its policy. A grant naming a tenant is a grant IN that tenant, so
+   the union only adds tenants the key already holds something in. It is not a
+   dataset grant, and a config grant still confines the key to its nodes. Each source is a collection of tenant ids. An empty result grants
+   NO tenant (the tenant axis fails closed; `digdir.api.auth`)."
+  [& sources]
+  (vec (distinct (remove #(or (nil? %) (and (string? %) (str/blank? %))) (apply concat sources)))))
+
 (defn- build-dataset-scope-tx-data
   [dataset-scopes]
   (mapv (fn [{:keys [tenant dataset-config-key]}]
@@ -385,6 +396,7 @@
     :access-policy/clients
     :access-policy/skill-graphs
     :access-policy/scopes
+    :access-policy/all-tenants?
     :access-policy/created
     :access-policy/created-by])
 
@@ -472,14 +484,14 @@
                                {:tenant (:api-key.dataset-scope/tenant dataset-scope)
                                 :dataset-config-key (:api-key.dataset-scope/dataset-config-key dataset-scope)})
                              (:access-policy/dataset-scopes policy-entity))
-        tenants (if (seq (:access-policy/tenants policy-entity))
-                  (vec (:access-policy/tenants policy-entity))
-                  (dataset-scopes->tenants dataset-scopes))
         agent-refs (->> (:access-policy/agent-refs policy-entity)
                         (mapv :api-key.agent-ref/agent-id))
         allowed-config-keys (->> (:access-policy/allowed-config-keys policy-entity)
                                  (mapv normalize-pulled-allowed-config-key)
-                                 vec)]
+                                 vec)
+        tenants (granted-tenants (:access-policy/tenants policy-entity)
+                                 (dataset-scopes->tenants dataset-scopes)
+                                 (map :api-key.allowed-config-key/tenant allowed-config-keys))]
     (-> policy-entity
         (assoc :access-policy/dataset-scopes dataset-scopes
                :access-policy/agent-refs agent-refs
@@ -640,15 +652,12 @@
                                       {:tenant (:api-key.dataset-scope/tenant dataset-scope)
                                        :dataset-config-key (:api-key.dataset-scope/dataset-config-key dataset-scope)})
                                     (:api-key/dataset-scopes key-entity)))))
-        tenants (vec (distinct
-                      (concat
-                       (or (:access-policy/tenants policy) [])
-                       (if (seq (:api-key/tenants key-entity))
-                         (vec (:api-key/tenants key-entity))
-                         (dataset-scopes->tenants (mapv (fn [dataset-scope]
-                                                          {:tenant (:api-key.dataset-scope/tenant dataset-scope)
-                                                           :dataset-config-key (:api-key.dataset-scope/dataset-config-key dataset-scope)})
-                                                        (:api-key/dataset-scopes key-entity)))))))
+        tenants (granted-tenants (:access-policy/tenants policy)
+                                 (dataset-scopes->tenants (:access-policy/dataset-scopes policy))
+                                 (map :api-key.allowed-config-key/tenant (:access-policy/allowed-config-keys policy))
+                                 (:api-key/tenants key-entity)
+                                 (map :api-key.dataset-scope/tenant (:api-key/dataset-scopes key-entity))
+                                 (map :api-key.allowed-config-key/tenant (:api-key/allowed-config-keys key-entity)))
         agent-refs (vec (distinct
                          (concat
                           (or (:access-policy/agent-refs policy) [])
@@ -809,6 +818,60 @@
      {:api-key-id api-key-id
       :api-key api-key})))
 
+(defn all-tenants-marked?
+  "THE read of the all-tenant marker on a normalized key (its policy's
+   `:access-policy/all-tenants?`). Only the boolean true marks; absent is false."
+  [normalized-key]
+  (true? (get-in normalized-key [:api-key/policy :access-policy/all-tenants?])))
+
+(defn tenant-reach
+  "what a normalized key reaches on the tenant axis, for display:
+   `:all-tenants` (marked), `:no-tenant` (no granted tenant and no marker: it is
+   refused everywhere), or `:granted` (its `:api-key/tenants`, the one
+   `granted-tenants` union). Derived from the marker and the granted set, never
+   from the dataset scopes alone."
+  [normalized-key]
+  (cond
+    (all-tenants-marked? normalized-key) :all-tenants
+    (empty? (:api-key/tenants normalized-key)) :no-tenant
+    :else :granted))
+
+(defn set-all-tenants!
+  "set or clear the explicit ALL-TENANT marker on `api-key-id`'s access
+   policy (`:access-policy/all-tenants?`), and audit it (who, when, the old and
+   the new value) in the SAME transaction. A marked key reaches every tenant;
+   without the marker the tenant axis fails closed.
+
+   The ONE setter of the marker. Its callers are the admin console route
+   (`PUT /console-api/api-keys/:key-id/all-tenants`), the key UI's admin-checked
+   control, and the e2e seed. Rotate keeps it by linking the new key to the SAME
+   policy, and the importer only COPIES it. A census by attribute pins all of
+   that. A key with no access policy has nothing to mark: 409
+   `:key-has-no-policy`."
+  [conn api-key-id all-tenants? {:keys [user-id user-email]}]
+  (when-not (boolean? all-tenants?)
+    (throw (ex-info "all-tenants? is true or false" {:status 400 :reason :bad-all-tenants :value all-tenants?})))
+  (let [db @conn
+        key-name (d/q '[:find ?n . :in $ ?id :where [?k :api-key/id ?id] [?k :api-key/name ?n]] db api-key-id)
+        policy-eid (d/q '[:find ?p . :in $ ?id :where [?k :api-key/id ?id] [?k :api-key/policy ?p]] db api-key-id)]
+    (when-not (d/q '[:find ?k . :in $ ?id :where [?k :api-key/id ?id]] db api-key-id)
+      (throw (ex-info "API key not found" {:status 404 :reason :unknown-api-key :api-key-id api-key-id})))
+    (when-not policy-eid
+      (throw (ex-info "This API key has no access policy to mark" {:status 409 :reason :key-has-no-policy :api-key-id api-key-id})))
+    (let [;; the EFFECTIVE old value: absent reads as false, as it does at the door
+          previous (true? (:access-policy/all-tenants? (d/pull db [:access-policy/all-tenants?] policy-eid)))]
+      ;; ONE transaction: the marker and its audit record, or neither.
+      (d/transact conn {:tx-data [[:db/add policy-eid :access-policy/all-tenants? all-tenants?]
+                                  (audit/api-key-change-tx-data
+                                   (cond-> {:action (if all-tenants? :mark-all-tenants :unmark-all-tenants)
+                                            :api-key-id api-key-id
+                                            :api-key-name (or key-name api-key-id)
+                                            :previous-all-tenants? previous
+                                            :all-tenants? all-tenants?}
+                                     user-id (assoc :user-id user-id)
+                                     user-email (assoc :user-email user-email)))]}))
+    all-tenants?))
+
 (defn create-api-key!
   "Create a new API key with all parameters. This is a convenience function
    that generates the key and stores it in one atomic operation.
@@ -898,6 +961,7 @@
          :allowed-config-keys (:api-key/allowed-config-keys normalized-key)
          :skill-graphs (:api-key/skill-graphs normalized-key)
          :tenants (vec (:api-key/tenants normalized-key))
+         :all-tenants? (all-tenants-marked? normalized-key)
          :client-id (first (:api-key/clients normalized-key))
          :api-key-id (:api-key/id normalized-key)
          :name (:api-key/name normalized-key)
@@ -1108,7 +1172,11 @@
 
 (defn rotate-api-key!
   "Rotate an API key by creating a new one with the same policy and revoking the old one.
-   If the old key is a legacy key (no policy), a new policy will be created for it first."
+   If the old key is a legacy key (no policy), a new policy will be created for it first.
+
+   the new key is linked to the SAME policy entity, so the all-tenant
+   marker (`:access-policy/all-tenants?`) carries by construction. A legacy key
+   has no policy and so cannot carry the marker (`set-all-tenants!` answers 409)."
   [conn old-api-key-id {:keys [_user-email user-id] :as opts}]
   (let [db @conn
         old-key-entity (pull-api-key-entity db old-api-key-id)]

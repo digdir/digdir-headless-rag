@@ -231,7 +231,7 @@
                    (let [[tok _] (e/Token (dom/On "click" identity nil))]
                      (when tok (On-promote (:path c)) (tok))))))))))))
 
-(e/defn GlobalDefaultsEditor [_user-id]
+(e/defn GlobalDefaultsEditor []
   (e/client
    (let [!state (atom :loading)
          !result (atom nil)
@@ -274,13 +274,15 @@
 
      (when mutation
        (let [server-result (e/server
-                            (e/Offload #(try
+                            ;; the actor, read server-side in this form; merged LAST
+                            (let [actor (:user/id e/http-request)]
+                             (e/Offload #(try
                                           (common/mutate-config-tree!
-                                           (merge mutation {:user-id _user-id}))
+                                           (merge mutation {:user-id actor}))
                                           {:status :success}
                                           (catch #?(:clj Exception :cljs :default) e
                                             {:status :error
-                                             :error (or (ex-message e) "Update failed")}))))]
+                                             :error (or (ex-message e) "Update failed")})))))]
          (e/client
           (if (= :success (:status server-result))
             (do (reset! !mutation nil)
@@ -315,7 +317,6 @@
 
       (when (= state :done)
         (let [{:keys [definitions values-by-path version versions]} result
-              master-key (e/server (common/get-master-key))
               groups (group-by-category definitions)
               candidates (:candidates candidates-result)
               candidate-defs-by-path (into {}
@@ -359,8 +360,9 @@
                    (let [path (:config-def/path definition)
                          value-entity (get values-by-path path)
                          decoded (when value-entity
+                                   ;; the master key never binds in client scope
                                    (e/server (display-value-for-definition
-                                              definition value-entity master-key)))
+                                              definition value-entity (common/get-master-key))))
                          has-value? (some? value-entity)]
                      (dom/tr
                       (dom/td (dom/props {:style td-style})
@@ -425,6 +427,5 @@
          (e/fn []
            (reset! !wizard-def nil)
            (swap! !refresh inc)
-           (reset! !state :loading))
-         _user-id))))))
+           (reset! !state :loading))))))))
 )

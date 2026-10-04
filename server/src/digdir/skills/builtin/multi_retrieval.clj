@@ -179,7 +179,7 @@
        :search-attribution search-attribution
        :query-results (mapv #(select-keys % [:query :total-hits]) query-results)}
       {:queries-executed (count queries)
-       :dataset-ref (or dataset-ref (:dataset-ref inputs) (:dataset-ref skill-params))})))
+       :dataset-ref (or dataset-ref (:dataset-ref skill-params))})))
 
 ;; =============================================================================
 ;; Skill Registration

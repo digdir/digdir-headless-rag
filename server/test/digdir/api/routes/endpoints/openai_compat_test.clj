@@ -84,7 +84,7 @@
   (let [!captured (atom [])]
     (with-surface-stubs !captured
       (fn []
-        (mcp-tools/invoke-tool principal model-name {"query" "What changed?"} nil)))
+        (mcp-tools/invoke-tool principal model-name {"query" "What changed?" "tenant" "altinn-docs"} nil)))
     (first @!captured)))
 
 (defn- skill-params-via-openai [& [extra-body]]

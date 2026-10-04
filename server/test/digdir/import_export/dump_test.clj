@@ -216,8 +216,9 @@
                 :api-key/revoked false
                 :api-key/scopes [:query]}]
     (try
-      (is (= {:created 1 :skipped 0 :overwritten 0}
-             (api-key-entities/import-api-keys! config-conn main-conn [record] :skip)))
+      (is (= {:created 1 :skipped 0 :overwritten 0 :all-tenant-keys []}
+             (api-key-entities/import-api-keys! config-conn main-conn [record] :skip))
+          "the result also lists the all-tenant keys it brought in (none here)")
       (let [stored (d/pull @main-conn '[:api-key/key :api-key/key-digest]
                            [:api-key/id "legacy-import-key"])]
         (is (nil? (:api-key/key stored)))

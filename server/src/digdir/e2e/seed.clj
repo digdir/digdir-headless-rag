@@ -21,6 +21,7 @@
    self-contained: `server/e2e/.env` carries the values and both the
    dev server and MCPO read from it."
   (:require [clojure.string :as str]
+            [digdir.secrets :as secrets]
             [digdir.agents.db :as agents-db]
             [digdir.config.api-keys :as api-keys]
             [digdir.config.core :as config-core]
@@ -135,6 +136,13 @@
          :master-key (config-core/get-master-key)})
       tenant)))
 
+(defn- env-dataset-scope
+  "The deployment's dataset, `{:tenant :dataset-config-key}` from TENANT and
+   DATASET_CONFIG_KEY, or nil unless both are set."
+  []
+  (let [t (secrets/*env-lookup* "TENANT") k (secrets/*env-lookup* "DATASET_CONFIG_KEY")]
+    (when-not (or (str/blank? t) (str/blank? k)) {:tenant t :dataset-config-key k})))
+
 (defn seed!
   "Apply the seed against `conn`: agents + an API key with `api-key`
    as plaintext + (optional) Azure config from AZURE_OPENAI_* env
@@ -150,11 +158,20 @@
         _ (seed-e2e-fixture-agents! conn)
         agents-after (count (agents-db/list-enabled-agents @conn))
         key-existed? (key-already-stored? conn api-key)
+        ;; the tenant axis fails closed, so the
+        ;; seed key is NEVER scopeless-and-unmarked. With the deployment's
+        ;; TENANT/DATASET_CONFIG_KEY it is scoped to that dataset - the normal
+        ;; path; without them it is MARKED all-tenant, deliberately, because
+        ;; the e2e harness then names its tenants per request.
+        env-scope (env-dataset-scope)
         _ (when-not key-existed?
-            (api-keys/store-api-key
-              conn api-key "e2e-harness" "e2e-seed"
-              {:scopes #{:query}
-               :user-email "e2e@local"}))
+            (let [{:keys [api-key-id]} (api-keys/store-api-key
+                                        conn api-key "e2e-harness" "e2e-seed"
+                                        (cond-> {:scopes #{:query}
+                                                 :user-email "e2e@local"}
+                                          env-scope (assoc :dataset-scopes [env-scope])))]
+              (when-not env-scope
+                (api-keys/set-all-tenants! conn api-key-id true {:user-id "e2e-seed" :user-email "e2e@local"}))))
         tenant-registered (register-e2e-tenant! conn)
         azure-report (if tenant-registered
                        (seed-azure-config-from-env! conn tenant-registered)

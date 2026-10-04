@@ -378,7 +378,10 @@ paths:
             type: string
       requestBody:
         required: true
-        description: The tool's arguments. Open-ended; see the tool's own schema.
+        description: >-
+          The tool's arguments. Open-ended; see the tool's own schema. `tenant` is
+          required on every call; a call without it is refused with
+          `tenant_required`.
         content:
           application/json:
             schema:
@@ -744,6 +747,15 @@ paths:
           description: Optional comma-separated tags; conversations must include all listed tags
           schema:
             type: string
+        - name: tenant
+          in: query
+          required: true
+          description: >-
+            The tenant this request acts in. REQUIRED on every call, for every key:
+            a conversation is addressed by tenant and id together. A key with
+            no dataset scopes may name any tenant, but must name one.
+          schema:
+            type: string
         - name: X-User-Id
           in: header
           required: true
@@ -814,6 +826,15 @@ paths:
       description: Get a specific conversation with all its messages.
       operationId: getConversation
       parameters:
+        - name: tenant
+          in: query
+          required: true
+          description: >-
+            The tenant this request acts in. REQUIRED on every call, for every key:
+            a conversation is addressed by tenant and id together. A key with
+            no dataset scopes may name any tenant, but must name one.
+          schema:
+            type: string
         - name: include_diagnostics
           in: query
           required: false
@@ -842,6 +863,16 @@ paths:
       summary: Update Conversation
       description: Update a conversation (e.g., rename).
       operationId: updateConversation
+      parameters:
+        - name: tenant
+          in: query
+          required: true
+          description: >-
+            The tenant this request acts in. REQUIRED on every call, for every key:
+            a conversation is addressed by tenant and id together. A key with
+            no dataset scopes may name any tenant, but must name one.
+          schema:
+            type: string
       security:
         - ApiKeyAuth: []
       requestBody:
@@ -870,6 +901,16 @@ paths:
       summary: Delete Conversation
       description: Delete a conversation and all its messages.
       operationId: deleteConversation
+      parameters:
+        - name: tenant
+          in: query
+          required: true
+          description: >-
+            The tenant this request acts in. REQUIRED on every call, for every key:
+            a conversation is addressed by tenant and id together. A key with
+            no dataset scopes may name any tenant, but must name one.
+          schema:
+            type: string
       security:
         - ApiKeyAuth: []
       responses:
@@ -985,8 +1026,9 @@ paths:
         - API Keys
       summary: Rotate an API key
       description: >-
-        Issues a replacement key and returns the new plaintext **once**. Only
-        the operator who created the key may rotate it. Documented from
+        Issues a replacement key and returns the new plaintext **once**. Any
+        admin may rotate any key; its creator is attribution only.
+        Documented from
         `rotate-api-key-handler` in #369.
       operationId: rotateApiKey
       security:
@@ -1007,7 +1049,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: The key was created by a different operator.
+          description: The caller is not an admin
           content:
             application/json:
               schema:
@@ -1065,7 +1107,7 @@ paths:
       tags:
         - API Keys
       summary: List API Keys
-      description: List all API keys for the authenticated user.
+      description: List EVERY API key, for an admin. The console panel lists the same keys; a key's creator does not filter the list.
       operationId: listApiKeys
       security:
         - JwtAuth: []
@@ -1141,7 +1183,7 @@ paths:
       tags:
         - API Keys
       summary: Replace API Key Allowed Config Keys
-      description: Replace the config-management allowed config keys for an API key owned by the authenticated user.
+      description: Replace the config-management allowed config keys for an API key. Any admin may, on any key; the key's creator is attribution only.
       operationId: updateApiKeyAllowedConfigKeys
       security:
         - JwtAuth: []
@@ -1194,13 +1236,72 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Not authorized to update this key
+          description: The caller is not an admin
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /console-api/api-keys/{key-id}/all-tenants:
+    put:
+      tags:
+        - API Keys
+      summary: Set or Clear the All-Tenant Marker
+      description: >-
+        Set or clear an API key's explicit ALL-TENANT marker. A key
+        reaches only the tenants its grants name; a marked key reaches every
+        tenant. Any admin may set or clear it (not only the key's creator), and
+        every change is audited with the old and the new value. A key without an
+        access policy has nothing to mark (409). Rotating a key keeps the
+        marker, and a restore carries it and lists every marked key it brings in.
+      operationId: setApiKeyAllTenants
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: key-id
+          in: path
+          required: true
+          description: API key ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetApiKeyAllTenantsRequest'
+            example:
+              all-tenants: true
+      responses:
+        '200':
+          description: The marker is set or cleared
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetApiKeyAllTenantsResponse'
+              example:
+                api-key-id: "key_abc123"
+                all-tenants: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: The caller is not an admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The key has no access policy to mark
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /console-api/api-keys/{key-id}/revoke:
     post:
@@ -1232,7 +1333,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Not authorized to revoke this key
+          description: The caller is not an admin
           content:
             application/json:
               schema:
@@ -2129,7 +2230,14 @@ components:
 
     CreateConversationRequest:
       type: object
+      required:
+        - tenant
       properties:
+        tenant:
+          type: string
+          description: >-
+            The tenant the conversation belongs to. REQUIRED, for every key: a
+            conversation is addressed by tenant and id together.
         agent-id:
           type: string
           description: |
@@ -2533,6 +2641,30 @@ components:
           type: integer
           nullable: true
         revoked:
+          type: boolean
+        all-tenants:
+          type: boolean
+          description: |
+            the explicit all-tenant marker. True means the key reaches
+            EVERY tenant; false (the default) means only the tenants its grants
+            name. Set or cleared only through
+            PUT /console-api/api-keys/{key-id}/all-tenants.
+
+    SetApiKeyAllTenantsRequest:
+      type: object
+      required:
+        - all-tenants
+      properties:
+        all-tenants:
+          type: boolean
+          description: true marks the key all-tenant; false clears the marker.
+
+    SetApiKeyAllTenantsResponse:
+      type: object
+      properties:
+        api-key-id:
+          type: string
+        all-tenants:
           type: boolean
 
     CreateApiKeyResponse:

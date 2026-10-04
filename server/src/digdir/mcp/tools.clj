@@ -9,6 +9,7 @@
   (:require [clojure.string :as str]
             [clojure.walk :as walk]
             [digdir.agents.db :as agents-db]
+            [digdir.api.auth :as api-auth]
             [digdir.api.routes.endpoints.debug :as debug]
             [digdir.api.util :as api-util]
             [digdir.config.core :as config-core]
@@ -215,8 +216,14 @@
     "To continue a conversation, pass the `conversation_id` from the previous "
     "response back in the next call. Earlier turns are retained server-side and "
     "supplied to the model automatically; omit it to start fresh.\n\n"
-    "Scope a call with `tenant` and `dataset_config_key` when the API key or "
-    "agent does not already fix one.\n\n"
+    "Every call names its `tenant`: a conversation is addressed by tenant and id "
+    "together, and a call without one is refused (`tenant_required`). Add "
+    "`dataset_config_key` to choose a dataset within that tenant; without it, the "
+    "first one the key and agent may use there. A key with no dataset scopes has "
+    "none of its own, so it names `dataset_config_key` too (else "
+    "`dataset_not_authorized`), unless the agent, or the server default, supplies a "
+    "dataset in that tenant; an agent's declared scopes also limit which tenant may "
+    "be named.\n\n"
     "Errors: a result with `isError: true` carries a message you can act on - "
     "fix the arguments or choose another tool. A JSON-RPC error means the "
     "request could not be dispatched (-32602) or the server failed (-32603); "
@@ -397,10 +404,10 @@
                        "model automatically.")}
    "tenant"
    {"type" "string"
-    "description" "Dataset tenant to scope this call to. Optional when the API key or agent already fixes a scope."}
+    "description" "REQUIRED. The tenant this call acts in: a conversation is addressed by tenant and id together. A key with no dataset scopes must name one too, and must then also name `dataset_config_key` (it has no dataset of its own), unless the agent, or the server default, supplies a dataset in that tenant; an agent's declared scopes also limit which tenant may be named."}
    "dataset_config_key"
    {"type" "string"
-    "description" "Dataset configuration key to scope this call to. Optional, as for `tenant`."}
+    "description" "Dataset configuration key within `tenant`. Without it, the first dataset the key and agent may use in that tenant. A key with no dataset scopes names this too (else `dataset_not_authorized`), unless the agent, or the server default, supplies a dataset in that tenant; an agent's declared scopes also limit which tenant may be named."}
    "overrides"
    {"type" "object"
     "description" (str "Per-call overrides. Accepts `retrieve-filter-by`, `retrieve-auto-filter` "
@@ -413,9 +420,15 @@
 (defn- with-protocol-properties
   "Merge the protocol-level arguments into a tool's advertised input schema.
    Declared properties win, so a graph that names one of these itself keeps its
-   own description and type."
+   own description and type.
+
+   `tenant` is REQUIRED: a conversation is addressed by the pair (tenant,
+   conversation id), so every call names its tenant. It is advertised as
+   required because this schema is how a client learns what to send."
   [json-schema]
-  (update json-schema "properties" #(merge conversation-properties %)))
+  (-> json-schema
+      (update "properties" #(merge conversation-properties %))
+      (update "required" #(vec (distinct (conj (vec %) "tenant"))))))
 
 (defn- skill-graph-tool
   [agent skill-graph-id]
@@ -552,43 +565,56 @@
   [s]
   [(:tenant s) (:dataset-config-key s)])
 
+(defn effective-dataset-scopes
+  "The scopes a call may resolve among: the key's grant, narrowed by the agent's
+   declaration when it has one. A key marked all-tenant has no grant to
+   narrow: its scopes are the agent's declaration. Pure, and shared by
+   `pick-dataset-scope` and `conversation-call-arguments` so the two cannot
+   drift."
+  [agent principal]
+  (let [agent-scopes (vec (or (:allowed-dataset-scopes agent) []))
+        key-scopes (vec (or (:api-key/dataset-scopes principal) []))
+        key-granted (set (map scope-key key-scopes))]
+    (cond
+      (api-auth/all-tenants? principal) agent-scopes
+      (seq agent-scopes) (vec (filter #(contains? key-granted (scope-key %)) agent-scopes))
+      :else key-scopes)))
+
+(defn- authorized
+  "`{:scope scope}` when the key may act in `scope` (THE decision,
+   `digdir.api.auth/authorize-scope!`), else the MCP error for why not."
+  [principal scope]
+  (try
+    (api-auth/authorize-scope! principal {:dataset-ref scope})
+    {:scope scope}
+    (catch clojure.lang.ExceptionInfo e
+      (if (#{:tenant-not-granted :dataset-not-granted} (:reason (ex-data e)))
+        ;; ONE client-facing code for both reasons: MCP clients already
+        ;; handle `dataset_not_authorized`; the tenant-scope fix adds refusals, not codes.
+        {:error {:code "dataset_not_authorized"
+                 :message (str "API key is not allowed to access the requested dataset: "
+                               (:tenant scope) "/" (:dataset-config-key scope))}}
+        (throw e)))))
+
 (defn pick-dataset-scope
   "Pick the (tenant, dataset-config-key) for this call.
 
-   THE API KEY'S GRANT IS THE FLOOR (#464). A key's `:dataset-scopes`, when it
-   has any, bound every dataset this call can reach. An agent's
-   `:allowed-dataset-scopes` can only NARROW that further; it can never widen
-   it, and neither can an explicit `tenant` / `dataset_config_key` in tool
-   arguments.
-
-   That was not true before. The explicit-argument path was reached only when
-   the agent declared no scopes, and in that branch the arguments were accepted
-   WITHOUT being checked against the key's grant — so confinement depended on
-   the AGENT declaring scopes rather than on the KEY. All three shipped agents
-   declare none, so it was the default path, not a corner. The REST path
-   (`digdir.api.context/select-request-dataset-ref!`) never had the gap, and
-   this now mirrors its contract; `dataset-scope-parity-test` drives both from
-   one table so they cannot diverge again.
+   THE API KEY'S GRANT IS THE FLOOR, and since the tenant-scope fix it is decided in ONE
+   place, `digdir.api.auth/authorize-scope!`, for every scope this fn answers:
+   - the tenant axis FAILS CLOSED: a key with no granted tenant reaches none,
+     unless it carries the explicit all-tenant marker;
+   - an agent's `:allowed-dataset-scopes` can only NARROW the key's grant, never
+     widen it, and neither can an explicit `tenant` / `dataset_config_key` in
+     tool arguments.
 
    Resolution:
-     1. `effective` = the key's granted scopes, narrowed by the agent's
-        declaration when it has one.
-     2. An explicit scope in arguments must be a member of the key's grant, and
-        of the agent's declaration when it has one. Otherwise
-        `dataset_not_authorized`.
-     3. With no explicit scope, the first effective scope wins, else the
-        env-var default, else `no_dataset_scope`.
-
-   ⚠️ A key with NO `:dataset-scopes` is UNRESTRICTED here, deliberately and
-   unchanged. That is this surface's convention on every other axis — empty
-   `:agent-refs` reaches any agent (`resolve-agent`), empty `:skill-graphs` any
-   mode (`resolve-skill-graph-id`), empty `:allowed-config-keys` any config node
-   (`api.context/resolve-request-config-node!`) — and the env-var default below
-   exists to serve exactly that deployment. The REST path instead answers 401
-   for a scopeless key, so the two still differ THERE; closing that difference
-   would silently revoke MCP access from every key without scopes, which is a
-   policy decision with real blast radius rather than a bug fix. It is recorded
-   on #464 and deliberately not taken here.
+     1. An explicit scope in arguments must be authorized for the key, and be in
+        the agent's declaration when it has one. Otherwise
+        `tenant_not_granted` / `dataset_not_authorized`.
+     2. With no explicit scope, the first effective scope wins
+        (`effective-dataset-scopes`); else, for a key MARKED all-tenant only, the
+        env-var default (a single-deployment key); else `no_dataset_scope`. The
+        env default is never a grant.
 
    Returns `{:scope {...}}` on success or `{:error {...}}` on failure."
   [agent principal arguments]
@@ -596,48 +622,35 @@
         dataset_config_key (or (get arguments "dataset_config_key")
                                 (get arguments :dataset_config_key))
         agent-scopes (vec (or (:allowed-dataset-scopes agent) []))
-        key-scopes (vec (or (:api-key/dataset-scopes principal) []))
-        key-granted (set (map scope-key key-scopes))
-        ;; Empty grant = unrestricted on this axis; see the warning above.
-        key-restricted? (boolean (seq key-granted))
         arg-scope (when (and tenant dataset_config_key)
                     {:tenant tenant :dataset-config-key dataset_config_key})
-        ;; The floor, narrowed by the agent's declaration.
-        effective (cond
-                    (and (seq agent-scopes) key-restricted?)
-                    (vec (filter #(contains? key-granted (scope-key %)) agent-scopes))
-
-                    (seq agent-scopes) agent-scopes
-                    :else key-scopes)
+        effective (effective-dataset-scopes agent principal)
         effective-keys (set (map scope-key effective))]
     (cond
       arg-scope
-      (cond
-        ;; Checked FIRST and independently of the agent, because this is the
-        ;; check that was missing: the agent's declaration must not be what
-        ;; decides whether the key's grant is honoured.
-        (and key-restricted? (not (contains? key-granted (scope-key arg-scope))))
-        {:error {:code "dataset_not_authorized"
-                 :message (str "API key is not allowed to access the requested "
-                               "dataset: " tenant "/" dataset_config_key)}}
+      (let [{:keys [error] :as decided} (authorized principal arg-scope)]
+        (cond
+          ;; Checked FIRST and independently of the agent: the agent's
+          ;; declaration must not be what decides whether the key's grant is
+          ;; honoured.
+          error decided
 
-        (and (seq agent-scopes) (not (contains? effective-keys (scope-key arg-scope))))
-        {:error {:code "dataset_not_authorized"
-                 :message (str "Agent " (or (:id agent) "") " is not allowed to "
-                               "access the requested dataset: "
-                               tenant "/" dataset_config_key)}}
+          (and (seq agent-scopes) (not (contains? effective-keys (scope-key arg-scope))))
+          {:error {:code "dataset_not_authorized"
+                   :message (str "Agent " (or (:id agent) "") " is not allowed to "
+                                 "access the requested dataset: "
+                                 tenant "/" dataset_config_key)}}
 
-        :else {:scope arg-scope})
+          :else decided))
 
-      (seq effective) {:scope (first effective)}
-      (env-default-scope) {:scope (env-default-scope)}
+      (seq effective) (authorized principal (first effective))
+      (and (api-auth/all-tenants? principal) (env-default-scope)) {:scope (env-default-scope)}
 
       :else
       {:error {:code "no_dataset_scope"
                :message (str "No dataset scope available. Pass `tenant` and "
-                             "`dataset_config_key` in tool arguments, attach "
-                             "scopes to the API key, or set TENANT / "
-                             "DATASET_CONFIG_KEY env vars.")}})))
+                             "`dataset_config_key` in tool arguments, or attach "
+                             "scopes to the API key.")}})))
 
 (defn load-dataset-config
   "Resolve a `{:tenant :dataset-config-key}` scope into the materialized
@@ -649,6 +662,52 @@
   (when-let [config-conn (config-db/get-conn)]
     (let [master-key (config-core/get-master-key)]
       (config-db/get-dataset-by-ref @config-conn scope master-key))))
+
+(defn- named-argument [arguments k]
+  (let [v (or (get arguments k) (get arguments (keyword k)))]
+    (when-not (str/blank? (str v)) (str v))))
+
+(defn- conversation-call-arguments
+  "A conversation is addressed by the PAIR (tenant, conversation
+   id), never by id alone, so EVERY tool call names its tenant. There is no
+   default tenant. Since the tenant-scope fix a key reaches only the tenants it is granted; a
+   key with no grant reaches none unless it is MARKED all-tenant, and then it
+   may name any tenant, but it must name one.
+
+   With only `tenant` named, the dataset is the first one this call may reach
+   IN THAT TENANT (a dataset default within one customer, never a tenant
+   default); the env default counts only for a MARKED key, and only when it is
+   in that tenant. The
+   arguments returned name both, so `pick-dataset-scope` checks the grant
+   exactly as it does for an explicit pair.
+
+   Returns `{:arguments ...}` or `{:error ...}`."
+  [agent principal arguments]
+  (let [tenant (named-argument arguments "tenant")
+        dataset-config-key (named-argument arguments "dataset_config_key")]
+    (cond
+      (nil? tenant)
+      {:error {:code "tenant_required"
+               :message (str "Name the conversation's tenant with the `tenant` argument: "
+                             "a conversation is addressed by tenant and id, on every call.")}}
+
+      dataset-config-key
+      {:arguments arguments}
+
+      :else
+      (if-let [in-tenant (or (some #(when (= tenant (:tenant %)) (:dataset-config-key %))
+                                   (effective-dataset-scopes agent principal))
+                             ;; the env default serves only a key MARKED
+                             ;; all-tenant; it is never a grant.
+                             (when (api-auth/all-tenants? principal)
+                               (let [env (env-default-scope)]
+                                 (when (= tenant (:tenant env)) (:dataset-config-key env)))))]
+        {:arguments (-> arguments
+                        (dissoc :tenant :dataset_config_key)
+                        (assoc "tenant" tenant "dataset_config_key" in-tenant))}
+        {:error {:code "dataset_not_authorized"
+                 :message (str "No dataset this call may use in tenant " tenant
+                               "; name one with `dataset_config_key`.")}}))))
 
 (defn- history-from-conversation
   "Pull prior turns from Datahike into the `{:role :text}` shape that
@@ -830,11 +889,17 @@
                 (resolve-skill-graph-id agent skill-graph-short principal)]
             (if sg-err
               {:error sg-err}
-              (let [{scope-err :error :keys [scope]}
-                    (pick-dataset-scope agent principal arguments)]
+              (let [{args-err :error call-args :arguments}
+                    (conversation-call-arguments agent principal arguments)
+                    {scope-err :error :keys [scope]}
+                    (if args-err
+                      {:error args-err}
+                      (pick-dataset-scope agent principal call-args))]
                 (if scope-err
                   {:error scope-err}
                   (let [user-query (read-query-argument arguments)
+                        conversation-id (or (get arguments "conversation_id")
+                                            (get arguments :conversation_id))
                         raw-overrides (or (get arguments "overrides")
                                           (get arguments :overrides))
                         {overrides :overrides overrides-error :error} (read-overrides raw-overrides)]
@@ -846,10 +911,21 @@
                       overrides-error
                       {:error {:code "invalid_overrides" :message overrides-error}}
 
+                      ;; a conversation is continued ONLY within the
+                      ;; tenant of this call's scope, through the same lookup
+                      ;; the REST handlers use. An id outside it, or one that
+                      ;; does not exist, is refused BEFORE its history is read
+                      ;; or anything is appended; an unknown id used to be
+                      ;; upserted as a new, unbound conversation.
+                      (and conversation-id
+                           (nil? (data-db/conversation-in-tenant @(data-db/get-conn)
+                                                                 conversation-id
+                                                                 (:tenant scope))))
+                      {:error {:code "conversation_not_found"
+                               :message "Conversation not found."}}
+
                       :else
-                      (let [conversation-id (or (get arguments "conversation_id")
-                                                (get arguments :conversation_id))
-                            dataset-config (load-dataset-config scope)
+                      (let [dataset-config (load-dataset-config scope)
                             _ (when-not dataset-config
                                 (throw (ex-info "Dataset not found"
                                                 {:scope scope})))

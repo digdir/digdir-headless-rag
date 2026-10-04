@@ -127,6 +127,10 @@
     :db/valueType :db.type/string
     :db/cardinality :db.cardinality/many
     :db/doc "Tenant IDs that this policy has access to"}
+   {:db/ident :access-policy/all-tenants?
+    :db/valueType :db.type/boolean
+    :db/cardinality :db.cardinality/one
+    :db/doc "the key reaches EVERY tenant. Set only through the admin console; absent means false (the tenant axis fails closed)"}
    {:db/ident :access-policy/clients
     :db/valueType :db.type/string
     :db/cardinality :db.cardinality/many
@@ -1139,15 +1143,38 @@
         result))))
 
 #?(:clj
+   (defn- usable-tenant
+     "`tenant` when it can scope a query, else nil. Scoping on nil is not
+      scoping: a nil datalog `:in` is unbound and matches every row."
+     [tenant]
+     (when (and (string? tenant) (not (str/blank? tenant)))
+       tenant)))
+
+#?(:clj
+   (defn conversations-by-user-in-tenant
+     "A user's conversations WITHIN `tenant`. A nil or blank tenant
+      matches nothing, as in `conversation-in-tenant`."
+     [db tenant user-id tags]
+     (let [in-tenant (if-let [tenant (usable-tenant tenant)]
+                       (set (d/q '[:find [?e ...] :in $ ?t :where [?e :conversation/tenant ?t]]
+                                 db tenant))
+                       #{})
+           records (filter #(contains? in-tenant (:db/id %)) (regular-conversation-records db))
+           user-records (filter #(= user-id (:conversation/user-id %)) records)
+           filtered (filter-conversations-by-tags user-records tags)]
+       (sort-by #(or (:conversation/created %) 0) > filtered))))
+
+#?(:clj
    (defn conversations-by-user-paginated
-     "Returns paginated conversations for a specific user.
+     "Returns paginated conversations for a specific user, WITHIN `tenant`:
+     the list is scoped exactly as the lookup is.
       page-size: number of conversations per page
       page-index: 0-based page index
       Returns {:conversations [...] :total count :page-size n :page-index n}"
-     ([db user-id page-size page-index]
-      (conversations-by-user-paginated db user-id page-size page-index nil))
-     ([db user-id page-size page-index tags]
-      (let [all-convos (conversations-by-user db user-id tags)
+     ([db tenant user-id page-size page-index]
+      (conversations-by-user-paginated db tenant user-id page-size page-index nil))
+     ([db tenant user-id page-size page-index tags]
+      (let [all-convos (conversations-by-user-in-tenant db tenant user-id tags)
             total (count all-convos)
             start (* page-size page-index)
             end (min (+ start page-size) total)
@@ -1181,10 +1208,30 @@
                     [?e :conversation/id ?conv-id]]
                   db convo-id)
              (#(d/pull db conversation-pull-attrs %))
-             normalize-conversation-record))) 
+             normalize-conversation-record)))
 
 #?(:clj
-   (defn empty-threads-older-than-30-min 
+   (defn conversation-in-tenant
+     "The conversation with `convo-id`, ONLY if it belongs to `tenant`.
+      Every public door resolves a conversation through this: the REST handlers
+      and the MCP tool path. `conversation-by-id` stays global, for admin use.
+
+      A nil or blank tenant matches NOTHING. In datalog a nil `:in` is unbound
+      and would match every row, so it is refused before the query runs."
+     [db convo-id tenant]
+     (when-let [tenant (usable-tenant tenant)]
+       (when (some? convo-id)
+         (some-> (d/q '[:find ?e .
+                        :in $ ?conv-id ?tenant
+                        :where
+                        [?e :conversation/id ?conv-id]
+                        [?e :conversation/tenant ?tenant]]
+                      db convo-id tenant)
+                 (#(d/pull db conversation-pull-attrs %))
+                 normalize-conversation-record)))))
+
+#?(:clj
+   (defn empty-threads-older-than-30-min
      "Returns conversation IDs of all conversations that have exactly 2 messages (system + filter) and were created more than 30 minutes ago"
      [db]
      (let [thirty-min-ago (- (System/currentTimeMillis) (* 30 60 1000))]
@@ -1425,7 +1472,11 @@
        (d/transact conn retraction-ops))))
 
 #?(:clj
-   (defn transact-new-msg-thread [conn agent-id user-id & [filter-value]]
+   (defn transact-new-msg-thread
+     "`tenant` binds the conversation to the customer it belongs to: the
+      public API reaches a conversation only within the tenant a request names.
+      A thread created without one is reachable through no public door."
+     [conn agent-id user-id & [filter-value tenant]]
      (let [convo-id (nano-id)
            time-point (System/currentTimeMillis)
            system-message {:message/id (nano-id)
@@ -1445,13 +1496,14 @@
                       [system-message filter-message]
                       [system-message])
            tx-data
-           {:conversation/id convo-id
-            :conversation/user-id user-id
-            :conversation/agent-id agent-id
-            :conversation/topic "Ny tråd"
-            :conversation/created time-point
-            :conversation/system-prompt "sys-prompt"
-            :conversation/messages messages}
+           (cond-> {:conversation/id convo-id
+                    :conversation/user-id user-id
+                    :conversation/agent-id agent-id
+                    :conversation/topic "Ny tråd"
+                    :conversation/created time-point
+                    :conversation/system-prompt "sys-prompt"
+                    :conversation/messages messages}
+             tenant (assoc :conversation/tenant tenant))
            _ (prn "transact-new-msg-thread called" )]
        (d/transact conn [tx-data])
        {:conversation-id convo-id})))

@@ -11,7 +11,6 @@
             #?(:clj [digdir.skills.init :as skills-init])
             #?(:clj [digdir.agents.db :as agents-db])
             #?(:clj [digdir.config.db :as config-db])
-            #?(:clj [digdir.config.permissions :as perms])
             #?(:clj [digdir.config.ui.common :as common])))
 
 #?(:clj
@@ -175,7 +174,7 @@
   "Statuses a reseed can change. Not :narrowed, whose graphs are unregistered."
   #{:stale :diverged :unseeded})
 
-(e/defn ReseedButton [row is-admin user-id !row-err]
+(e/defn ReseedButton [row is-admin !row-err]
   (e/client
    (let [status (:status row)
          blocked (cond
@@ -200,10 +199,10 @@
                                          "This overwrites name, description, instructions, "
                                          "guardrails, enabled, skill params, dataset scopes and "
                                          "allowed graphs on this agent.")))
-                                  (reset! !row-err (:error (e/server (reseed-agent! user-id (:id row))))))
+                                  (reset! !row-err (:error (e/server (reseed-agent! (:user/id e/http-request) (:id row))))))
                          (tok))))))))))
 
-(e/defn AgentRow [row is-admin user-id !editing]
+(e/defn AgentRow [row is-admin !editing]
   (e/client
    (let [stored (:stored row)
          declared (:declared row)
@@ -236,7 +235,7 @@
          (dom/div
           (dom/props {:style {:font-size "0.75rem" :color "#991b1b" :margin-top "0.25rem"}})
           (dom/text row-err)))
-       (ReseedButton row is-admin user-id !row-err)
+       (ReseedButton row is-admin !row-err)
        (dom/div
         (dom/props {:style {:display "flex" :gap "0.5rem" :margin-top "0.25rem"}})
         (ks/Button (cond-> {:data-size "sm" :data-variant "tertiary"}
@@ -273,7 +272,7 @@
                                            "Conversations that used this agent keep its id and "
                                            "will no longer resolve to an agent. This cannot be "
                                            "undone.")))
-                                    (reset! !row-err (:error (e/server (delete-agent! user-id (:id row))))))
+                                    (reset! !row-err (:error (e/server (delete-agent! (:user/id e/http-request) (:id row))))))
                            (tok))))))))))))
 
 (e/defn Field [label value on-input & [{:keys [disabled placeholder multiline]}]]
@@ -317,7 +316,7 @@
        (e/for [o (e/diff-by identity ordered)]
          (dom/option (dom/props {:value o}) (dom/text (if (= o "") "—" o)))))))))
 
-(e/defn AgentForm [editing is-admin user-id graphs catalogue !editing]
+(e/defn AgentForm [editing is-admin graphs catalogue !editing]
   (e/client
    (let [row (:row editing)
          mode (:mode editing)
@@ -435,7 +434,7 @@
                      (let [[tok _] (e/Token (dom/On "click" identity nil))]
                        (when tok
                          (case (let [res (e/server
-                                          (save-agent! user-id mode (:id row)
+                                          (save-agent! (:user/id e/http-request) mode (:id row)
                                                        {:id id-v :name name-v :description desc-v
                                                         :instructions instr-v
                                                         :allowed-skill-graphs (vec allowed-v)
@@ -461,13 +460,13 @@
          err (e/watch !err)
          graphs (e/server (available-graphs))
          catalogue (e/server (skill-param-catalogue))
-         user-id (e/server (:user/id e/http-request))
          ;; e/watch, not deref: the table must redraw after a reseed writes.
          rows (e/server (if-let [conn (config-db/get-conn)]
                           (agents-db/drift-report (e/watch conn))
                           []))
-         is-admin (e/server (let [conn (config-db/get-conn)]
-                              (boolean (and conn (perms/is-admin? @conn user-id)))))
+         is-admin (e/server (let [actor (:user/id e/http-request)
+                                    conn (config-db/get-conn)]
+                              (boolean (and conn (common/config-ui-admin? @conn actor)))))
          needing (count (remove #(#{:matches-code :custom} (:status %)) rows))]
      (dom/div
       (dom/props {:style {:padding "1rem" :max-width "100%"}})
@@ -483,7 +482,7 @@
                       " An agent can only run a skill graph listed on its row, "
                       "regardless of what the code declares or an API key grants.")))
       (e/for [f (e/diff-by :mode (if editing [editing] []))]
-        (AgentForm f is-admin user-id graphs catalogue !editing))
+        (AgentForm f is-admin graphs catalogue !editing))
       (dom/div
        (dom/props {:style {:display "flex" :gap "0.5rem" :margin-bottom "1rem"}})
        (ks/Button (cond-> {:data-size "sm" :data-variant "primary"}
@@ -511,7 +510,7 @@
                                           "enabled, skill params, dataset scopes and allowed graphs on "
                                           "every agent that has a code definition, not only the ones "
                                           "listed as differing.")))
-                                   (reset! !err (:error (e/server (reseed-all-agents! user-id)))))
+                                   (reset! !err (:error (e/server (reseed-all-agents! (:user/id e/http-request))))))
                           (tok)))))))
       (when err
         (dom/div
@@ -531,4 +530,4 @@
            (dom/th (dom/props {:style header-style}) (dom/text "Allowed graphs"))))
          (dom/tbody
           (e/for [row (e/diff-by :id rows)]
-            (AgentRow row is-admin user-id !editing)))))))))
+            (AgentRow row is-admin !editing)))))))))

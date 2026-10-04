@@ -51,7 +51,6 @@
     {:id :fetch
      :skill :builtin/enrichment-fetch-chunk-context
      :inputs {:chunk-id :$chunk-id
-              :tenant :$tenant
               :chunks-collection :$chunks-collection
               :docs-collection :$docs-collection}}
     {:id :propose

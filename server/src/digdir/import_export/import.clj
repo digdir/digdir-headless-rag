@@ -17,7 +17,10 @@
                                         ((phase-key entity) config-conn main-conn normalized opts on-conflict)))
                                {}
                                registry/ordered-system-entities)]
-    (report/build-system-import-result mode on-conflict entity-results)))
+    ;; a restore that brings in an ALL-TENANT key lists it,
+    ;; at the top of the result, in the preview (would write) and the apply.
+    (assoc (report/build-system-import-result mode on-conflict entity-results)
+           :all-tenant-keys (vec (get-in entity-results [:api-keys :all-tenant-keys])))))
 
 (defn- normalized-system-export
   [data]
