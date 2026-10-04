@@ -1,0 +1,39 @@
+;; Review re-check of the write-report change. POST-READ cases: written AFTER reading write_sites_test.clj @ 44df3c16.
+;; NOT pre-registered. Each targets a specific line of the new census.
+[
+ ;; logging-fns includes taoensso.telemere/trace! - but trace! RETURNS its form's value (like spy!)
+ {:id :P01-telemere-trace-returns :expect :green
+  :src "(defn f [cfg] (t/trace! (storage/store-chunks! cfg \"c\" [])))"}
+ ;; deref is visited as a BODY (visit-body): with a timeout, the LAST arg is the timeout value,
+ ;; so the future (the real value) is visited as a statement
+ {:id :P02-deref-with-timeout-returned :expect :green
+  :src "(defn f [cfg] (deref (future (storage/store-chunks! cfg \"c\" [])) 60000 nil))"}
+ {:id :P03-deref-with-timeout-read :expect :green
+  :src "(defn f [cfg] (let [r (deref (future (storage/store-chunks! cfg \"c\" [])) 60000 nil)] (:written r)))"}
+ ;; core-name is computed for ANY unqualified head, so a name that is NOT clojure.core's println
+ {:id :P04-local-fn-named-println :expect :green
+  :src "(defn f [cfg] (let [println (fn [r] (when (seq (:rejected r)) (throw (ex-info \"refused\" r))))] (println (storage/store-chunks! cfg \"c\" [])) :x))"}
+ {:id :P05-ns-own-print-refer-clojure-exclude :expect :green
+  :ns-opts "(:refer-clojure :exclude [print])"
+  :src "(def reports (atom []))
+        (defn print [r] (swap! reports conj r))
+        (defn f [cfg] (print (storage/store-chunks! cfg \"c\" [])) :x)"}
+ ;; doto's rest forms are calls ON the value: a validating doto consumes it
+ {:id :P06-doto-validate-statement :expect :green
+  :src "(defn check-written! [r] (when (seq (:rejected r)) (throw (ex-info \"refused\" r))))
+        (defn f [cfg] (doto (storage/store-chunks! cfg \"c\" []) check-written!) :x)"}
+ {:id :P07-doto-store-statement :expect :green
+  :src "(def acc (atom []))
+        (defn f [cfg] (doto (storage/store-chunks! cfg \"c\" []) (->> (swap! acc conj))) :x)"}
+ ;; a let whose local is RETURNED takes the let's context - even when the body READ the local first
+ {:id :P08-doseq-check-then-trailing-local :expect :green
+  :src "(defn f [cfg batches] (doseq [b batches] (let [r (storage/store-chunks! cfg \"c\" b)] (when (seq (:rejected r)) (throw (ex-info \"refused\" r))) r)) :done)"}
+ {:id :P09-statement-let-stores-then-returns :expect :green
+  :src "(def acc (atom []))
+        (defn f [cfg] (let [r (storage/store-chunks! cfg \"c\" [])] (swap! acc conj r) r) :done)"}
+ ;; the other direction: and's non-last argument is only truth-tested (a report is never falsy)
+ {:id :P10-let-local-and-non-last :expect :red
+  :src "(defn f [cfg] (let [r (storage/store-chunks! cfg \"c\" [])] (and r :stored)))"}
+ {:id :P11-when-test-only :expect :red :note "PRE-EXISTING rule: a when-test is 'consumed'"
+  :src "(defn f [cfg] (when (storage/store-chunks! cfg \"c\" []) :stored))"}
+]

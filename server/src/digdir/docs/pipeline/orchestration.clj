@@ -7,10 +7,10 @@
    - Parallel document storage with rate limiting
    - Complete pipeline materialization"
   (:require [missionary.core :as m]
-            [net.cgrand.xforms.rfs :as rfs]
             [medley.core :as y]
             [taoensso.telemere :as t]
             [digdir.docs.pipeline.core :as core]
+            [digdir.docs.pipeline.storage :as storage]
             [digdir.docs.pipeline.telemetry :as telemetry]))
 
 ;; ============================================================================
@@ -136,7 +136,8 @@
    2. Filters and dedupes
    3. Prepares documents (parallel)
    4. Stores documents (parallel)
-   5. Returns the last stored document"
+   5. Returns what the run wrote: `storage/merge-write-reports` over every
+      stored document's report"
   [config source-entries-t filter-entries-fn prepare-doc-t store-doc-t pipeline-name]
   (m/sp
     (t/event! (keyword (name pipeline-name) "starting")
@@ -152,7 +153,7 @@
           prepared-flow (mk-prepare-documents-f config prepare-doc-t filtered-flow pipeline-name)
           stored-flow (mk-store-documents-f config store-doc-t prepared-flow)]
 
-      (m/? (m/reduce rfs/last stored-flow)))))
+      (m/? (m/reduce storage/merge-write-reports stored-flow)))))
 
 ;; ============================================================================
 ;; Job Management

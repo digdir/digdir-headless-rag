@@ -5,6 +5,7 @@
             [digdir.pipeline.core :as pipeline]
             [digdir.pipeline.collections :as collections]
             [digdir.pipeline.executor :as executor]
+            [digdir.docs.pipeline.storage :as ingest-storage]
             [digdir.config.db :as config-db]
             [digdir.setup.config :as setup-config]
             [digdir.config.ops.bootstrap :as config-bootstrap]
@@ -461,6 +462,104 @@
                (:chunks-collection (pipeline/get-dataset @conn "digdir" "default"
                                                          "altinn-docs" test-master-key)))
             "the name visible at :completed must be the final one")))))
+
+;; =============================================================================
+;; Collection names are recorded only for collections a run WROTE
+;; =============================================================================
+;;
+;; ⚠️ THE DOOR THESE CLOSE. The executor used to call the STORING arity of
+;; `get-or-generate-collection-names` before dispatching the loader. With nothing
+;; stored yet, that persisted names from `pipeline-collection-names`, which no
+;; loader writes: the loader names by `storage/coll-ids` over the loader config.
+;; So a first run that then failed left three stored names naming no
+;; collection, and the all-present gate kept returning them until a run
+;; completed. Measured on the demo: `demo_norquad_*_d4aab9b4a5ea`, the names the
+;; stale collection-names comment in the executor records.
+;;
+;; The loader is the only stub. The config comes from `create-pipeline!` and
+;; `get-dataset`, the real producer, because a hand-built map is exactly where
+;; two naming functions can be made to agree.
+
+(defn- stored-collection-names
+  "The persisted collection names, in docs/chunks/phrases order; nil where unset."
+  [db]
+  (mapv (pipeline/get-dataset db "digdir" "default" "altinn-docs" test-master-key)
+        [:docs-collection :chunks-collection :phrases-collection]))
+
+(defn- create-folder-pipeline! [conn]
+  (create-test-dataset! conn "public-docs" "Public Docs")
+  (pipeline/create-pipeline! conn
+                             {:tenant "digdir" :tenant-config-key "default"
+                              :dataset-id "public-docs" :pipeline-name "altinn-docs"
+                              :properties folder-materialization-properties
+                              :master-key test-master-key}))
+
+(defn- run-with-loader!
+  "Run the real executor with `loader` in place of the dispatched loader. Returns
+   what the dispatch saw: the stored names AT DISPATCH and the loader config. The
+   run's own exception is swallowed; its execution status says what happened."
+  [conn loader]
+  (let [seen (atom nil)]
+    (with-redefs [executor/dispatch-to-loader
+                  (fn [_ loader-config]
+                    (reset! seen {:stored-at-dispatch (stored-collection-names @conn)
+                                  :loader-config loader-config})
+                    (loader loader-config))]
+      (try
+        (m/? (executor/execute-pipeline! conn "digdir" "default" "altinn-docs"
+                                         test-master-key "test-user"))
+        (catch Exception _ nil)))
+    @seen))
+
+(defn- latest-status [db]
+  (:pipeline-execution/status
+   (first (executor/list-executions db "digdir:default:altinn-docs"))))
+
+(defn- failing-loader [_] (m/sp (throw (ex-info "loader failed" {}))))
+(defn- succeeding-loader [_] (m/sp nil))
+
+(deftest test-a-failed-first-run-records-no-collection-names
+  (let [conn (db/get-conn)]
+    (create-folder-pipeline! conn)
+    (is (= [nil nil nil] (stored-collection-names @conn))
+        "PREMISE: a fresh dataset has no collection names")
+    (let [seen (run-with-loader! conn failing-loader)]
+      (is (some? seen) "PREMISE: the run reached the loader")
+      (is (= :failed (latest-status @conn)) "PREMISE: the run failed")
+      ;; Asserted at dispatch as well as after, because a process killed mid-run
+      ;; never reaches a catch: names written up front and undone on failure
+      ;; would still be left behind by a kill.
+      (is (= [nil nil nil] (:stored-at-dispatch seen))
+          "names were persisted BEFORE the loader ran, for collections it has not written")
+      (is (= [nil nil nil] (stored-collection-names @conn))
+          "a failed first run left collection names that no run wrote"))))
+
+(deftest test-a-successful-run-records-exactly-the-names-the-loader-writes
+  ;; The positive control for the test above, and exact where
+  ;; `test-collection-names-are-durable-before-the-run-is-marked-completed` checks
+  ;; only a prefix: every naming function here shares the prefix.
+  (let [conn (db/get-conn)]
+    (create-folder-pipeline! conn)
+    (let [seen (run-with-loader! conn succeeding-loader)]
+      (is (= :completed (latest-status @conn)) "PREMISE: the run completed")
+      (is (= (ingest-storage/coll-ids (:loader-config seen))
+             (stored-collection-names @conn))
+          "the recorded names are not the names the loader writes to"))))
+
+(deftest test-a-failed-run-keeps-the-names-a-previous-run-recorded
+  ;; A later failure must neither clear nor replace what a completed run
+  ;; recorded: those are the only collections known to exist.
+  (let [conn (db/get-conn)]
+    (create-folder-pipeline! conn)
+    (run-with-loader! conn succeeding-loader)
+    (let [recorded (stored-collection-names @conn)]
+      (is (every? some? recorded) "PREMISE: the first run recorded three names")
+      (let [seen (run-with-loader! conn failing-loader)]
+        (is (= :failed (latest-status @conn)) "PREMISE: the second run failed")
+        (is (= recorded (:stored-at-dispatch seen))
+            "the recorded names were replaced before the loader ran")
+        (is (= recorded (stored-collection-names @conn))
+            "a failed run replaced the names a completed run had recorded")))))
 
 ;; =============================================================================
 ;; #509 — two conflated identities, reachable only with a SECOND dataset

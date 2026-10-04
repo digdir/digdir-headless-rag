@@ -10,7 +10,7 @@
             [clojure.edn :as edn]
             [clojure.data.json :as json]
             [net.cgrand.xforms.io :as xfio]
-            [net.cgrand.xforms.rfs :as rfs]
+            [digdir.docs.pipeline.storage :as storage]
             [missionary.core :as m]
             [clojure.java.io :as jio]
             [digdir.docs.file-fetch :as file-fetch]
@@ -530,20 +530,26 @@
                                               :doc_num (:doc_num doc)}))
                                          (:chunks doc))
                          current-phrase-ids (mapv :id phrases)]
+                     ;; Each write returns what it CONFIRMED. The bulk
+                     ;; upserts answer per row and do not throw on a refused
+                     ;; row, so the report is the only place a refusal shows.
                      (t/event! :document-loading/upserting-to-documents-typesense-collection)
-                     (ts/upsert-document! (ts kview) documents-coll (prepare-doc doc))
-                     (t/event! :document-loading/upserting-to-chunks-typesense-collection
-                               {:data {:chunk-count (count chunks)}})
-                     (ts/upsert-documents! (ts kview) chunks-coll chunks)
-                     (delete-orphans! kview chunks-coll (:doc_num doc) current-chunk-ids)
-                     (t/event! :document-loading/upserting-to-phrases-typesense-collection)
-                     (ts/upsert-documents! (ts kview) phrases-coll phrases)
-                     (delete-orphans! kview phrases-coll (:doc_num doc) current-phrase-ids)
-                     (say "Stored")
-                     (t/event! :document-loading/document-upserted)))
+                     (let [doc-write (storage/upsert-row! (ts kview) documents-coll (prepare-doc doc))
+                           _ (t/event! :document-loading/upserting-to-chunks-typesense-collection
+                                       {:data {:chunk-count (count chunks)}})
+                           chunks-write (storage/upsert-rows! (ts kview) chunks-coll chunks)
+                           _ (delete-orphans! kview chunks-coll (:doc_num doc) current-chunk-ids)
+                           _ (t/event! :document-loading/upserting-to-phrases-typesense-collection)
+                           phrases-write (storage/upsert-rows! (ts kview) phrases-coll phrases)
+                           _ (delete-orphans! kview phrases-coll (:doc_num doc) current-phrase-ids)]
+                       (say "Stored")
+                       (t/event! :document-loading/document-upserted)
+                       (storage/document-report (:id doc) [doc-write chunks-write phrases-write]))))
 
       :dev/duratom (fn [doc]
-                     (swap! !duratom-store update documents-coll (fnil conj #{}) doc)))))
+                     (swap! !duratom-store update documents-coll (fnil conj #{}) doc)
+                     (storage/document-report
+                      (:id doc) [(storage/write-report documents-coll [doc] [{:success true}])])))))
 
 (defn mk-store-document-in-store-t [store kview doc]
   (m/sp
@@ -1140,9 +1146,7 @@
       (t/event! :document-loading/retrying-failed-documents {:data {:doc-ids failed-ids}})
       (reset! !failed-documents [])
       (m/? (m/reduce
-            (fn
-              ([] nil)
-              ([_ _] nil))
+            storage/merge-write-reports
             (let [documents-by-ids (partial kudos/documents-by-ids (kudos/profile kview))]
               (mk-store-documents-f
                kview
@@ -1167,16 +1171,20 @@
           ;;                                (extract-ns-from-map kview "chunks")))) 
 
           (m/? (m/via m/blk (create-stores kview)))
-          (m/?
-           (m/reduce
-            rfs/last
-            (->> (let [id-docs (documents-by-ids (:documents/first-import-ids kview))
-                       filtered-docs (m/buffer 1337 (mk-filter-documents-f kview (documents kview)))
-                       docs (if (seq (:documents/types kview))
-                              (concat-flows id-docs filtered-docs)
-                              id-docs)]
-                   (mk-store-documents-f kview (m/buffer 10000 (mk-prepare-documents-f kview docs)))))))
-          (t/event! :document-loading/done))))
+          ;; The task returns what the run WROTE, and returns it AFTER
+          ;; the done event: the event used to be the last form, so the task's
+          ;; value was the telemetry call's.
+          (let [written (m/?
+                         (m/reduce
+                          storage/merge-write-reports
+                          (->> (let [id-docs (documents-by-ids (:documents/first-import-ids kview))
+                                     filtered-docs (m/buffer 1337 (mk-filter-documents-f kview (documents kview)))
+                                     docs (if (seq (:documents/types kview))
+                                            (concat-flows id-docs filtered-docs)
+                                            id-docs)]
+                                 (mk-store-documents-f kview (m/buffer 10000 (mk-prepare-documents-f kview docs)))))))]
+            (t/event! :document-loading/done)
+            written))))
 
 (comment
   (def prepared-docs (m/? (m/reduce conj (mk-prepare-documents-f kview (m/eduction (take 7)  (kudos/documents (kudos/profile kview) kview))))))
@@ -1283,7 +1291,7 @@ REPLACE_ME
       (m/? (m/via m/blk (create-stores kview)))
       (m/?
        (m/reduce
-        rfs/last
+        storage/merge-write-reports
         (mk-store-documents-f
          kview
          (mk-prepare-documents-f

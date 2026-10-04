@@ -131,23 +131,137 @@
     ids))
 
 ;; ============================================================================
+;; Write Reports: a write returns what it actually wrote
+;; ============================================================================
+
+(def ^:private max-rejected-sample
+  "How many refused rows a run's report names. The COUNT is always exact (the
+   per-collection :sent minus :written); only the named examples are capped, so a
+   run that refuses every phrase does not carry every phrase in its report."
+  20)
+
+(defn write-report
+  "What one Typesense write to `coll` actually did, read from its own response:
+
+     {:collection coll :sent n :written n :rejected [{:id .. :error ..}]}
+
+   A bulk import (`ts/upsert-documents!` and its siblings) answers HTTP 200 with
+   ONE RESULT PER ROW, in the order the rows were sent, and does NOT throw when a
+   row is refused: `{:success false :error ...}` is an ordinary element of an
+   ordinary return value. Every ingest write site used to drop that vector, so a
+   refused row left no error, no count and no signal.
+
+   `:written` counts the rows the response CONFIRMS. A row it does not confirm -
+   refused, or with no result because the response is shorter than what was
+   sent - is not written, and is named in `:rejected` by the id that was sent.
+
+   A refusal is also signalled (`:pipeline/rows-rejected`). That line is for a
+   person reading logs; the guard is the return value."
+  [coll rows response]
+  (let [rows (vec rows)
+        results (if (sequential? response) (vec response) [])
+        rejected (vec (for [[i row] (map-indexed vector rows)
+                            :let [result (get results i)]
+                            :when (not (true? (:success result)))]
+                        {:id (:id row)
+                         :error (if result
+                                  (:error result)
+                                  "no result for this row in Typesense's response")}))]
+    (when (seq rejected)
+      (t/event! :pipeline/rows-rejected
+                {:level :error
+                 :data {:collection coll
+                        :sent (count rows)
+                        :rejected-count (count rejected)
+                        :first-rejected (vec (take 5 rejected))}}))
+    {:collection coll
+     :sent (count rows)
+     :written (- (count rows) (count rejected))
+     :rejected rejected}))
+
+(defn upsert-rows!
+  "Bulk-upsert `rows` into `coll` and return its `write-report`."
+  [settings coll rows]
+  (write-report coll rows (ts/upsert-documents! settings coll rows)))
+
+(defn upsert-row!
+  "Upsert one `row` into `coll` and return its `write-report`.
+
+   The single-document endpoint, unlike the bulk one, THROWS on a refusal
+   (`typesense.client/upsert-document!` maps every non-2xx to an ex-info), so a
+   return is the confirmation, and it is reported in the bulk shape."
+  [settings coll row]
+  (ts/upsert-document! settings coll row)
+  (write-report coll [row] [{:success true}]))
+
+(defn document-report
+  "What storing one document wrote: `{:document-id id :writes [write-report ...]}`,
+   one write-report per collection written."
+  [doc-id writes]
+  {:document-id doc-id
+   :writes (vec writes)})
+
+(defn- add-write [run {:keys [collection sent written rejected] :as write}]
+  (if (and (string? collection) (int? sent) (int? written))
+    (-> run
+        (update-in [:collections collection :sent] (fnil + 0) sent)
+        (update-in [:collections collection :written] (fnil + 0) written)
+        (update :rejected-sample
+                (fn [sample]
+                  (into sample
+                        (comp (map #(assoc % :collection collection))
+                              (take (max 0 (- max-rejected-sample (count sample)))))
+                        rejected))))
+    (do (t/event! :pipeline/unreported-write {:level :warn :data {:write (pr-str write)}})
+        (update run :unreported inc))))
+
+(defn merge-write-reports
+  "Reducing function over a store flow: folds each stored document's report into
+   what the whole run wrote.
+
+     {:documents n                                  ; documents that reached the store step
+      :collections {coll {:sent n :written n}}      ; per collection, exact
+      :rejected-sample [{:collection .. :id .. :error ..}]   ; named, capped
+      :unreported n}                                ; values that were not reports (see below)
+
+   A flow element is one document's `document-report`, or - for the kudos loader,
+   which stores each document in every one of its `:stores` - a vector of them.
+   Anything that is not a report is COUNTED as `:unreported`, never read as a
+   write: a store that does not say what it wrote has not said it wrote anything.
+   The count is of VALUES, not of store results: a sequential element is read as
+   one value per item, so a raw 2-row vector counts 2, and so does each item of a
+   `:writes` that is not a sequence of write-reports. A `{:writes nil}` report is
+   a document that wrote nothing.
+
+   This replaces `rfs/last`, which kept the last document's return value - and
+   before the phrases-reference tripwire that value was a telemetry call's, so it said nothing at all."
+  ([] {:documents 0 :collections {} :rejected-sample [] :unreported 0})
+  ([run stored]
+   (reduce (fn [run doc-report]
+             (if (and (map? doc-report) (contains? doc-report :writes))
+               (reduce add-write run (:writes doc-report))
+               (do (t/event! :pipeline/unreported-write {:level :warn :data {:stored (pr-str doc-report)}})
+                   (update run :unreported inc))))
+           (update run :documents inc)
+           (if (sequential? stored) stored [stored]))))
+
+;; ============================================================================
 ;; Document Storage
 ;; ============================================================================
 
 (defn upsert-document!
-  "Upserts a single document into the collection.
-   Returns the document on success."
+  "Upserts a single document into the collection and returns its `write-report`."
   [config coll-name doc]
   (t/event! :pipeline/upserting-document {:data {:id (:id doc)}})
-  (ts/upsert-document! (ts config) coll-name doc))
+  (upsert-row! (ts config) coll-name doc))
 
 (defn upsert-documents!
-  "Upserts multiple documents into the collection.
-   Returns the results on success."
+  "Upserts multiple documents into the collection and returns their `write-report`."
   [config coll-name docs]
-  (when (seq docs)
-    (t/event! :pipeline/upserting-documents {:data {:count (count docs)}})
-    (ts/upsert-documents! (ts config) coll-name docs)))
+  (if (seq docs)
+    (do (t/event! :pipeline/upserting-documents {:data {:count (count docs)}})
+        (upsert-rows! (ts config) coll-name docs))
+    (write-report coll-name [] [])))
 
 ;; ============================================================================
 ;; Chunk Storage
@@ -184,14 +298,16 @@
     (not (:id chunk)) (assoc :id (:chunk_id chunk))))
 
 (defn store-chunks!
-  "Stores chunks for a document into the chunks collection.
+  "Stores chunks for a document into the chunks collection and returns the
+   `write-report` (an empty report when there are no chunks: nothing is sent).
    Enforces `:id := :chunk_id` so upsert is keyed correctly even if
    the upstream prepare-fn omitted the field."
   [config chunks-coll chunks]
-  (when (seq chunks)
+  (if (seq chunks)
     (let [chunks-with-ids (mapv ensure-chunk-id chunks)]
       (t/event! :pipeline/upserting-chunks {:data {:count (count chunks-with-ids)}})
-      (ts/upsert-documents! (ts config) chunks-coll chunks-with-ids))))
+      (upsert-rows! (ts config) chunks-coll chunks-with-ids))
+    (write-report chunks-coll [] [])))
 
 (defn- ts-id-list
   "Render a seq of alphanumeric IDs as a Typesense filter list:
@@ -263,22 +379,24 @@
                 (str (:chunk_id phrase) "|" (:search_phrase phrase))))))
 
 (defn store-phrases!
-  "Stores search phrases for a document into the phrases collection.
+  "Stores search phrases for a document into the phrases collection and returns
+   the `write-report` (an empty report when there are no phrases: nothing is sent).
    Enforces a deterministic `:id` per (chunk_id, search_phrase) pair
    so upsert is keyed correctly even if the upstream caller omitted
    the field."
   [config phrases-coll phrases doc-id]
   (t/event! :pipeline/phrase-count {:data {:count (count phrases) :doc-id doc-id}})
-  (when (seq phrases)
+  (if (seq phrases)
     (let [phrases-with-ids (mapv ensure-phrase-id phrases)]
       (try
-        (ts/upsert-documents! (ts config) phrases-coll phrases-with-ids)
+        (upsert-rows! (ts config) phrases-coll phrases-with-ids)
         (catch Exception e
           (t/error! {:id :pipeline/upsert-phrases-error
                      :msg ["Failed to upsert phrases" "doc:" doc-id "count:" (count phrases-with-ids)]}
                     e)
           (t/log! ["Sample phrases:" (take 3 phrases-with-ids)])
-          (throw e))))))
+          (throw e))))
+    (write-report phrases-coll [] [])))
 
 (defn delete-orphan-phrases!
   "Delete phrases for `doc-num` whose Typesense `:id` is NOT in
@@ -328,33 +446,36 @@
    upsert and delete is sub-second per doc; during that window a query
    may see both revisions of one doc's chunks.
 
-   Returns nil on success, throws on error."
+   Returns the `document-report`: one `write-report` per collection, saying
+   what each write CONFIRMED. Throws on error, as before; a row Typesense
+   refuses is not an error it raises, which is why the report exists."
   [config doc prepare-doc-fn prepare-chunks-fn]
   (let [[docs-coll chunks-coll phrases-coll] (coll-ids config)
         doc-num (:doc_num doc)]
     (try
-      ;; Store document
-      (upsert-document! config docs-coll (prepare-doc-fn config (assoc doc :total_chunks (count (:chunks doc)))))
+      (let [;; Store document
+            doc-write (upsert-document! config docs-coll (prepare-doc-fn config (assoc doc :total_chunks (count (:chunks doc)))))
 
-      ;; Store chunks + delete orphan chunks for this doc.
-      ;; Apply ensure-chunk-id to the prepared chunks BEFORE both
-      ;; storage and keep-set extraction so the deleted-orphans
-      ;; filter exactly matches the upserted :id values, regardless
-      ;; of whether the upstream prepare-fn included :id.
-      (let [prepared-chunks (mapv ensure-chunk-id (prepare-chunks-fn (:chunks doc)))
-            current-chunk-ids (mapv :id prepared-chunks)]
-        (store-chunks! config chunks-coll prepared-chunks)
-        (delete-orphan-chunks! config chunks-coll doc-num current-chunk-ids)
+            ;; Store chunks + delete orphan chunks for this doc.
+            ;; Apply ensure-chunk-id to the prepared chunks BEFORE both
+            ;; storage and keep-set extraction so the deleted-orphans
+            ;; filter exactly matches the upserted :id values, regardless
+            ;; of whether the upstream prepare-fn included :id.
+            prepared-chunks (mapv ensure-chunk-id (prepare-chunks-fn (:chunks doc)))
+            current-chunk-ids (mapv :id prepared-chunks)
+            chunks-write (store-chunks! config chunks-coll prepared-chunks)
+            _ (delete-orphan-chunks! config chunks-coll doc-num current-chunk-ids)
 
-        ;; Store phrases + delete orphan phrases. Same defense-in-depth:
-        ;; pass through ensure-phrase-id before extracting ids.
-        (let [phrases (mapv ensure-phrase-id (extract-phrases (:chunks doc) doc-num))
-              current-phrase-ids (mapv :id phrases)]
-          (store-phrases! config phrases-coll phrases (:id doc))
-          (delete-orphan-phrases! config phrases-coll doc-num current-phrase-ids)))
+            ;; Store phrases + delete orphan phrases. Same defense-in-depth:
+            ;; pass through ensure-phrase-id before extracting ids.
+            phrases (mapv ensure-phrase-id (extract-phrases (:chunks doc) doc-num))
+            current-phrase-ids (mapv :id phrases)
+            phrases-write (store-phrases! config phrases-coll phrases (:id doc))
+            _ (delete-orphan-phrases! config phrases-coll doc-num current-phrase-ids)]
 
-      (core/say "Stored document")
-      (t/event! :pipeline/document-stored {:data {:id (:id doc)}})
+        (core/say "Stored document")
+        (t/event! :pipeline/document-stored {:data {:id (:id doc)}})
+        (document-report (:id doc) [doc-write chunks-write phrases-write]))
 
       (catch Exception e
         (t/error! {:id :pipeline/store-document-error

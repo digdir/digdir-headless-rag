@@ -505,19 +505,22 @@
            ;; marking a materialization that had already succeeded as failed.
            durable-dataset-id (:dataset-id dataset-config)
 
-           collection-names (collections/get-or-generate-collection-names
-                             dataset-config conn master-key)
-           dataset-config-with-colls (merge dataset-config collection-names)
-
-           loader-config (convert-pipeline-config-to-loader-format dataset-config-with-colls)
+           ;; ⚠️ the stale stored-collection-names issue: NOTHING IS PERSISTED BEFORE THE LOADER RUNS. This used to
+           ;; call the STORING arity of `get-or-generate-collection-names`, which,
+           ;; with nothing stored yet, persisted `pipeline-collection-names`. No
+           ;; loader writes to those names, and the loader never read them back:
+           ;; the stored names have no loader key. So a first run that failed, or
+           ;; was killed, left three stored names naming no collection, and the
+           ;; all-present gate then kept returning them. The only names recorded
+           ;; are now the ones below, after the loader succeeds.
+           loader-config (convert-pipeline-config-to-loader-format dataset-config)
 
              ;; #497: the names the INGEST PATH actually writes to. `coll-ids`
-             ;; derives them from the loader config, and its result — not the
-             ;; `collection-names` merged in above — is what the loader uses. The
-             ;; two were computed by different functions over different config
-             ;; shapes, so what retrieval later read from
-             ;; `pipeline.storage.*-collection` named collections ingest had never
-             ;; written to, and every query 404'd against a full corpus.
+             ;; derives them from the loader config, and they are the only names
+             ;; this run records. A second function over a different config shape
+             ;; used to name collections as well, so what retrieval later read
+             ;; from `pipeline.storage.*-collection` named collections ingest had
+             ;; never written to, and every query 404'd against a full corpus.
              materialized-collections (let [[docs chunks phrases]
                                             (ingest-storage/coll-ids loader-config)]
                                         {:docs-collection docs
@@ -531,10 +534,10 @@
                        {:data {:execution-id execution-id
                                :dataset-id dataset-id
                                :source-type (:source-type dataset-config)
-                               :collections collection-names}})]
+                               :collections materialized-collections}})]
 
        (try
-         (let [loader-task (dispatch-to-loader dataset-config-with-colls loader-config)
+         (let [loader-task (dispatch-to-loader dataset-config loader-config)
                _ (m/? loader-task)
                final (final-progress-counts execution-id)]
 

@@ -19,7 +19,6 @@
             [clojure.data.xml :as xml]
             [clojure.java.io :as jio]
             [missionary.core :as m]
-            [net.cgrand.xforms.rfs :as rfs]
             [taoensso.telemere :as t]
             [hyperfiddle.rcf :refer [tests tap %]]))
 
@@ -440,7 +439,7 @@
 
       (m/?
        (m/reduce
-        rfs/last
+        storage/merge-write-reports
         (mk-store-documents-f config (mk-prepare-documents-f config filtered-flow)))))))
 
 ;; ============================================================================

@@ -16,6 +16,7 @@
    Lives in `src-dev/` for the same reason as the other Phase B
    skills: offline tooling, not part of the runtime retrieval path."
   (:require [clojure.string :as str]
+            [digdir.docs.pipeline.storage :as storage]
             [digdir.rag.skills.core :as skills]
             [digdir.rag.typesense :as ts-utils]
             [typesense.client :as ts]))
@@ -196,16 +197,15 @@
               ;; first-time application. Surface anything else.
               (when-not (= 404 (:status (ex-data e)))
                 (throw e)))))
-        (let [resp (ts/upsert-documents! settings collection-name rows)
-              ;; Typesense returns a per-row vec: each entry has
-              ;; `:success true/false` and (on failure) an `:error`
-              ;; string. Aggregate so the skill returns the REAL
-              ;; success count and surfaces row-level rejections —
-              ;; without this, an "Error with field doc_num" gets
-              ;; silently masked behind `applied-count (count rows)`.
-              row-results (when (sequential? resp) resp)
-              successes (filter :success row-results)
-              failures (remove :success row-results)]
+        (let [;; Typesense answers per row and does not throw on a refused
+              ;; row. `storage/write-report` reads that answer against the
+              ;; rows SENT: a refused row, or one the answer does not
+              ;; confirm, is `:rejected`; only confirmed rows are `:written`.
+              ;; This skill used to re-implement the check, and a short or
+              ;; non-sequential answer then read as nothing refused.
+              report (storage/write-report collection-name rows
+                                           (ts/upsert-documents! settings collection-name rows))
+              failures (:rejected report)]
           (if (seq failures)
             (throw (ex-info "Typesense upsert had row-level failures"
                             {:skill-id :builtin/enrichment-apply-questions
@@ -215,13 +215,13 @@
                              :first-error (-> failures first :error)
                              :sample-failures (->> failures (take 3) vec)}))
             (skills/success-result
-             {:applied-count (count successes)
+             {:applied-count (:written report)
               :chunk-ids chunk-ids
               :collection-name collection-name}
              {:tenant tenant
               :delete-filter del-filter
               :rows-sent (count rows)
-              :rows-accepted (count successes)})))))))
+              :rows-accepted (:written report)})))))))
 
 ;; =============================================================================
 ;; Registration

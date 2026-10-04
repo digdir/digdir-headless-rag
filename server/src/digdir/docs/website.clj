@@ -694,7 +694,7 @@
 
       (m/?
        (m/reduce
-        net.cgrand.xforms.rfs/last
+        storage/merge-write-reports
         (mk-store-documents-f config (mk-prepare-documents-f config filtered-flow)))))))
 
 ;; ============================================================================
