@@ -83,6 +83,19 @@
           s (str failed " of " seen " documents failed: " (str/join ", " (remove nil? [refusals prepares])))]
       (if (> (count s) max-summary-length) (str (subs s 0 (- max-summary-length 3)) "...") s))))
 
+(defn check-stored!
+  "Fail a run that saw at least one source entry and stored no document: it
+   ingested nothing, whatever its tolerance allowed one document at a time. The
+   count is the run's own (documents whose store returned), not telemetry. An
+   EMPTY source (nothing seen) completes."
+  [config]
+  (let [{:keys [seen stored] :as r} @(record-of config)]
+    (when (and (pos? seen) (zero? stored))
+      (throw (ex-info (str "0 of " seen " documents stored"
+                           (when-let [summary (failure-summary r)] (str ": " summary)))
+                      {:type :digdir.storage/nothing-stored
+                       :seen seen})))))
+
 (defn tolerate-refusal
   "The store step's catch: a document whose rows Typesense refused
    (`:digdir.storage/rows-refused`, exactly that and nothing broader) is a
@@ -251,9 +264,10 @@
           entries-flow (m/seed entries)
           filtered-flow (filter-entries-fn config entries-flow)
           prepared-flow (mk-prepare-documents-f config prepare-doc-t filtered-flow pipeline-name)
-          stored-flow (mk-store-documents-f config store-doc-t prepared-flow)]
-
-      (m/? (m/reduce rfs/last stored-flow))))))
+          stored-flow (mk-store-documents-f config store-doc-t prepared-flow)
+          last-stored (m/? (m/reduce rfs/last stored-flow))]
+      (check-stored! config)
+      last-stored))))
 
 ;; ============================================================================
 ;; Job Management

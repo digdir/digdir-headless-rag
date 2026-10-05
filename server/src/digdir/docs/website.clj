@@ -695,10 +695,12 @@
           url-entries-flow (m/seed url-entries)
           filtered-flow (mk-filter-url-entries-f config url-entries-flow)]
 
-      (m/?
-       (m/reduce
-        net.cgrand.xforms.rfs/last
-        (mk-store-documents-f config (mk-prepare-documents-f config filtered-flow))))))))
+      (let [last-stored (m/?
+                         (m/reduce
+                          net.cgrand.xforms.rfs/last
+                          (mk-store-documents-f config (mk-prepare-documents-f config filtered-flow))))]
+        (orch/check-stored! config)
+        last-stored)))))
 
 ;; ============================================================================
 ;; Entry Points
