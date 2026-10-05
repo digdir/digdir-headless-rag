@@ -237,3 +237,47 @@
       (let [before @gauge]
         (is (thrown? clojure.lang.ExceptionInfo (run-it!)))
         (is (= before @gauge) "a throwing store must decrement what it incremented")))))
+
+;; =============================================================================
+;; 5. Only Typesense saying THIS ROW's data is unacceptable counts as refused
+;; =============================================================================
+
+(def ^:private client-error-types
+  "Each `:type` the client raises, and whether a single-row write counts it as a refusal."
+  {:typesense.client/bad-request true
+   :typesense.client/unprocessable-entity true
+   :typesense.client/unauthorized false
+   :typesense.client/not-found false
+   :typesense.client/conflict false
+   :typesense.client/service-unavailable false
+   :typesense.client/unspecified-api-error false})
+
+(deftest only-a-data-refusal-of-a-single-row-counts-as-refused
+  (is (= #{:typesense.client/bad-request :typesense.client/unprocessable-entity}
+         (some-> (ns-resolve 'digdir.docs.pipeline.storage 'refusal-types) deref))
+      "ONE definition, with exactly these members")
+  (doseq [[t refused?] client-error-types]
+    (testing (name t)
+      (let [client-error (ex-info (str "client says " (name t)) {:type t :message "x"})]
+        (with-typesense (constantly false)
+          {#'ts/upsert-document! (fn [& _] (throw client-error))}
+          (fn [_]
+            (let [e (thrown #(storage/upsert-document! {:tenant "t"} "t_documents_x" {:id "d1"}))]
+              (if refused?
+                (is (= :digdir.storage/rows-refused (:type (ex-data e))) "a data refusal: counted against the budget")
+                (is (identical? client-error e)
+                    "anything else (an outage, a missing collection, a bad key) propagates UNCHANGED and fails the run"))))))))
+  (testing "a non-client exception propagates unchanged"
+    (let [io (java.io.IOException. "connection reset")]
+      (with-typesense (constantly false)
+        {#'ts/upsert-document! (fn [& _] (throw io))}
+        (fn [_]
+          (is (identical? io (try (storage/upsert-document! {:tenant "t"} "c" {:id "d"}) nil
+                                  (catch Exception e e)))))))))
+
+(deftest an-id-less-refusal-says-how-many-rows-not-an-empty-id-list
+  (with-typesense (constantly true)
+    (fn [_]
+      (let [e (thrown #(storage/upsert-rows! {:uri "u"} "t_questions_x" [{:question "a"} {:question "b"}]))]
+        (is (str/includes? (str (ex-message e)) "(2 rows without ids)") (str (ex-message e)))
+        (is (not (str/includes? (str (ex-message e)) "(ids:")) "never an empty id list")))))

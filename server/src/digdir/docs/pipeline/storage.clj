@@ -198,8 +198,11 @@
                       :rejected-count n
                       :first-rejected (vec (take 5 sample))}})
     (throw (ex-info (str "Typesense refused " n " of " sent " rows written to " coll
-                         " (ids: " (str/join ", " (map :id (take max-refused-ids-in-message refused))) "): "
-                         (:error (first refused)))
+                         (let [ids (keep :id (take max-refused-ids-in-message refused))]
+                           (if (seq ids)
+                             (str " (ids: " (str/join ", " ids) ")")
+                             (str " (" n " rows without ids)")))
+                         ": " (:error (first refused)))
                     {:type :digdir.storage/rows-refused
                      :collection coll
                      :sent sent
@@ -224,17 +227,27 @@
           (throw-rows-refused! coll (count rows) refused nil))
         (count rows)))))
 
+(def refusal-types
+  "The client errors that mean Typesense refused THIS ROW's data: a 400 and a
+   422. Only these make a single-document write a refusal (tolerated within the
+   run's budget). Every other client error (401, 404, 409, 503, any other
+   status) and every other exception is not about the row: it propagates
+   unchanged and fails the run at once."
+  #{:typesense.client/bad-request :typesense.client/unprocessable-entity})
+
 (defn upsert-row!
   "Upsert one `row` into `coll`. Returns 1. The single-document endpoint, unlike
-   the bulk one, already THROWS on a refusal (`typesense.client/upsert-document!`
-   maps every non-2xx to an ex-info); it is re-raised here in the same shape as
-   a bulk refusal, with the client's error as its cause."
+   the bulk one, THROWS on any non-2xx (`typesense.client/upsert-document!`). A
+   data refusal (`refusal-types`) is re-raised in the same shape as a bulk
+   refusal, with the client's error as its cause; anything else propagates as it is."
   [settings coll row]
   (try
     (ts/upsert-document! settings coll row)
     1
     (catch clojure.lang.ExceptionInfo e
-      (throw-rows-refused! coll 1 [{:index 0 :id (:id row) :error (capped (ex-message e))}] e))))
+      (if (contains? refusal-types (:type (ex-data e)))
+        (throw-rows-refused! coll 1 [{:index 0 :id (:id row) :error (capped (ex-message e))}] e)
+        (throw e)))))
 
 (defn delete-by-filter!
   "Delete the documents in `coll` matching `filter-by`. Returns how many were
