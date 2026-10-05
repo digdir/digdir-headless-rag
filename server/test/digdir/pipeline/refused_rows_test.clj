@@ -47,14 +47,20 @@
 (defn- fake-typesense
   "`store`: an atom {collection {id row}}. `refuse?` [coll row] refuses a row of
    a bulk import; `explode?` [coll rows] makes the whole bulk call throw, as a
-   500 does."
-  [store {:keys [refuse? explode?] :or {refuse? (constantly false) explode? (constantly false)}}]
+   500 does; `doc-error` [coll doc] answers a single-document write with the
+   client error `[type message]` it returns, as the client raises it per status."
+  [store {:keys [refuse? explode? doc-error]
+          :or {refuse? (constantly false) explode? (constantly false) doc-error (constantly nil)}}]
   (merge
    (into {} (for [[sym v] (ns-publics 'typesense.client)]
               [v (fn [& _] (throw (ex-info (str "unexpected Typesense call: typesense.client/" sym) {})))]))
    {#'ts/create-collection! (fn [_ schema] schema)
     #'ts/retrieve-collection (fn [_ coll] {:name coll :fields []})
-    #'ts/upsert-document! (fn [_ coll doc] (swap! store assoc-in [coll (:id doc)] doc) doc)
+    #'ts/upsert-document! (fn [_ coll doc]
+                            (when-let [[t message] (doc-error coll doc)]
+                              (throw (ex-info message {:type t :message message})))
+                            (swap! store assoc-in [coll (:id doc)] doc)
+                            doc)
     #'ts/upsert-documents! (fn [_ coll rows]
                              (when (explode? coll rows)
                                (throw (ex-info "Internal Server Error" {:type :typesense.client/unspecified-api-error})))
@@ -143,7 +149,7 @@
 ;; One run through the executor
 ;; =============================================================================
 
-(defn- run-once! [{:keys [source-type loader-keys redefs]} ts-opts extra-loader-keys]
+(defn- run-once! [{:keys [source-type loader-keys redefs]} ts-opts extra-loader-keys & {:keys [async?]}]
   (let [conn (db/get-conn)
         real-dispatch executor/dispatch-to-loader
         store (atom {})
@@ -167,9 +173,15 @@
                            (reset! seen {:colls colls :loader-colls (storage/coll-ids loader-config)})
                            (seed-old-revisions! store colls doc-ids)
                            (real-dispatch (assoc dataset-config :source-type source-type) lc)))})
-               (fn [] (try (m/? (executor/execute-pipeline! conn "digdir" "default" "altinn-docs"
-                                                           it/test-master-key "test-user"))
-                           (catch Exception _ nil)))))]
+               (fn []
+                 (if async?
+                   ;; the console's path: the progress handler, the flusher, and the final flush
+                   (let [id (executor/execute-pipeline-async! conn "digdir" "default" "altinn-docs"
+                                                              it/test-master-key "test-user")]
+                     (some-> (get @executor/!executions-futures id) deref))
+                   (try (m/? (executor/execute-pipeline! conn "digdir" "default" "altinn-docs"
+                                                        it/test-master-key "test-user"))
+                        (catch Exception _ nil))))))]
       (assoc @seen
              :store store
              :signals signals
@@ -180,9 +192,9 @@
 (defn- run-source!
   "`run-once!` on a fresh store (each run creates the same dataset)."
   ([source ts-opts] (run-source! source ts-opts {}))
-  ([source ts-opts extra-loader-keys]
+  ([source ts-opts extra-loader-keys & opts]
    (let [result (atom nil)]
-     (it/with-test-db #(reset! result (run-once! source ts-opts extra-loader-keys)))
+     (it/with-test-db #(reset! result (apply run-once! source ts-opts extra-loader-keys opts)))
      @result)))
 
 (defn- refuse-chunk-of
@@ -208,6 +220,8 @@
         (is (= :completed (:pipeline-execution/status execution))
             (str "one refused document is within the budget: " message))
         (is (= 1 (:pipeline-execution/documents-failed execution)) "counted, exactly once")
+        (is (= 2 (:pipeline-execution/documents-processed execution))
+            "processed counts the documents STORED: the refused one is not among them")
         (is (= 1 (telemetry-failures signals)) "and exactly once by the live progress count too")
         (is (str/includes? message chunks-coll) (str "the persisted summary names the collection: " message))
         (is (str/includes? message "b-c2") "and the refused row's id")
@@ -364,4 +378,61 @@
                          (filter (comp keyword? :id) signals))]
     (is (= 3 (:stored @record)) "PREMISE: the flow stored all three")
     (is (= 3 (:stored progress)) "and the run's progress says so: documents-processed counts them")))
+
+;; =============================================================================
+;; Only a DATA refusal is tolerated. An outage or a missing collection fails the run at once
+;; =============================================================================
+
+(defn- error-on-document-row-of [id type message]
+  (fn [coll doc] (when (and (str/includes? coll "_documents_") (= id (:id doc))) [type message])))
+
+(deftest an-outage-on-a-document-row-fails-the-run-at-once
+  (let [{:keys [execution]} (run-source! folder {:doc-error (error-on-document-row-of
+                                                             "b" :typesense.client/service-unavailable "Service Unavailable")})
+        message (str (:pipeline-execution/error-message execution))]
+    (is (= :failed (:pipeline-execution/status execution)) "a 503 is not a refusal: no budget applies")
+    (is (str/includes? message "Service Unavailable") (str "the run's error is the client's own: " message))
+    (is (not (str/includes? message "refused")) "and nothing reads it as refused")))
+
+(deftest a-missing-collection-on-a-document-row-fails-the-run-at-once
+  (let [{:keys [execution]} (run-source! folder {:doc-error (error-on-document-row-of
+                                                             "b" :typesense.client/not-found "Not Found")})]
+    (is (= :failed (:pipeline-execution/status execution)) "a 404 is not a refusal")))
+
+(deftest a-bad-request-on-a-document-row-is-a-tolerated-refusal
+  (let [{:keys [execution]} (run-source! folder {:doc-error (error-on-document-row-of
+                                                             "b" :typesense.client/bad-request "Field `title` must be a string.")})]
+    (is (= :completed (:pipeline-execution/status execution)) (str (:pipeline-execution/error-message execution)))
+    (is (= 1 (:pipeline-execution/documents-failed execution)))
+    (is (str/includes? (str (:pipeline-execution/error-message execution)) "refused"))))
+
+;; =============================================================================
+;; The persisted counts are the run's own, on the console's path too
+;; =============================================================================
+
+(deftest the-final-flush-does-not-overwrite-a-finished-runs-counts
+  ;; Direct, so the order is certain: the run has finished and written its own
+  ;; counts; telemetry, still in memory, counted differently.
+  (it/with-test-db
+    (fn []
+      (let [conn (db/get-conn)
+            id (executor/create-execution-record! conn "digdir:default:altinn-docs" "test-user")]
+        (executor/update-execution-status! conn id :completed {:documents-processed 2 :documents-failed 0})
+        (swap! executor/!executions-progress assoc id (assoc @#'executor/empty-progress :stored 3 :failures 1))
+        (try
+          (executor/flush-progress-to-db! conn id nil)
+          (let [e (executor/get-execution @conn id)]
+            (is (= 2 (:pipeline-execution/documents-processed e)) "the run's own processed count stays")
+            (is (= 0 (:pipeline-execution/documents-failed e)) "and its failed count"))
+          (finally (executor/forget-progress! id)))))))
+
+(deftest a-console-run-persists-the-runs-own-failed-count
+  ;; A 500 on a chunk write is not a document failure (the run fails), but the
+  ;; live telemetry counts the store error. The record's count must be what stays.
+  (let [{:keys [execution]} (run-source! folder {:explode? (fn [coll rows] (and (str/includes? coll "_chunks_")
+                                                                                (some #(= "b-c1" (:id %)) rows)))}
+                                         {} :async? true)]
+    (is (= :failed (:pipeline-execution/status execution)) "PREMISE: the run failed")
+    (is (= 0 (:pipeline-execution/documents-failed execution))
+        "the persisted count is the run's (0), not the telemetry's")))
 

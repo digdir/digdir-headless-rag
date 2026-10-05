@@ -359,10 +359,18 @@
      prev-snapshot - Last snapshot we flushed (so we can skip if unchanged).
                      Pass nil on the first flush.
 
+   Once the run is no longer `:running`, its processed and failed counts are its
+   own and are left as written.
+
    Returns: the snapshot that was flushed (or prev-snapshot if no flush occurred)."
   [conn execution-id prev-snapshot]
   (when-let [progress (get-execution-progress execution-id)]
-    (let [stored (or (:stored progress) 0)
+    (let [running? (= :running (d/q '[:find ?s .
+                                      :in $ ?id
+                                      :where [?e :pipeline-execution/id ?id]
+                                             [?e :pipeline-execution/status ?s]]
+                                    @conn execution-id))
+          stored (or (:stored progress) 0)
           failures (or (:failures progress) 0)
           total (:total-urls progress)
           snapshot {:stored stored :failures failures :total total}]
@@ -374,10 +382,13 @@
                          :where [?e :pipeline-execution/id ?id]]
                        db execution-id)]
           (when eid
+            ;; Live counts are telemetry's, and only while the run is running. Once
+            ;; it has finished, its processed and failed counts are its own (written
+            ;; with its status) and a later flush must not overwrite them.
             (let [tx-map (cond-> {:db/id eid
-                                  :pipeline-execution/documents-processed stored
-                                  :pipeline-execution/documents-failed failures
                                   :pipeline-execution/last-progress-at (now-inst)}
+                           running? (assoc :pipeline-execution/documents-processed stored
+                                           :pipeline-execution/documents-failed failures)
                            total (assoc :pipeline-execution/documents-total total))]
               (d/transact conn {:tx-data [tx-map]})))
           snapshot)))))
@@ -477,13 +488,15 @@
        (some #(when (= :digdir.pipeline/failure-budget-reached (:type (ex-data %))) %))))
 
 (defn- run-failures
-  "What a run's failure record says, for its execution record: the failed count,
-   and the failure summary as `:error-message` on any run with failures. On a run
-   failed by its document-failure budget the message says so first. A run failed
-   by anything else keeps that error's own message. `e` is nil for a completed run."
+  "What a run's own record says, for its execution record: the documents STORED
+   (processed) and FAILED, and the failure summary as `:error-message` on any run
+   with failures. On a run failed by its document-failure budget the message says
+   so first. A run failed by anything else keeps that error's own message. `e` is
+   nil for a completed run."
   [record e]
   (let [summary (orchestration/failure-summary record)]
-    (cond-> {:documents-failed (:failed record 0)}
+    (cond-> {:documents-processed (:stored record 0)
+             :documents-failed (:failed record 0)}
       (and summary (nil? e))
       (assoc :error-message (str "completed with " summary))
 

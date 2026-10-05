@@ -75,8 +75,11 @@
     (let [by-coll (->> refused (group-by :collection) (sort-by key) (take max-summary-collections))
           refusals (when (seq refused)
                      (str (count refused) " refused by Typesense ("
-                          (str/join "; " (for [[coll rs] by-coll]
-                                           (str coll ": ids " (str/join ", " (take max-summary-ids (mapcat :ids rs)))
+                          (str/join "; " (for [[coll rs] by-coll
+                                               :let [ids (take max-summary-ids (remove nil? (mapcat :ids rs)))]]
+                                           (str coll ": " (if (seq ids)
+                                                            (str "ids " (str/join ", " ids))
+                                                            (str (reduce + (map :refused rs)) " rows without ids"))
                                                 "; first error: " (:first-error (first rs)))))
                           ")"))
           prepares (when (pos? prepare-failed) (str prepare-failed " failed to prepare"))

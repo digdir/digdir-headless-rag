@@ -15,7 +15,8 @@
    4. The skill body honors :dry-run? without touching Typesense.
    5. The live path calls delete-documents! then upsert-documents! in
       that order, with the expected filter."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [digdir.rag.skills.core :as skills]
             [digdir.skills.enrichment.apply-questions :as aq]
             [digdir.rag.typesense :as ts-utils]
@@ -200,7 +201,9 @@
       (is (instance? clojure.lang.ExceptionInfo e) "Must throw, not silently succeed")
       (is (= :digdir.storage/rows-refused (:type data)) (pr-str data))
       (is (= {:collection "enrichment_hypothetical_questions_abc" :sent 3 :written 0 :refused 3}
-             (select-keys data [:collection :sent :written :refused]))))))
+             (select-keys data [:collection :sent :written :refused])))
+      (is (not (str/includes? (str (ex-message e)) "(ids:"))
+          (str "question rows carry no id: the message says how many, not an empty id list: " (ex-message e))))))
 
 (deftest singular-proposal-with-doc-num-backfill
   (testing "Graph callers pass `:proposal` (singular map) without `:doc-num`; the separate `:doc-num` input backfills it"
