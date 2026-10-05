@@ -19,6 +19,7 @@
             [clojure.data.xml :as xml]
             [clojure.java.io :as jio]
             [missionary.core :as m]
+            [net.cgrand.xforms.rfs :as rfs]
             [taoensso.telemere :as t]
             [hyperfiddle.rcf :refer [tests tap %]]))
 
@@ -419,9 +420,12 @@
   (orch/mk-store-documents-f config mk-store-document-t documents-f))
 
 (defn mk-materialize-t
-  "Creates the complete materialization task"
+  "Creates the complete materialization task. Its prepare and store steps share
+   ONE failure record, so a refused document and a document that failed to
+   prepare count against the same budget."
   [config]
-  (m/sp
+  (let [config (orch/with-failure-record config)]
+   (m/sp
     (t/event! :episerver/materializing {:data {:config config :colls (coll-ids config)}})
 
     (m/? (m/via m/blk (create-stores config)))
@@ -439,8 +443,8 @@
 
       (m/?
        (m/reduce
-        storage/merge-write-reports
-        (mk-store-documents-f config (mk-prepare-documents-f config filtered-flow)))))))
+        rfs/last
+        (mk-store-documents-f config (mk-prepare-documents-f config filtered-flow))))))))
 
 ;; ============================================================================
 ;; Entry Points
