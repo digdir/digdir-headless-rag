@@ -11,6 +11,7 @@
   (:require [hyperfiddle.electric3 :as e]
             [hyperfiddle.electric-dom3 :as dom]
             [clojure.string :as str]
+            [digdir.pipeline.ui.execution-display :as display]
             #?(:clj [digdir.pipeline.executor :as executor])
             #?(:clj [digdir.data.db :as db])))
 
@@ -268,8 +269,9 @@
               (dom/props {:style {:font-size "1.5rem" :font-weight "700" :color "#dc2626"}})
               (dom/text (str docs-failed)))))
 
-        ;; Error message (if failed)
-        (when (and (= status :failed) error-message)
+        ;; The run's error, or the failure summary of a run that completed
+        ;; with failed documents
+        (when (display/failure-summary-shown? status error-message)
           (dom/div
             (dom/props {:style {:padding "1rem"
                                :background "#fee2e2"
@@ -278,7 +280,7 @@
                                :margin-bottom "1.5rem"}})
             (dom/div
               (dom/props {:style {:font-weight "500" :color "#991b1b" :margin-bottom "0.5rem"}})
-              (dom/text "Error"))
+              (dom/text (if (= status :failed) "Error" "Completed with failures")))
             (dom/div
               (dom/props {:style {:font-family "monospace" :font-size "0.875rem" :color "#7f1d1d"}})
               (dom/text error-message))))

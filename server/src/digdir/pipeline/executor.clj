@@ -8,6 +8,7 @@
             [taoensso.telemere :as t]
             [digdir.pipeline.core :as pipeline]
             [digdir.pipeline.collections :as collections]
+            [digdir.docs.pipeline.orchestration :as orchestration]
             [digdir.docs.pipeline.storage :as ingest-storage]
             [digdir.pipeline.materialization :as materialization]
             [nano-id.core :refer [nano-id]]))
@@ -205,6 +206,18 @@
       ;; Failure events fired by orchestration's prepare-documents flow.
       ;; The orchestration emits `<pipeline-name>/recoverable-failure` and
       ;; `<pipeline-name>/terminal-failure`, so we recognize on the name.
+      ;; A document whose rows Typesense refused: a document failure, counted
+      ;; once (storage does not also emit :pipeline/store-document-error for it).
+      (= :pipeline/document-refused sig-id)
+      (-> progress
+          (update :failures inc)
+          (record-error
+           {:kind :rows-refused
+            :doc-id (:document-id data)
+            :collection (:collection data)
+            :ids (:ids data)
+            :message (:first-error data)}))
+
       (or (= "recoverable-failure" sig-name)
           (= "terminal-failure" sig-name)
           (= :pipeline/store-document-error sig-id))
@@ -307,7 +320,9 @@
        :documents-processed - Number of documents processed
        :documents-failed - Number of documents failed
        :documents-total - Total documents discovered for this run (if known)
-       :error-message - Error message (for failed status)"
+       :error-message - The run's failure summary, on any run with failures
+                        (a completed run included), or the error that
+                        failed it"
   [conn execution-id status & [{:keys [documents-processed documents-failed
                                        documents-total error-message]}]]
   (let [db @conn
@@ -455,6 +470,27 @@
      :documents-failed (or (:failures progress) 0)
      :documents-total (:total-urls progress)}))
 
+(defn- budget-reached
+  "The `:digdir.pipeline/failure-budget-reached` error in `e`'s cause chain, if any."
+  [e]
+  (->> e (iterate ex-cause) (take-while some?)
+       (some #(when (= :digdir.pipeline/failure-budget-reached (:type (ex-data %))) %))))
+
+(defn- run-failures
+  "What a run's failure record says, for its execution record: the failed count,
+   and the failure summary as `:error-message` on any run with failures. On a run
+   failed by its document-failure budget the message says so first. A run failed
+   by anything else keeps that error's own message. `e` is nil for a completed run."
+  [record e]
+  (let [summary (orchestration/failure-summary record)]
+    (cond-> {:documents-failed (:failed record 0)}
+      (and summary (nil? e))
+      (assoc :error-message (str "completed with " summary))
+
+      (and e (budget-reached e))
+      (assoc :error-message (str "failed: " (ex-message (budget-reached e))
+                                 (when summary (str ": " summary)))))))
+
 (defn execute-pipeline!
   "Execute a dataset materialization.
 
@@ -527,6 +563,13 @@
                                          :chunks-collection chunks
                                          :phrases-collection phrases})
 
+           ;; The run's failure record, shared by its prepare and store steps. The
+           ;; count and the summary persisted below come from it, not from
+           ;; telemetry, which is asynchronous. (The key is in no namespace that
+           ;; names a collection, so the names above do not change.)
+           failures (orchestration/failure-record)
+           loader-config (assoc loader-config :fault-tolerance/failures failures)
+
            execution-id (or execution-id
                             (create-execution-record! conn dataset-id user-id))
 
@@ -564,7 +607,8 @@
            (update-execution-status! conn execution-id :completed
                                      (merge {:documents-processed 0
                                              :documents-failed 0}
-                                            final))
+                                            final
+                                            (run-failures @failures nil)))
 
            (t/event! :pipeline/completed
                      {:data {:execution-id execution-id
@@ -576,7 +620,8 @@
            (let [final (final-progress-counts execution-id)]
              (update-execution-status! conn execution-id :failed
                                        (merge {:error-message (.getMessage e)}
-                                              final)))
+                                              final
+                                              (run-failures @failures e))))
 
            (t/error! {:id :pipeline/failed
                       :data {:execution-id execution-id

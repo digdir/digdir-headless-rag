@@ -10,6 +10,8 @@
             [clojure.edn :as edn]
             [clojure.data.json :as json]
             [net.cgrand.xforms.io :as xfio]
+            [net.cgrand.xforms.rfs :as rfs]
+            [digdir.docs.pipeline.orchestration :as orch]
             [digdir.docs.pipeline.storage :as storage]
             [missionary.core :as m]
             [clojure.java.io :as jio]
@@ -492,23 +494,6 @@
                   :last_retrieval_failure_at :consecutive_retrieval_failures
                   :retrieval_attempts])))
 
-(defn- delete-orphans!
-  "Delete docs in `coll` for `doc-num` whose Typesense `:id` is NOT
-   in `current-ids`. Mirrors
-   digdir.docs.pipeline.storage/delete-orphan-{chunks,phrases}! so
-   the kudos loader gets the same cleanup. Filters on `id`, not
-   `chunk_id`, to catch legacy auto-id rows from before chunks/phrases
-   carried an explicit `:id`."
-  [kview coll doc-num current-ids]
-  (when (and (seq current-ids) (not (str/blank? (str doc-num))))
-    (let [filter-by (str "doc_num:=" doc-num
-                         " && id:!=[" (str/join "," current-ids) "]")]
-      (t/event! :document-loading/deleting-orphans
-                {:data {:coll coll
-                        :doc-num doc-num
-                        :keep-count (count current-ids)}})
-      (ts/delete-documents! (ts kview) coll {:filter_by filter-by}))))
-
 (defn store-doc [store kview]
   (let [[documents-coll chunks-coll phrases-coll] (coll-ids kview)]
     (case (:store/type store)
@@ -530,26 +515,20 @@
                                               :doc_num (:doc_num doc)}))
                                          (:chunks doc))
                          current-phrase-ids (mapv :id phrases)]
-                     ;; Each write returns what it CONFIRMED. The bulk
-                     ;; upserts answer per row and do not throw on a refused
-                     ;; row, so the report is the only place a refusal shows.
                      (t/event! :document-loading/upserting-to-documents-typesense-collection)
-                     (let [doc-write (storage/upsert-row! (ts kview) documents-coll (prepare-doc doc))
-                           _ (t/event! :document-loading/upserting-to-chunks-typesense-collection
-                                       {:data {:chunk-count (count chunks)}})
-                           chunks-write (storage/upsert-rows! (ts kview) chunks-coll chunks)
-                           _ (delete-orphans! kview chunks-coll (:doc_num doc) current-chunk-ids)
-                           _ (t/event! :document-loading/upserting-to-phrases-typesense-collection)
-                           phrases-write (storage/upsert-rows! (ts kview) phrases-coll phrases)
-                           _ (delete-orphans! kview phrases-coll (:doc_num doc) current-phrase-ids)]
-                       (say "Stored")
-                       (t/event! :document-loading/document-upserted)
-                       (storage/document-report (:id doc) [doc-write chunks-write phrases-write]))))
+                     (storage/upsert-row! (ts kview) documents-coll (prepare-doc doc))
+                     (t/event! :document-loading/upserting-to-chunks-typesense-collection
+                               {:data {:chunk-count (count chunks)}})
+                     (storage/upsert-rows! (ts kview) chunks-coll chunks)
+                     (storage/delete-orphans! (ts kview) chunks-coll (:doc_num doc) current-chunk-ids)
+                     (t/event! :document-loading/upserting-to-phrases-typesense-collection)
+                     (storage/upsert-rows! (ts kview) phrases-coll phrases)
+                     (storage/delete-orphans! (ts kview) phrases-coll (:doc_num doc) current-phrase-ids)
+                     (say "Stored")
+                     (t/event! :document-loading/document-upserted)))
 
       :dev/duratom (fn [doc]
-                     (swap! !duratom-store update documents-coll (fnil conj #{}) doc)
-                     (storage/document-report
-                      (:id doc) [(storage/write-report documents-coll [doc] [{:success true}])])))))
+                     (swap! !duratom-store update documents-coll (fnil conj #{}) doc)))))
 
 (defn mk-store-document-in-store-t [store kview doc]
   (m/sp
@@ -562,11 +541,20 @@
 
 (defonce !store-threads (atom 0))
 (defn mk-store-documents-f [kview documents]
-  (m/ap (let [doc (m/?> (:parallelism/store kview) documents)
-              _ (swap! !store-threads inc)
-              doc (m/? (mk-store-document-t kview doc))
-              _ (swap! !store-threads dec)]
-          doc)))
+  (m/ap (let [record (orch/record-of kview)
+              doc (m/?> (:parallelism/store kview) documents)]
+          (swap! !store-threads inc)
+          ;; A store that throws must not leave the gauge counting it.
+          (try
+            (let [stored (m/? (mk-store-document-t kview doc))]
+              (swap! record update :stored inc)
+              stored)
+            (catch clojure.lang.ExceptionInfo e
+              ;; a refused document is a document failure, counted and named;
+              ;; it is NOT queued for a prepare retry, which would refuse again
+              (orch/tolerate-refusal kview record doc e)
+              (m/amb))
+            (finally (swap! !store-threads dec))))))
 
 (comment
   (t/with-signal
@@ -828,7 +816,7 @@
 
 (defn mk-prepare-documents-f [kview documents-f]
   (let [[documents-coll _ _] (coll-ids kview)]
-    (m/ap (let [prepare-document-failures (atom 0)
+    (m/ap (let [record (orch/record-of kview)
                 doc (m/?> (:parallelism/documents kview) documents-f)]
             ;; Skip already imported documents if :skip-already-imported is true
             (if (and (:skip-already-imported kview)
@@ -838,13 +826,15 @@
                           {:data {:doc-id (:id doc)}})
                 (m/amb))
               (try
+                (swap! record update :seen inc)
                 (t/event! :document-loading/handling-document)
                 (m/? (backoff (mk-prepare-document-t kview doc)
                               [(+ (* 1 60 1000) (rand-int (* 59 60 1000)))]))
                 (catch Exception e
                   (let [doc-id (:id doc)
-                        failures (swap! prepare-document-failures inc)
-                        terminal? (= failures (:fault-tolerance/max-document-failures kview))]
+                        max-failures (:fault-tolerance/max-document-failures kview)
+                        failures (inc (:failed @record))
+                        terminal? (and max-failures (>= failures max-failures))]
                     (swap! !failed-documents conj doc-id)
                     (t/event! :document-loading/failed {:data {:doc-id doc-id}})
 
@@ -859,8 +849,10 @@
                                       :doc-id doc-id}}
                               e)
                     (when terminal?
-                      (reset! !terminal-failure? true)
-                      (throw e))
+                      (reset! !terminal-failure? true))
+                    ;; counts against the run's ONE budget, shared with refused
+                    ;; documents; throws when it is reached
+                    (orch/count-failure! kview record {:kind :prepare} e)
                     (m/amb)))))))))
 
 (def eval-ns *ns*)
@@ -1141,12 +1133,15 @@
   (reset! !failed-documents []))
 
 (defn retry-failed-documents! [kview]
-  (let [failed-ids @!failed-documents]
+  (let [kview (orch/with-failure-record kview)
+        failed-ids @!failed-documents]
     (when (seq failed-ids)
       (t/event! :document-loading/retrying-failed-documents {:data {:doc-ids failed-ids}})
       (reset! !failed-documents [])
       (m/? (m/reduce
-            storage/merge-write-reports
+            (fn
+              ([] nil)
+              ([_ _] nil))
             (let [documents-by-ids (partial kudos/documents-by-ids (kudos/profile kview))]
               (mk-store-documents-f
                kview
@@ -1158,7 +1153,8 @@
   (m/ap (m/amb (m/?> f1) (m/?> f2))))
 
 (defn mk-materialize-t [kview]
-  (let [kudos-profile (kudos/profile kview)
+  (let [kview (orch/with-failure-record kview)
+        kudos-profile (kudos/profile kview)
         documents-by-ids (partial kudos/documents-by-ids kudos-profile)
         documents (partial kudos/documents kudos-profile)]
     (m/sp (t/event! :document-loading/materializing-kview
@@ -1171,20 +1167,16 @@
           ;;                                (extract-ns-from-map kview "chunks")))) 
 
           (m/? (m/via m/blk (create-stores kview)))
-          ;; The task returns what the run WROTE, and returns it AFTER
-          ;; the done event: the event used to be the last form, so the task's
-          ;; value was the telemetry call's.
-          (let [written (m/?
-                         (m/reduce
-                          storage/merge-write-reports
-                          (->> (let [id-docs (documents-by-ids (:documents/first-import-ids kview))
-                                     filtered-docs (m/buffer 1337 (mk-filter-documents-f kview (documents kview)))
-                                     docs (if (seq (:documents/types kview))
-                                            (concat-flows id-docs filtered-docs)
-                                            id-docs)]
-                                 (mk-store-documents-f kview (m/buffer 10000 (mk-prepare-documents-f kview docs)))))))]
-            (t/event! :document-loading/done)
-            written))))
+          (m/?
+           (m/reduce
+            rfs/last
+            (->> (let [id-docs (documents-by-ids (:documents/first-import-ids kview))
+                       filtered-docs (m/buffer 1337 (mk-filter-documents-f kview (documents kview)))
+                       docs (if (seq (:documents/types kview))
+                              (concat-flows id-docs filtered-docs)
+                              id-docs)]
+                   (mk-store-documents-f kview (m/buffer 10000 (mk-prepare-documents-f kview docs)))))))
+          (t/event! :document-loading/done))))
 
 (comment
   (def prepared-docs (m/? (m/reduce conj (mk-prepare-documents-f kview (m/eduction (take 7)  (kudos/documents (kudos/profile kview) kview))))))
@@ -1285,13 +1277,14 @@ REPLACE_ME
 
 (defn mk-import-single-document-t [kview doc-id]
   "Import a single Kudos document by ID"
-  (let [documents-by-ids (partial kudos/documents-by-ids (kudos/profile kview))]
+  (let [kview (orch/with-failure-record kview)
+        documents-by-ids (partial kudos/documents-by-ids (kudos/profile kview))]
     (m/sp
       (t/event! :document-loading/importing-single-document {:data {:doc-id doc-id}})
       (m/? (m/via m/blk (create-stores kview)))
       (m/?
        (m/reduce
-        storage/merge-write-reports
+        rfs/last
         (mk-store-documents-f
          kview
          (mk-prepare-documents-f

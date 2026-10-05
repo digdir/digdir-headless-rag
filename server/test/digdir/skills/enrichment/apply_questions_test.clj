@@ -159,34 +159,48 @@
           (is (every? #{"enrichment_hypothetical_questions_abc"}
                       (map :coll ops))))))))
 
-(deftest upsert-row-failures-surface-as-exception
-  (testing "If Typesense rejects any row, apply-questions throws — must NOT silently report applied-count=(count rows)"
-    (with-redefs [ts-utils/make-ts-settings (fn [_] {:uri "x" :key "k"})
-                  ts/delete-documents! (fn [& _] {:num_deleted 0})
-                  ts/upsert-documents! (fn [_settings _coll docs]
-                                         ;; Simulate the real bug: every row
-                                         ;; rejected with the empty-doc_num
-                                         ;; error.
-                                         (mapv (fn [_]
+(defn- apply-with-refusals
+  "Run the live path with Typesense refusing the rows for which `refuse?` holds.
+   Returns the result, or the thrown ex-info."
+  [refuse?]
+  (with-redefs [ts-utils/make-ts-settings (fn [_] {:uri "x" :key "k"})
+                ts/delete-documents! (fn [& _] {:num_deleted 0})
+                ts/upsert-documents! (fn [_settings _coll docs]
+                                       (mapv (fn [row]
+                                               (if (refuse? row)
                                                  {:success false
                                                   :code 400
-                                                  :error "Error with field `doc_num`: Value cannot be empty."})
-                                               docs))]
-      (let [thrown (try
-                     (aq/execute-apply-questions
-                      {:inputs {:proposals sample-proposals
-                                :collection-name "enrichment_hypothetical_questions_abc"}
-                       :parameters {}
-                       :skill-params {:tenant "digdir"}})
-                     nil
-                     (catch clojure.lang.ExceptionInfo e e))]
-        (is (some? thrown) "Must throw, not silently succeed")
-        (is (= :builtin/enrichment-apply-questions
-               (-> thrown ex-data :skill-id)))
-        (is (= 3 (-> thrown ex-data :failed-count))
-            "All three sample rows should be counted as failed")
-        (is (re-find #"doc_num" (-> thrown ex-data :first-error))
-            "First-error message preserved for debugging")))))
+                                                  :error "Error with field `doc_num`: Value cannot be empty."}
+                                                 {:success true}))
+                                             docs))]
+    (try
+      (aq/execute-apply-questions
+       {:inputs {:proposals sample-proposals
+                 :collection-name "enrichment_hypothetical_questions_abc"}
+        :parameters {}
+        :skill-params {:tenant "digdir"}})
+      (catch clojure.lang.ExceptionInfo e e))))
+
+(deftest a-refused-chunk-is-reported-and-the-rest-is-applied
+  (testing "One of two chunks refused: the step succeeds with what it wrote, and NAMES the refused chunk"
+    (let [r (apply-with-refusals #(= "c2" (:chunk_id %)))]
+      (is (not (instance? Throwable r)) (str "must not throw when some rows were written: " r))
+      (is (= 2 (-> r :outputs :applied-count)) "the two rows of c1 were written")
+      (is (= [{:chunk-id "c2" :refused 1 :sent 1 :previous-questions-deleted true}]
+             (mapv #(dissoc % :first-error) (-> r :outputs :refused)))
+          "the refused chunk is named; its earlier questions were deleted before the refused upsert")
+      (is (re-find #"doc_num" (str (-> r :outputs :refused first :first-error)))
+          "Typesense's own reason is kept")
+      (is (= 1 (-> r :outputs :refused-count)) "the exact number of refused chunks"))))
+
+(deftest nothing-written-still-throws
+  (testing "Every row refused: the step did nothing, so it throws the storage refusal"
+    (let [e (apply-with-refusals (constantly true))
+          data (ex-data e)]
+      (is (instance? clojure.lang.ExceptionInfo e) "Must throw, not silently succeed")
+      (is (= :digdir.storage/rows-refused (:type data)) (pr-str data))
+      (is (= {:collection "enrichment_hypothetical_questions_abc" :sent 3 :written 0 :refused 3}
+             (select-keys data [:collection :sent :written :refused]))))))
 
 (deftest singular-proposal-with-doc-num-backfill
   (testing "Graph callers pass `:proposal` (singular map) without `:doc-num`; the separate `:doc-num` input backfills it"

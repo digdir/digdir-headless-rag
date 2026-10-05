@@ -12,14 +12,14 @@
      the rows produced by one specific propose call, leaving rows from
      other prompt-hashes intact. The risk register on the plan flagged
      this as the guard against accidentally wiping unrelated history.
-   - Idempotent on a 404 'no documents matched' response from Typesense:
-     reverting an already-empty chunk is a successful no-op.
+   - Reverting an already-empty chunk deletes nothing (`num_deleted` 0). A
+     client error, a missing collection included, propagates.
 
    Lives in `src-dev/` alongside the rest of the Phase B enrichment
    skills — offline tooling, not part of the runtime retrieval path."
   (:require [digdir.rag.skills.core :as skills]
             [digdir.rag.typesense :as ts-utils]
-            [typesense.client :as ts]))
+            [digdir.docs.pipeline.storage :as storage]))
 
 ;; =============================================================================
 ;; Metadata
@@ -92,7 +92,7 @@
      :tenant — used to build Typesense settings.
 
    Outputs:
-     :reverted-count   — Typesense `num_deleted`; 0 on dry-run or 404
+     :reverted-count   — Typesense `num_deleted`; 0 on dry-run
      :chunk-id         — echo of input
      :collection-name  — echo of input
      :filter-by        — the filter clause used (handy for trace)"
@@ -135,20 +135,10 @@
                 _ (when (nil? settings)
                     (throw (ex-info "No Typesense settings — tenant missing or unconfigured"
                                     {:tenant tenant})))
-                resp (try
-                       (ts/delete-documents! settings collection-name
-                                             {:filter_by filter-by})
-                       (catch clojure.lang.ExceptionInfo e
-                         ;; A 404 'no documents matched' is a successful
-                         ;; no-op for an already-empty chunk — same
-                         ;; idempotency pattern apply-questions uses for
-                         ;; its pre-upsert delete.
-                         (if (= 404 (:status (ex-data e)))
-                           {:num_deleted 0}
-                           (throw e))))]
+                deleted (storage/delete-by-filter! settings collection-name filter-by)]
             (skills/success-result
              (merge {:decision :revert
-                     :reverted-count (or (:num_deleted resp) 0)
+                     :reverted-count (or deleted 0)
                      :chunk-id chunk-id
                      :collection-name collection-name
                      :filter-by filter-by}

@@ -6,12 +6,103 @@
    - Parallel document preparation with fault tolerance
    - Parallel document storage with rate limiting
    - Complete pipeline materialization"
-  (:require [missionary.core :as m]
+  (:require [clojure.string :as str]
+            [missionary.core :as m]
+            [net.cgrand.xforms.rfs :as rfs]
             [medley.core :as y]
             [taoensso.telemere :as t]
             [digdir.docs.pipeline.core :as core]
-            [digdir.docs.pipeline.storage :as storage]
             [digdir.docs.pipeline.telemetry :as telemetry]))
+
+;; ============================================================================
+;; A run's failures: ONE record, shared by its prepare and store steps
+;; ============================================================================
+;;
+;; A document that fails to PREPARE (fetch, parse, LLM) and a document whose
+;; rows Typesense REFUSED are the same event for a run: this document could not
+;; be ingested. Both count against the one `:fault-tolerance/max-document-failures`
+;; budget, in this record, and the run fails when it is reached. The record also
+;; says what failed, so the run can report it: a failure is never silent.
+
+(defn failure-record
+  "A fresh record of one run's documents and failures."
+  []
+  (atom {:seen 0 :stored 0 :failed 0 :prepare-failed 0 :refused []}))
+
+(defn with-failure-record
+  "`config` carrying the run's failure record under `:fault-tolerance/failures`,
+   adding a fresh one unless the caller (the executor) handed one in. Call it
+   ONCE per run, where both flows are built, so they share it."
+  [config]
+  (if (:fault-tolerance/failures config)
+    config
+    (assoc config :fault-tolerance/failures (failure-record))))
+
+(defn record-of
+  "The run's failure record in `config` (a fresh one when none was handed in)."
+  [config]
+  (or (:fault-tolerance/failures config) (failure-record)))
+
+(defn count-failure!
+  "Count one failed document in the run's record; throw when the run's budget is
+   reached. `detail` is merged into the record (a refusal adds itself to
+   `:refused`)."
+  [config record detail cause]
+  (let [max-failures (:fault-tolerance/max-document-failures config)
+        {:keys [failed]} (swap! record (fn [r]
+                                         (cond-> (update r :failed inc)
+                                           (= :prepare (:kind detail)) (update :prepare-failed inc)
+                                           (= :rows-refused (:kind detail)) (update :refused conj (dissoc detail :kind)))))]
+    (when (and max-failures (>= failed max-failures))
+      (throw (ex-info (str "the document-failure budget (" max-failures ") was reached")
+                      {:type :digdir.pipeline/failure-budget-reached
+                       :max-document-failures max-failures
+                       :failed failed}
+                      cause)))
+    failed))
+
+(def ^:private max-summary-collections 3)
+(def ^:private max-summary-ids 5)
+(def ^:private max-summary-length 1000)
+
+(defn failure-summary
+  "A run's failures in one line a person can act on, from its record, or nil when
+   nothing failed: how many of how many documents failed, the refusals by
+   collection (ids and the first error), and the prepare failures. No document
+   bodies. At most `max-summary-length` characters."
+  [{:keys [seen failed prepare-failed refused]}]
+  (when (pos? (or failed 0))
+    (let [by-coll (->> refused (group-by :collection) (sort-by key) (take max-summary-collections))
+          refusals (when (seq refused)
+                     (str (count refused) " refused by Typesense ("
+                          (str/join "; " (for [[coll rs] by-coll]
+                                           (str coll ": ids " (str/join ", " (take max-summary-ids (mapcat :ids rs)))
+                                                "; first error: " (:first-error (first rs)))))
+                          ")"))
+          prepares (when (pos? prepare-failed) (str prepare-failed " failed to prepare"))
+          s (str failed " of " seen " documents failed: " (str/join ", " (remove nil? [refusals prepares])))]
+      (if (> (count s) max-summary-length) (str (subs s 0 (- max-summary-length 3)) "...") s))))
+
+(defn tolerate-refusal
+  "The store step's catch: a document whose rows Typesense refused
+   (`:digdir.storage/rows-refused`, exactly that and nothing broader) is a
+   document failure. It is counted against the run's budget, named in one
+   `:pipeline/document-refused` event, and dropped. Its OLD revision stays:
+   storage threw before that document's orphan delete. Any other exception is
+   rethrown, and fails the run."
+  [config record doc e]
+  (let [d (ex-data e)]
+    (if (= :digdir.storage/rows-refused (:type d))
+      (let [detail {:kind :rows-refused
+                    :document-id (:id doc)
+                    :collection (:collection d)
+                    :refused (:refused d)
+                    :sent (:sent d)
+                    :ids (vec (take max-summary-ids (map :id (:refused-sample d))))
+                    :first-error (:error (first (:refused-sample d)))}]
+        (t/event! :pipeline/document-refused {:level :warn :data (dissoc detail :kind)})
+        (count-failure! config record detail e))
+      (throw e))))
 
 ;; ============================================================================
 ;; Document Preparation Flow
@@ -32,15 +123,17 @@
    - Emits m/amb (empty) for recoverable failures to continue processing"
   [config prepare-doc-t entries-f pipeline-name]
   (m/ap
-    (let [prepare-failures (atom 0)
+    (let [record (record-of config)
           entry (m/?> (:parallelism/documents config) entries-f)]
+      (swap! record update :seen inc)
       (try
         (t/event! (keyword (name pipeline-name) "handling-entry")
                   {:data {:entry (select-keys entry [:loc :path :id])}})
         (m/? (prepare-doc-t config entry))
         (catch Exception e
-          (let [failures (swap! prepare-failures inc)
-                terminal? (= failures (:fault-tolerance/max-document-failures config))]
+          (let [max-failures (:fault-tolerance/max-document-failures config)
+                failures (inc (:failed @record))
+                terminal? (and max-failures (>= failures max-failures))]
             (if terminal?
               (core/say (str "FATAL: " failures " documents failed. Shutting down"))
               (core/say (str "WARNING: " failures " documents failed. Skipping")))
@@ -50,7 +143,7 @@
                        :data {:failures failures
                               :entry (select-keys entry [:loc :path :id])}}
                       e)
-            (when terminal? (throw e))
+            (count-failure! config record {:kind :prepare} e)
             (m/amb)))))))
 
 ;; ============================================================================
@@ -70,11 +163,18 @@
    - Tracks active store threads via telemetry/!store-threads"
   [config store-doc-t documents-f]
   (m/ap
-    (let [doc (m/?> (:parallelism/store config) documents-f)
-          _ (swap! telemetry/!store-threads inc)
-          doc (m/? (store-doc-t config doc))
-          _ (swap! telemetry/!store-threads dec)]
-      doc)))
+    (let [record (record-of config)
+          doc (m/?> (:parallelism/store config) documents-f)]
+      (swap! telemetry/!store-threads inc)
+      ;; A store that throws must not leave the gauge counting it.
+      (try
+        (let [stored (m/? (store-doc-t config doc))]
+          (swap! record update :stored inc)
+          stored)
+        (catch clojure.lang.ExceptionInfo e
+          (tolerate-refusal config record doc e)
+          (m/amb))
+        (finally (swap! telemetry/!store-threads dec))))))
 
 ;; ============================================================================
 ;; Entry Filtering Flows
@@ -136,10 +236,10 @@
    2. Filters and dedupes
    3. Prepares documents (parallel)
    4. Stores documents (parallel)
-   5. Returns what the run wrote: `storage/merge-write-reports` over every
-      stored document's report"
+   5. Returns the last stored document"
   [config source-entries-t filter-entries-fn prepare-doc-t store-doc-t pipeline-name]
-  (m/sp
+  (let [config (with-failure-record config)]
+   (m/sp
     (t/event! (keyword (name pipeline-name) "starting")
               {:data {:config (select-keys config [:parallelism/documents
                                                    :parallelism/store
@@ -153,7 +253,7 @@
           prepared-flow (mk-prepare-documents-f config prepare-doc-t filtered-flow pipeline-name)
           stored-flow (mk-store-documents-f config store-doc-t prepared-flow)]
 
-      (m/? (m/reduce storage/merge-write-reports stored-flow)))))
+      (m/? (m/reduce rfs/last stored-flow))))))
 
 ;; ============================================================================
 ;; Job Management

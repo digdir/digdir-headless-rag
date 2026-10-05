@@ -16,10 +16,9 @@
    Lives in `src-dev/` for the same reason as the other Phase B
    skills: offline tooling, not part of the runtime retrieval path."
   (:require [clojure.string :as str]
-            [digdir.docs.pipeline.storage :as storage]
             [digdir.rag.skills.core :as skills]
-            [digdir.rag.typesense :as ts-utils]
-            [typesense.client :as ts]))
+            [digdir.docs.pipeline.storage :as storage]
+            [digdir.rag.typesense :as ts-utils]))
 
 ;; =============================================================================
 ;; Metadata
@@ -37,7 +36,7 @@
    ;; a one-element seq). Listing only :collection-name means the
    ;; runner's input validator passes for both styles.
    :inputs [:collection-name]
-   :outputs [:applied-count :chunk-ids :collection-name]
+   :outputs [:applied-count :chunk-ids :collection-name :refused :refused-count]
    :parameters {:dry-run? :boolean}
    :required-services #{:typesense}
    :version "1.0.0"
@@ -112,6 +111,28 @@
 ;; =============================================================================
 ;; Skill body
 ;; =============================================================================
+
+(def ^:private max-refused-chunks
+  "How many refused chunks a result lists. `:refused-count` is always exact."
+  20)
+
+(defn- refused-chunks
+  "The chunks whose rows storage reports refused, from the positions it gives
+   (question rows carry no id): `{:chunk-id :refused :sent :first-error
+   :previous-questions-deleted}` per chunk, in the order the rows were sent."
+  [rows {:keys [refused-indices refused-sample]} deleted?]
+  (let [error-at (zipmap refused-indices (map :error refused-sample))
+        sent-per-chunk (frequencies (map :chunk_id rows))
+        refused (map (fn [i] {:chunk-id (:chunk_id (nth rows i)) :error (error-at i)}) refused-indices)
+        by-chunk (group-by :chunk-id refused)]
+    (mapv (fn [chunk-id]
+            (let [group (by-chunk chunk-id)]
+              {:chunk-id chunk-id
+               :refused (count group)
+               :sent (sent-per-chunk chunk-id)
+               :first-error (some :error group)
+               :previous-questions-deleted deleted?}))
+          (distinct (map :chunk-id refused)))))
 
 (defn execute-apply-questions
   "Apply the batch of proposals against `:collection-name`.
@@ -189,39 +210,35 @@
                 (throw (ex-info "No Typesense settings — tenant missing or unconfigured"
                                 {:tenant tenant})))
             del-filter (chunk-ids-filter chunk-ids)]
+        ;; ⚠️ KNOWN: the delete runs BEFORE the upsert, so a chunk whose new rows
+        ;; are refused is left with NO questions. The result marks each such chunk
+        ;; `:previous-questions-deleted true`. Reordering it (deterministic ids,
+        ;; upsert, then delete only that chunk's orphans) is a separate change.
         (when del-filter
-          (try
-            (ts/delete-documents! settings collection-name {:filter_by del-filter})
-            (catch clojure.lang.ExceptionInfo e
-              ;; A "no documents matched" 404 is a successful no-op for
-              ;; first-time application. Surface anything else.
-              (when-not (= 404 (:status (ex-data e)))
-                (throw e)))))
-        (let [;; Typesense answers per row and does not throw on a refused
-              ;; row. `storage/write-report` reads that answer against the
-              ;; rows SENT: a refused row, or one the answer does not
-              ;; confirm, is `:rejected`; only confirmed rows are `:written`.
-              ;; This skill used to re-implement the check, and a short or
-              ;; non-sequential answer then read as nothing refused.
-              report (storage/write-report collection-name rows
-                                           (ts/upsert-documents! settings collection-name rows))
-              failures (:rejected report)]
-          (if (seq failures)
-            (throw (ex-info "Typesense upsert had row-level failures"
-                            {:skill-id :builtin/enrichment-apply-questions
-                             :collection collection-name
-                             :rows-sent (count rows)
-                             :failed-count (count failures)
-                             :first-error (-> failures first :error)
-                             :sample-failures (->> failures (take 3) vec)}))
-            (skills/success-result
-             {:applied-count (:written report)
-              :chunk-ids chunk-ids
-              :collection-name collection-name}
-             {:tenant tenant
-              :delete-filter del-filter
-              :rows-sent (count rows)
-              :rows-accepted (:written report)})))))))
+          (storage/delete-by-filter! settings collection-name del-filter))
+        ;; Storage reads Typesense's per-row answer and throws
+        ;; `:digdir.storage/rows-refused` if any row is refused or unconfirmed. A
+        ;; partly applied batch is a success that NAMES its refused chunks; a batch
+        ;; that wrote nothing still throws.
+        (let [{:keys [written refused]} (try
+                                          {:written (storage/upsert-rows! settings collection-name rows)}
+                                          (catch clojure.lang.ExceptionInfo e
+                                            (let [d (ex-data e)]
+                                              (if (and (= :digdir.storage/rows-refused (:type d))
+                                                       (pos? (:written d)))
+                                                {:written (:written d)
+                                                 :refused (refused-chunks rows d (some? del-filter))}
+                                                (throw e)))))]
+          (skills/success-result
+           (cond-> {:applied-count written
+                    :chunk-ids chunk-ids
+                    :collection-name collection-name}
+             (seq refused) (assoc :refused (vec (take max-refused-chunks refused))
+                                  :refused-count (count refused)))
+           {:tenant tenant
+            :delete-filter del-filter
+            :rows-sent (count rows)
+            :rows-accepted written}))))))
 
 ;; =============================================================================
 ;; Registration
