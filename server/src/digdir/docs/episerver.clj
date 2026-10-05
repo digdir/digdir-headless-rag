@@ -441,10 +441,12 @@
           pages-flow (m/seed lang-filtered)
           filtered-flow (mk-filter-pages-f config pages-flow)]
 
-      (m/?
-       (m/reduce
-        rfs/last
-        (mk-store-documents-f config (mk-prepare-documents-f config filtered-flow))))))))
+      (let [last-stored (m/?
+                         (m/reduce
+                          rfs/last
+                          (mk-store-documents-f config (mk-prepare-documents-f config filtered-flow))))]
+        (orch/check-stored! config)
+        last-stored)))))
 
 ;; ============================================================================
 ;; Entry Points

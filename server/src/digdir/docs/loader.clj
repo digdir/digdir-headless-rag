@@ -516,7 +516,9 @@
                                          (:chunks doc))
                          current-phrase-ids (mapv :id phrases)]
                      (t/event! :document-loading/upserting-to-documents-typesense-collection)
-                     (storage/upsert-row! (ts kview) documents-coll (prepare-doc doc))
+                     ;; through storage's document write, which also emits
+                     ;; :pipeline/upserting-document, so the run counts it as stored
+                     (storage/upsert-document! kview documents-coll (prepare-doc doc))
                      (t/event! :document-loading/upserting-to-chunks-typesense-collection
                                {:data {:chunk-count (count chunks)}})
                      (storage/upsert-rows! (ts kview) chunks-coll chunks)
@@ -1132,7 +1134,17 @@
 (defn reset-failed-documents! []
   (reset! !failed-documents []))
 
+(defn- require-store!
+  "Refuse a KUDOS materialization with no store to write to, before anything is
+   fetched, prepared or created. Without one it used to run to the end, write
+   nothing, and report success."
+  [kview]
+  (when (empty? (:stores kview))
+    (throw (ex-info "KUDOS materialization has no store configured (:stores is empty)"
+                    {:type :digdir.storage/no-store}))))
+
 (defn retry-failed-documents! [kview]
+  (require-store! kview)
   (let [kview (orch/with-failure-record kview)
         failed-ids @!failed-documents]
     (when (seq failed-ids)
@@ -1157,7 +1169,8 @@
         kudos-profile (kudos/profile kview)
         documents-by-ids (partial kudos/documents-by-ids kudos-profile)
         documents (partial kudos/documents kudos-profile)]
-    (m/sp (t/event! :document-loading/materializing-kview
+    (m/sp (require-store! kview)
+          (t/event! :document-loading/materializing-kview
                     {:data {:kview kview
                             :colls (coll-ids kview)}})
           ;; Chunks coll name will need to be hash of both documents and chunks
@@ -1176,6 +1189,8 @@
                               (concat-flows id-docs filtered-docs)
                               id-docs)]
                    (mk-store-documents-f kview (m/buffer 10000 (mk-prepare-documents-f kview docs)))))))
+          ;; a run that saw documents and stored none ingested nothing: it fails
+          (orch/check-stored! kview)
           (t/event! :document-loading/done))))
 
 (comment
@@ -1280,6 +1295,7 @@ REPLACE_ME
   (let [kview (orch/with-failure-record kview)
         documents-by-ids (partial kudos/documents-by-ids (kudos/profile kview))]
     (m/sp
+      (require-store! kview)
       (t/event! :document-loading/importing-single-document {:data {:doc-id doc-id}})
       (m/? (m/via m/blk (create-stores kview)))
       (m/?

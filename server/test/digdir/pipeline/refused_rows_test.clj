@@ -17,6 +17,7 @@
             [digdir.docs.episerver :as episerver]
             [digdir.docs.folder :as folder]
             [digdir.docs.loader :as loader]
+            [digdir.docs.pipeline.orchestration :as orchestration]
             [digdir.docs.pipeline.storage :as storage]
             [digdir.docs.schema-drift :as schema-drift]
             [digdir.docs.website :as website]
@@ -96,8 +97,10 @@
 
 (defn- sources
   "Each executor source, with the loader keys it needs beyond the folder
-   pipeline's, and stubs for its outside-the-process steps. `fail-ids` fail to prepare."
-  [fail-ids]
+   pipeline's, and stubs for its outside-the-process steps. `fail-ids` fail to
+   prepare; `doc-ids` are the source's entries."
+  ([fail-ids] (sources fail-ids ["a" "b" "c"]))
+  ([fail-ids doc-ids]
   [{:source-type :folder
     :loader-keys {:files/limit 10}
     :redefs {#'folder/find-markdown-files (fn [_] (mapv #(hash-map :path (str "/corpus/" % ".md")) doc-ids))
@@ -112,7 +115,7 @@
              #'episerver/filter-published-pages identity
              #'episerver/filter-deleted-pages identity
              #'episerver/filter-by-language (fn [pages _] pages)
-             #'episerver/mk-prepare-document-t (fn [_ p] (prepare-or-fail fail-ids (:page p)))}}])
+             #'episerver/mk-prepare-document-t (fn [_ p] (prepare-or-fail fail-ids (:page p)))}}]))
 
 (def ^:private folder (first (sources #{})))
 
@@ -285,3 +288,80 @@
         "a 500 is not a refusal: it fails the run with the budget (10) far from reached")
     (is (str/includes? message "Internal Server Error") (str "the run's error is the 500's own: " message))
     (is (not (str/includes? message "budget")) "not a budget failure")))
+
+;; =============================================================================
+;; No write may succeed silently: a KUDOS run with no store, and a run that stored nothing
+;; =============================================================================
+
+(deftest a-kudos-run-with-no-store-refuses-up-front
+  ;; Through the executor the KUDOS loader is handed no `:stores`. It used to
+  ;; "complete" having written nothing, and record names nothing wrote.
+  (let [fetched (atom [])
+        kudos-source {:source-type :kudos
+                      :loader-keys {:documents/first-import-ids ["a" "b"]}
+                      :redefs {#'kudos/documents-by-ids (fn [_ ids] (swap! fetched into ids) (m/seed (map (fn [id] {:id id}) ids)))
+                               #'kudos/documents (fn [& _] (swap! fetched conj :documents) (m/seed []))
+                               #'loader/mk-prepare-document-t (fn [_ d] (m/sp (prepared (:id d))))
+                               #'schema-drift/report! (fn [& _] nil)}}
+        {:keys [execution names]} (run-source! kudos-source {})
+        message (str (:pipeline-execution/error-message execution))]
+    (is (= :failed (:pipeline-execution/status execution)) (str "a store-less KUDOS run must fail: " message))
+    (is (str/includes? message "no store") message)
+    (is (= [nil nil nil] names) "and record no collection names")
+    (is (= [] @fetched) "before anything is fetched"))
+  (testing "the loader's other entry points refuse the same way"
+    ;; Nothing here may reach Kudos or Typesense: a fetch, a prepare or a client call fails at once.
+    (let [kview {:tenant "t" :store/coll-prefix "t_" :parallelism/documents 1 :parallelism/store 1}
+          refuse-all (fn [what] (fn [& _] (throw (ex-info (str "must not " what) {}))))
+          no-store? (fn [f] (try (f) false
+                                 (catch clojure.lang.ExceptionInfo e (= :digdir.storage/no-store (:type (ex-data e))))))]
+      (with-redefs-fn
+        (merge (fake-typesense (atom {}) {})
+               {#'kudos/documents-by-ids (refuse-all "fetch")
+                #'kudos/documents (refuse-all "fetch")
+                #'loader/mk-prepare-document-t (refuse-all "prepare")})
+        (fn []
+          (is (no-store? #(m/? (loader/mk-import-single-document-t kview "a"))))
+          (let [before @loader/!failed-documents]
+            (try (reset! loader/!failed-documents ["a"])
+                 (is (no-store? #(loader/retry-failed-documents! kview)))
+                 (finally (reset! loader/!failed-documents before)))))))))
+
+(deftest a-run-that-stored-nothing-fails
+  (let [{:keys [execution names]} (run-source! (first (sources #{} ["b"])) {:refuse? (refuse-chunk-of ["b"])})
+        message (str (:pipeline-execution/error-message execution))]
+    (is (= :failed (:pipeline-execution/status execution))
+        (str "its one document refused, within the budget, the run still ingested nothing: " message))
+    (is (str/includes? message "0 of 1 documents stored") message)
+    (is (= [nil nil nil] names) "and records no collection names")))
+
+(deftest an-empty-source-still-completes
+  ;; The control for the test above: nothing seen is not nothing stored. (Website:
+  ;; the folder loader has its own refusal of an empty corpus directory.)
+  (let [{:keys [execution names]} (run-source! (second (sources #{} [])) {})]
+    (is (= :completed (:pipeline-execution/status execution)) (str (:pipeline-execution/error-message execution)))
+    (is (nil? (:pipeline-execution/error-message execution)))
+    (is (every? some? names))))
+
+(deftest a-kudos-run-reports-the-documents-it-stored
+  ;; The executor's progress counts a stored document on `:pipeline/upserting-document`.
+  ;; The KUDOS write path must emit it like the other loaders.
+  (let [store (atom {})
+        record (orchestration/failure-record)
+        kview {:tenant "t" :store/coll-prefix "t_" :stores #{{:store/type :typesense}}
+               :documents/first-import-ids ["a" "b" "c"] :parallelism/documents 1 :parallelism/store 1
+               :fault-tolerance/max-document-failures 10 :fault-tolerance/failures record}
+        [_ signals]
+        (with-signals
+          #(with-redefs-fn
+             (merge (fake-typesense store {})
+                    {#'kudos/documents-by-ids (fn [_ ids] (m/seed (map (fn [id] {:id id}) ids)))
+                     #'kudos/documents (fn [& _] (m/seed []))
+                     #'loader/mk-prepare-document-t (fn [_ d] (m/sp (prepared (:id d))))
+                     #'schema-drift/report! (fn [& _] nil)})
+             (fn [] (m/? (loader/mk-materialize-t kview)))))
+        progress (reduce #'executor/update-progress-from-signal @#'executor/empty-progress
+                         (filter (comp keyword? :id) signals))]
+    (is (= 3 (:stored @record)) "PREMISE: the flow stored all three")
+    (is (= 3 (:stored progress)) "and the run's progress says so: documents-processed counts them")))
+
