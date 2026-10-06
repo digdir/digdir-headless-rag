@@ -13,7 +13,6 @@
             #?(:clj [digdir.config.ops.retirement :as ops-retirement])
             #?(:clj [digdir.config.ops.sync :as ops-sync])
             #?(:clj [digdir.config.ops.topology :as ops-topology])
-            #?(:clj [digdir.pipeline.core :as pipeline])
             #?(:clj [clojure.data.json :as json])
             #?(:clj [clojure.java.io :as io])
             #?(:clj [clojure.edn :as edn])))
@@ -590,10 +589,31 @@
       THROWS rather than returning a refusal, because the two callers that
       ignore a return value would turn a refusal into a silent no-op. Callers
       that can reach this in normal use should ALSO not render the control —
-      enforcement here, explanation there."
+      enforcement here, explanation there.
+
+      THE ONE admin guard of the console's server surface. Every gated
+      helper calls it (a census by var pins that no other code calls the admin
+      predicate), and every caller reads its ACTOR from `e/http-request` inside
+      the SAME `e/server` form, never from a client-scope binding. A nil or
+      unknown actor is refused. The refusal carries `{:status 403 :reason
+      :not-admin}` so an HTTP door can answer it as a 403."
      [db user-id]
      (when-not (perms/is-admin? db user-id)
-       (throw (ex-info "Permission denied - admin required" {})))))
+       (throw (ex-info "Permission denied - admin required" {:status 403 :reason :not-admin})))))
+
+#?(:clj
+   (defn config-ui-admin?
+     "the ONE guard's verdict as a boolean, for what a panel DISPLAYS
+      (explanation, never enforcement). Only the guard's own refusal reads as
+      false; any other failure propagates."
+     [db user-id]
+     (try
+       (ensure-config-ui-admin! db user-id)
+       true
+       (catch clojure.lang.ExceptionInfo e
+         (if (= :not-admin (:reason (ex-data e)))
+           false
+           (throw e))))))
 
 #?(:clj
    (def ^:private tree-snapshot-mutation-ops
@@ -803,86 +823,6 @@
    (defn create-config-tree-binding! [& _]
      (throw (ex-info "Config tree binding creation is only available on the JVM server" {}))))
 
-#?(:clj
-   (defn create-dataset-handler!
-     "Create a new durable parent dataset for operator workflows."
-     [name description user-id]
-     (when-let [conn (config-db/get-conn)]
-       (let [db @conn]
-         (when-not (perms/is-admin? db user-id)
-           (throw (ex-info "Permission denied - admin required" {})))
-         (pipeline/create-dataset! conn (cond-> {:name name}
-                                          (some? description) (assoc :description description))))))
-   :cljs
-   (defn create-dataset-handler! [& _]
-     (throw (ex-info "Dataset creation is only available on the JVM server" {}))))
-
-#?(:clj
-   (defn create-pipeline-handler!
-     "Create a new pipeline."
-     [tenant dataset-id pipeline-id properties user-id]
-     (when-let [conn (config-db/get-conn)]
-       (let [db @conn
-             master-key (cfg/get-master-key)]
-         (when-not (perms/is-admin? db user-id)
-           (throw (ex-info "Permission denied - admin required" {})))
-         (pipeline/create-pipeline! conn {:tenant tenant
-                                          :environment nil
-                                          :dataset-id dataset-id
-                                          :pipeline-name pipeline-id
-                                          :properties properties
-                                          :master-key master-key})
-         :ok))))
-
-#?(:clj
-   (defn create-tenant-handler!
-     "Create a new tenant with ID and display name."
-     [tenant-id tenant-name user-id]
-     (when-let [conn (config-db/get-conn)]
-       (let [db @conn
-             normalized-id (sanitize-tenant-id (str/trim (or tenant-id "")))
-             normalized-name (str/trim (or tenant-name ""))]
-         (when-not (perms/is-admin? db user-id)
-           (throw (ex-info "Permission denied - admin required" {})))
-         (when (str/blank? normalized-name)
-           (throw (ex-info "Tenant name is required" {})))
-         (when (str/blank? normalized-id)
-           (throw (ex-info "Tenant ID is required" {})))
-         (when-not (valid-tenant-id? normalized-id)
-           (throw (ex-info "Tenant ID must use lowercase letters, numbers, and hyphens" {})))
-         (when (config-db/get-tenant db normalized-id)
-           (throw (ex-info "Tenant already exists" {:tenant-id normalized-id})))
-         (config-db/register-tenant! conn normalized-id {:name normalized-name
-                                                         :created-by user-id})
-         :ok))))
-
-#?(:clj
-   (defn duplicate-pipeline-handler!
-     "Duplicate an existing pipeline."
-     [tenant source-pipeline-id new-pipeline-id user-id]
-     (when-let [conn (config-db/get-conn)]
-       (let [db @conn
-             master-key (cfg/get-master-key)]
-         (when-not (perms/is-admin? db user-id)
-           (throw (ex-info "Permission denied - admin required" {})))
-         (pipeline/duplicate-pipeline! conn {:tenant tenant
-                                             :environment nil
-                                             :source-pipeline-name source-pipeline-id
-                                             :new-pipeline-name new-pipeline-id
-                                             :master-key master-key})
-         :ok))))
-
-#?(:clj
-   (defn soft-delete-pipeline-handler!
-     "Soft-delete an pipeline."
-     [tenant pipeline-id user-id]
-     (when-let [conn (config-db/get-conn)]
-       (let [db @conn]
-         (when-not (perms/is-admin? db user-id)
-           (throw (ex-info "Permission denied - admin required" {})))
-         (pipeline/soft-delete-pipeline! conn tenant nil pipeline-id)
-         :ok))))
-
 ;; =============================================================================
 ;; Operations Handlers (Server-side)
 ;; =============================================================================
@@ -896,10 +836,10 @@
      (try
        (if-let [conn (config-db/get-conn)]
          (let [db @conn]
-           (if-not (perms/is-admin? db user-id)
-             {:status :error :error "Permission denied - admin required"}
-             {:status :success
-              :data (body-fn {:conn conn :db db :master-key (cfg/get-master-key)})}))
+           ;; the ONE guard; its refusal becomes this fn's error map.
+           (ensure-config-ui-admin! db user-id)
+           {:status :success
+            :data (body-fn {:conn conn :db db :master-key (cfg/get-master-key)})})
          {:status :error :error "No database connection"})
        (catch Exception e
          {:status :error :error (or (ex-message e) "Operation failed")}))))

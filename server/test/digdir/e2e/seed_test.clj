@@ -124,7 +124,9 @@
                     seed/seed-e2e-fixture-agents!
                     (fn [_] (swap! calls update :e2e-agents-seeded inc))
                     api-keys/store-api-key
-                    (fn [& _] (swap! calls update :keys-stored inc))
+                    (fn [& _] (swap! calls update :keys-stored inc) {:api-key-id "seed-key"})
+                    ;; an unscoped seed key is marked all-tenant
+                    api-keys/set-all-tenants! (fn [& _] true)
                     seed/seed-azure-config-from-env!
                     (fn [_] {:azure-paths-written []})
                     config-bootstrap/bootstrap-config-tree!

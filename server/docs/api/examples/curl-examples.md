@@ -72,7 +72,7 @@ method/argument reference.
 ### List Conversations
 
 ```bash
-curl -X GET "$RAG_BASE_URL/api/conversations?page_size=10&page_index=0" \
+curl -X GET "$RAG_BASE_URL/api/conversations?tenant=digdir&page_size=10&page_index=0" \
   -H "X-API-Key: $RAG_API_KEY" \
   -H "X-User-Id: customer-user-123"
 ```

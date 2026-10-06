@@ -12,6 +12,9 @@ All endpoints require the `auth-token` cookie.
 
 `GET /console-api/api-keys`
 
+Lists EVERY key, for an admin, the same list the console panel shows.
+A key's creator does not filter it.
+
 ### Success Response
 
 ```json
@@ -35,7 +38,8 @@ All endpoints require the `auth-token` cookie.
       ],
       "created": 1704067200,
       "last-used": 1704153600,
-      "revoked": false
+      "revoked": false,
+      "all-tenants": false
     }
   ]
 }
@@ -65,10 +69,21 @@ is rejected — it would grant access to nothing.
 | `modes` | array | Namespaced mode ids the key may invoke, e.g. `builtin/agent-rag-graph-bundled` |
 | `client-id` | string | Optional caller/client identifier stored with the key |
 
-### An empty grant list means UNRESTRICTED, not none
+### The TENANT is never unrestricted by absence
 
-**`agent-refs`, `modes`/`skill-graphs`, `dataset-scopes` and
-`allowed-config-keys` all grant EVERYTHING when left empty.** A grant list
+**A key reaches only the tenants its grants name:** its dataset scopes, its
+allowed config keys and any explicit tenants, of the key and of its access
+policy. A key with no granted tenant reaches NO tenant and is refused
+everywhere. **An empty `dataset-scopes` reaches no dataset.**
+
+A deliberate all-tenant key (an operator's key, or a single-deployment key
+relying on `TENANT`/`DATASET_CONFIG_KEY`) must carry the explicit marker, set by
+an admin through [`PUT /console-api/api-keys/:key-id/all-tenants`](#set-or-clear-the-all-tenant-marker).
+
+### Within its tenants, an empty grant list means UNRESTRICTED, not none
+
+**`agent-refs`, `modes`/`skill-graphs` and `allowed-config-keys` grant
+EVERYTHING when left empty, within the key's granted tenants.** A grant list
 narrows access; it does not confer it. A key created with no `agent-refs` can
 list and call **every** agent.
 
@@ -232,9 +247,44 @@ curl -X PUT https://rag.digdir.cloud/console-api/api-keys/key_abc123/allowed-con
 }
 ```
 
+## Set or Clear the All-Tenant Marker
+
+`PUT /console-api/api-keys/:key-id/all-tenants`
+
+Marks a key as reaching EVERY tenant (`true`), or clears the marker (`false`).
+Only an admin may call it, and any admin may, not only the key's creator. Every
+change is audited with who made it and the old and new value.
+
+```json
+{ "all-tenants": true }
+```
+
+### Success Response
+
+```json
+{
+  "api-key-id": "key_abc123",
+  "all-tenants": true
+}
+```
+
+### Errors
+
+- `400`: `all-tenants` is missing or not a boolean.
+- `401`: no console session (an API key is not a console credential).
+- `403`: the caller is not an admin.
+- `404`: no such key.
+- `409`: the key has no access policy to mark.
+
+Rotating a key keeps the marker. A restore (the system import or a dump) carries
+it, and its result lists every marked key it brings in as `all-tenant-keys`.
+
 ## Revoke API Key
 
 `POST /console-api/api-keys/:key-id/revoke`
+
+Any admin may revoke, rotate or edit ANY key, not only the one who created it.
+A key's `created-by` records who made it; it grants nothing.
 
 ### Success Response
 

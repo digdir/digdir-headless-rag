@@ -293,7 +293,7 @@
    `definition` is the full config-def map. `On-close` is called when the
    operator dismisses the wizard. `On-applied` is called after a successful
    apply so the caller can refresh its data."
-  [definition On-close On-applied user-id]
+  [definition On-close On-applied]
   (e/client
    (let [!state (atom (initial-wizard-state definition))
          state (e/watch !state)
@@ -325,16 +325,17 @@
                    :path (:path state)
                    :candidate-value (:candidate-value state)
                    :non-matching-strategy (:strategy state)
-                   :changelog (:changelog state)
-                   :user-id user-id}
+                   :changelog (:changelog state)}
              server-result (e/server
-                            (e/Offload
+                            ;; the actor, read server-side in this form; assoc'd LAST
+                            (let [actor (:user/id e/http-request)]
+                             (e/Offload
                              #(try
                                 {:status :success
-                                 :result (common/mutate-config-tree! opts)}
+                                 :result (common/mutate-config-tree! (assoc opts :user-id actor))}
                                 (catch #?(:clj Exception :cljs :default) e
                                   {:status :error
-                                   :error (or (ex-message e) "apply failed")}))))]
+                                   :error (or (ex-message e) "apply failed")})))))]
          (e/client
           (case (:status server-result)
             :success (swap! !state assoc

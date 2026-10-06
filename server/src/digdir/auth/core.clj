@@ -168,7 +168,11 @@
                                        email "\n" confirmation-code))]
     (apply str (map #(format "%02x" (bit-and 0xff %)) digest))))
 
-(defn- secure-digest=
+(defn secure-digest=
+  "Whether two strings are equal, compared in CONSTANT time
+   (`MessageDigest/isEqual`); false unless both are strings. THE one secret
+   comparison: the confirmation codes here, and the debug router's operator
+   secret."
   [left right]
   (and (string? left)
        (string? right)

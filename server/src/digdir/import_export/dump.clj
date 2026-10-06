@@ -530,10 +530,14 @@
                               :on-conflict on-conflict})
     ;; Per-entity apply-fns (users/agents/folders/api-keys/...) run after the
     ;; config phase, in spec order.
-    (doseq [spec entity-specs
-            :when (:apply-fn spec)]
-      ((:apply-fn spec) config-conn main-conn (records-by-key (:key spec))
-       {:master-key master-key :on-conflict on-conflict}))
-    {:imported (->> entity-specs
-                    (map (fn [spec] [(:key spec) (count (records-by-key (:key spec)))]))
-                    (into {}))}))
+    (let [applied (reduce (fn [acc spec]
+                            (assoc acc (:key spec)
+                                   ((:apply-fn spec) config-conn main-conn (records-by-key (:key spec))
+                                    {:master-key master-key :on-conflict on-conflict})))
+                          {}
+                          (filter :apply-fn entity-specs))]
+      {:imported (->> entity-specs
+                      (map (fn [spec] [(:key spec) (count (records-by-key (:key spec)))]))
+                      (into {}))
+       ;; the ALL-TENANT keys this restore brought in.
+       :all-tenant-keys (vec (get-in applied [:api-keys :all-tenant-keys]))})))

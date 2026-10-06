@@ -14,11 +14,13 @@
 (def ^:private redacted-text "[REDACTED]")
 
 (defn- summarize-api-key-grants
-  [{:keys [pipeline-id dataset-scopes agent-refs]}]
+  [{:keys [pipeline-id dataset-scopes agent-refs all-tenants?]}]
   (cond-> {}
     pipeline-id (assoc :pipeline-id pipeline-id)
     (seq dataset-scopes) (assoc :dataset-scopes dataset-scopes)
-    (seq agent-refs) (assoc :agent-refs agent-refs)))
+    (seq agent-refs) (assoc :agent-refs agent-refs)
+    ;; the all-tenant marker is a grant too; `false` is a value to record.
+    (boolean? all-tenants?) (assoc :all-tenants? all-tenants?)))
 
 ;; =============================================================================
 ;; Logging
@@ -58,17 +60,19 @@
 
 (defn api-key-change-tx-data
   "Generate transaction data for an API key operation audit record."
-  [{:keys [action api-key-id api-key-name pipeline-id dataset-scopes agent-refs
-           previous-pipeline-id previous-dataset-scopes previous-agent-refs
+  [{:keys [action api-key-id api-key-name pipeline-id dataset-scopes agent-refs all-tenants?
+           previous-pipeline-id previous-dataset-scopes previous-agent-refs previous-all-tenants?
            user-email user-id ip-address]}]
   (let [now (System/currentTimeMillis)
         audit-id (nano-id)
         previous-summary (summarize-api-key-grants {:pipeline-id previous-pipeline-id
                                                     :dataset-scopes previous-dataset-scopes
-                                                    :agent-refs previous-agent-refs})
+                                                    :agent-refs previous-agent-refs
+                                                    :all-tenants? previous-all-tenants?})
         current-summary (summarize-api-key-grants {:pipeline-id pipeline-id
                                                    :dataset-scopes dataset-scopes
-                                                   :agent-refs agent-refs})]
+                                                   :agent-refs agent-refs
+                                                   :all-tenants? all-tenants?})]
     (cond-> {:audit/id audit-id
              :audit/timestamp now
              :audit/action action

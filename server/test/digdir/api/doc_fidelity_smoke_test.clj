@@ -69,10 +69,14 @@
               ;; (that asymmetry is #349). Exactly one grant is the only
               ;; configuration that reaches these handlers.
               agent-id (:id (first (agents-db/list-enabled-agents @conn)))
+              ;; It is also granted exactly one TENANT: a conversation belongs to
+              ;; one, and a key granted none cannot reach the conversation
+              ;; endpoints at all.
               convo-key (:api-key (api-keys/create-api-key!
                                     conn "doc-fidelity-convo" "smoke"
                                     {:scopes #{:query} :user-email "doc-fidelity@test"
-                                     :agent-refs [agent-id]}))
+                                     :agent-refs [agent-id]
+                                     :dataset-scopes [{:tenant "doc-fidelity" :dataset-config-key "docs"}]}))
               server (api-http/start-server!
                        (fn [_] nil)
                        {:port 0 :host "127.0.0.1"
@@ -162,8 +166,8 @@
       (let [r (GET "/api/conversations" {"X-API-Key" (api-key)})]
         (is (= 400 (:status r)))))
     (testing "supplying it succeeds"
-      (let [r (GET "/api/conversations" {"X-API-Key" (api-key)
-                                         "X-User-Id" "doc-fidelity-smoke"})]
+      (let [r (GET "/api/conversations?tenant=doc-fidelity" {"X-API-Key" (convo-key)
+                                                              "X-User-Id" "doc-fidelity-smoke"})]
         (is (= 200 (:status r)))))))
 
 ;; ---------------------------------------------------------------------------
@@ -349,17 +353,17 @@
            "Content-Type" "application/json"}
         post (http/post (str (base-url) "/api/conversations")
                         {:headers H :throw-exceptions false
-                         :body (json/generate-string {:title "doc-fidelity" :tags ["a"]})})
+                         :body (json/generate-string {:tenant "doc-fidelity" :title "doc-fidelity" :tags ["a"]})})
         created (json/parse-string (:body post) true)
         cid (or (:id created) (get-in created [:conversation :id]))
-        get- (http/get (str (base-url) "/api/conversations/" cid)
+        get- (http/get (str (base-url) "/api/conversations/" cid "?tenant=doc-fidelity")
                        {:headers H :throw-exceptions false})
-        put (http/put (str (base-url) "/api/conversations/" cid)
+        put (http/put (str (base-url) "/api/conversations/" cid "?tenant=doc-fidelity")
                       {:headers H :throw-exceptions false
                        :body (json/generate-string {:title "doc-fidelity-2"})})
-        list- (http/get (str (base-url) "/api/conversations?page_size=5&page_index=0")
+        list- (http/get (str (base-url) "/api/conversations?tenant=doc-fidelity&page_size=5&page_index=0")
                         {:headers H :throw-exceptions false})
-        del (http/delete (str (base-url) "/api/conversations/" cid)
+        del (http/delete (str (base-url) "/api/conversations/" cid "?tenant=doc-fidelity")
                          {:headers H :throw-exceptions false})]
     {"Create Conversation" (json/parse-string (:body post) true)
      "Get Conversation" (json/parse-string (:body get-) true)
@@ -479,7 +483,7 @@
    {:label "GET /api/conversations/:id — documented 404 body"
     :doc "docs/api/endpoints/conversations.md"
     :marker "### Error Response (404)"
-    :path "/api/conversations/no-such-conversation" :auth :conversations}])
+    :path "/api/conversations/no-such-conversation?tenant=doc-fidelity" :auth :conversations}])
 
 (def ^:private expected-response-shape-cases 3)
 
@@ -496,7 +500,7 @@
   (GET path (case auth
               :bearer {"Authorization" (str "Bearer " (api-key))}
               :api-key {"X-API-Key" (api-key)}
-              :conversations {"X-API-Key" (api-key) "X-User-Id" "doc-fidelity-smoke"})))
+              :conversations {"X-API-Key" (convo-key) "X-User-Id" "doc-fidelity-smoke"})))
 
 (defn- unobservable? [documented actual]
   (boolean (some (fn [[k v]] (and (vector? v) (seq v)
@@ -611,7 +615,7 @@
     :path "/api/datasets" :auth :api-key}
    {:label "GET /api/conversations"
     :spec-path "/api/conversations" :method "get" :status "200"
-    :path "/api/conversations" :auth :conversations}])
+    :path "/api/conversations?tenant=doc-fidelity" :auth :conversations}])
 
 (def ^:private expected-schema-emission-cases 3)
 

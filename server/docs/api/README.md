@@ -69,6 +69,7 @@ The contract is dataset-first:
 |----------|--------|-------------|
 | [`/console-api/api-keys`](./endpoints/api-keys.md) | GET, POST | List or create API keys |
 | [`/console-api/api-keys/:key-id/allowed-config-keys`](./endpoints/api-keys.md) | PUT | Replace allowed config keys |
+| [`/console-api/api-keys/:key-id/all-tenants`](./endpoints/api-keys.md) | PUT | Set or clear the all-tenant marker (admin) |
 | [`/console-api/api-keys/:key-id/revoke`](./endpoints/api-keys.md) | POST | Revoke an API key |
 | [`/console-api/datasets`](./endpoints/pipelines.md) | GET, POST | List or create datasets |
 | [`/console-api/datasets/:dataset-id`](./endpoints/pipelines.md) | GET | Get one dataset |

@@ -10,7 +10,7 @@
             #?(:clj [digdir.config.accessor :as cfg])
             #?(:clj [digdir.config.core :as config-core])
             #?(:clj [digdir.config.db :as config-db])
-            #?(:clj [digdir.config.permissions :as perms])
+            #?(:clj [digdir.config.ui.common :as common])
             #?(:clj [digdir.data.db :as db])
             #?(:clj [digdir.pipeline.core :as pipeline])
             #?(:clj [digdir.pipeline.executor :as executor])
@@ -542,10 +542,6 @@
 
 #?(:clj
    (do
-     (defn- ensure-operator-admin!
-       [conn user-id]
-       (when-not (perms/is-admin? @conn user-id)
-         (throw (ex-info "Permission denied - admin required" {:user-id user-id}))))
 
      (defn- execution-sort-key
        [ts]
@@ -722,7 +718,7 @@
      (defn- create-dataset!
        [user-id name description]
        (let [conn (db/get-conn)]
-         (ensure-operator-admin! conn user-id)
+         (common/ensure-config-ui-admin! @conn user-id)
          (pipeline/create-dataset! conn (cond-> {:name name}
                                           (seq (str/trim (or description "")))
                                           (assoc :description description)))))
@@ -730,7 +726,7 @@
      (defn- update-dataset!
        [user-id {:keys [dataset-id name description enabled?]}]
        (let [conn (db/get-conn)]
-         (ensure-operator-admin! conn user-id)
+         (common/ensure-config-ui-admin! @conn user-id)
          (pipeline/update-dataset! conn {:dataset-id dataset-id
                                          :name name
                                          :description description
@@ -739,7 +735,7 @@
      (defn- create-pipeline!
        [user-id {:keys [tenant tenant-config-key dataset-id pipeline-id name description source-type]}]
        (let [conn (db/get-conn)]
-         (ensure-operator-admin! conn user-id)
+         (common/ensure-config-ui-admin! @conn user-id)
          (pipeline/create-pipeline! conn {:tenant tenant
                                           :tenant-config-key tenant-config-key
                                           :dataset-id dataset-id
@@ -752,7 +748,7 @@
      (defn- update-pipeline!
        [user-id {:keys [tenant tenant-config-key pipeline-id name description source-type]}]
        (let [conn (db/get-conn)]
-         (ensure-operator-admin! conn user-id)
+         (common/ensure-config-ui-admin! @conn user-id)
          (pipeline/update-pipeline! conn {:tenant tenant
                                           :tenant-config-key tenant-config-key
                                           :pipeline-name pipeline-id
@@ -765,13 +761,13 @@
      (defn- delete-pipeline!
        [user-id tenant tenant-config-key pipeline-id]
        (let [conn (db/get-conn)]
-         (ensure-operator-admin! conn user-id)
+         (common/ensure-config-ui-admin! @conn user-id)
          (pipeline/soft-delete-pipeline! conn tenant tenant-config-key pipeline-id)))
 
      (defn- execute-pipeline!
        [user-id tenant tenant-config-key pipeline-id]
        (let [conn (db/get-conn)]
-         (ensure-operator-admin! conn user-id)
+         (common/ensure-config-ui-admin! @conn user-id)
          (executor/execute-pipeline-async! conn
                                            tenant
                                            tenant-config-key
@@ -785,7 +781,7 @@
         execution already completed by the time the user clicked Stop)."
        [user-id execution-id]
        (let [conn (db/get-conn)]
-         (ensure-operator-admin! conn user-id)
+         (common/ensure-config-ui-admin! @conn user-id)
          (executor/cancel-execution! conn execution-id)))))
 
 ;; =============================================================================
@@ -952,7 +948,7 @@
               (when tok
                 (when-not (str/blank? (str/trim name))
                   (let [created (e/server
-                                  (let [uid (e/client user-id)
+                                  (let [uid (:user/id e/http-request) ;; the actor, read server-side
                                         dataset-name (e/client name)
                                         dataset-description (e/client description)]
                                     (create-dataset! uid dataset-name dataset-description)))]
@@ -1113,7 +1109,7 @@
                           :description form-description
                           :enabled? form-enabled?}]
              (e/server
-              (let [uid (e/client user-id)
+              (let [uid (:user/id e/http-request) ;; the actor, read server-side
                     update-payload (e/client payload)]
                 (update-dataset! uid update-payload)))
              (swap! !refresh-counter inc)
@@ -1211,7 +1207,6 @@
                                           (:id pipeline)))))))))))
         (FocusedInheritanceEditor runtime-selections
                                   !refresh-counter
-                                  user-id
                                   "No dataset runtime nodes were available for the current tenant contexts."
                                   :selected-nodes))
       (dom/div
@@ -1616,7 +1611,7 @@
           (when tok
             (when has-single-context?
               (e/server
-               (let [uid (e/client user-id)
+               (let [uid (:user/id e/http-request) ;; the actor, read server-side
                      tenant (e/client (:tenant p))
                      tenant-config-key (e/client (:tenant-config-key p))
                      pipeline-id (e/client (:id p))]
@@ -1630,7 +1625,7 @@
           (when tok
             (when can-stop?
               (e/server
-               (let [uid (e/client user-id)
+               (let [uid (:user/id e/http-request) ;; the actor, read server-side
                      execution-id (e/client (:id latest-execution))]
                  (stop-pipeline-execution! uid execution-id)))
               (swap! !refresh-counter inc))
@@ -1665,7 +1660,7 @@
           (when tok
             (when has-single-context?
               (e/server
-               (let [uid (e/client user-id)
+               (let [uid (:user/id e/http-request) ;; the actor, read server-side
                      tenant (e/client (:tenant p))
                      tenant-config-key (e/client (:tenant-config-key p))
                      pipeline-id (e/client (:id p))]
@@ -1915,7 +1910,6 @@
               (if editor-selection
                 (FocusedInheritanceEditor [editor-selection]
                                           !refresh-counter
-                                          user-id
                                           "The selected materialization node could not be loaded."
                                           :selected-nodes)
                 (dom/div
@@ -1937,7 +1931,7 @@
                                  :description description
                                  :source-type source-type}]
                     (e/server
-                      (let [uid (e/client user-id)
+                      (let [uid (:user/id e/http-request) ;; the actor, read server-side
                             save-payload (e/client payload)]
                         (if (= (e/client mode) :create)
                           (create-pipeline! uid save-payload)

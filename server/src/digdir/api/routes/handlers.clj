@@ -12,6 +12,7 @@
                                      request-body-params
                                      request-path-params
                                      ]]
+            [digdir.config.api-key-authz :as authz]
             [digdir.config.api-keys :as api-keys]
             [digdir.config.core :as config-core]
             [digdir.config.db :as config-db]
@@ -81,7 +82,9 @@
              :created-by (:api-key/created-by key-info)
              :agent-refs (vec (or (:api-key/agent-refs key-info) []))
              public-modes-field (vec (or (:api-key/skill-graphs key-info) []))
-             :last-used (:api-key/last-used key-info)}
+             :last-used (:api-key/last-used key-info)
+             ;; the explicit all-tenant marker, shown wherever a key is
+             :all-tenants (api-keys/all-tenants-marked? key-info)}
       policy-id (assoc :policy-id policy-id))))
 
 (defn- public-access-policy
@@ -104,15 +107,26 @@
 ;; ===== API Key Management Handlers =====
 
 (defn list-api-keys-handler
-  "List all API keys for the authenticated user"
+  "List EVERY API key, for an admin. Any admin may act on
+   any key, so an admin must be able to FIND any key; this door answers exactly
+   as the Electric key panel does (both through `authorize-key-op!` `:list`).
+   The key's creator is attribution only; it no longer filters the list."
   [ring-req]
   (try
     (let [user-id (:user/id ring-req)
           conn (db/get-conn)
-          keys (mapv public-api-key (api-keys/list-api-keys conn user-id))]
+          _ (authz/authorize-key-op! @conn user-id :list nil)
+          keys (mapv public-api-key (api-keys/list-all-api-keys @conn))]
       (-> (res/response (json/generate-string {:api-keys keys}))
           (res/status 200)
           (res/content-type "application/json")))
+
+    (catch clojure.lang.ExceptionInfo e
+      (let [status (or (:status (ex-data e)) 500)]
+        (log/error e "Failed to list API keys")
+        (-> (res/response (api-error-body e))
+            (res/status status)
+            (res/content-type "application/json"))))
 
     (catch Exception e
       (log/error e "Failed to list API keys")
@@ -190,6 +204,8 @@
           ;; Generate and store API key
           new-key (api-keys/generate-api-key)
           conn (db/get-conn)
+          ;; the one authorization of a key operation, shared with the key panel
+          _ (authz/authorize-key-op! @conn user-id :create nil)
           result (api-keys/store-api-key conn
                                          new-key
                                          name
@@ -245,8 +261,7 @@
           key-info (api-keys/get-api-key-info conn api-key-id)
           _ (when-not key-info
               (throw (ex-info "API key not found" {:status 404})))
-          _ (when-not (= user-id (:api-key/created-by key-info))
-              (throw (ex-info "Unauthorized" {:status 403})))
+          _ (authz/authorize-key-op! @conn user-id :rotate key-info)
 
           result (api-keys/rotate-api-key! conn api-key-id
                                            {:user-email user-email
@@ -297,9 +312,8 @@
           _ (when-not key-info
               (throw (ex-info "API key not found" {:status 404})))
 
-          ;; Verify user owns this key
-          _ (when-not (= user-id (:api-key/created-by key-info))
-              (throw (ex-info "Unauthorized" {:status 403})))
+          ;; any admin may revoke any key
+          _ (authz/authorize-key-op! @conn user-id :revoke key-info)
 
           ;; Revoke the key
           _ (api-keys/revoke-api-key conn api-key-id
@@ -331,7 +345,7 @@
           (res/content-type "application/json")))))
 
 (defn update-api-key-allowed-config-keys-handler
-  "Replace the allowed config keys for an API key owned by the authenticated user."
+  "Replace the allowed config keys for an API key. Any admin may, on any key."
   [ring-req]
   (try
     (let [user-id (:user/id ring-req)
@@ -346,8 +360,7 @@
           key-info (api-keys/get-api-key-info conn api-key-id)
           _ (when-not key-info
               (throw (ex-info "API key not found" {:status 404})))
-          _ (when-not (= user-id (:api-key/created-by key-info))
-              (throw (ex-info "Unauthorized" {:status 403})))
+          _ (authz/authorize-key-op! @conn user-id :replace-allowed-config-keys key-info)
           updated-key (api-keys/replace-api-key-allowed-config-keys!
                        conn
                        api-key-id
@@ -376,6 +389,47 @@
 
     (catch Exception e
       (log/error e "Unexpected error updating API key allowed config keys")
+      (-> (res/response
+            (json/generate-string {:error "Internal server error"}))
+          (res/status 500)
+          (res/content-type "application/json")))))
+
+(defn set-api-key-all-tenants-handler
+  "set or clear a key's explicit ALL-TENANT marker
+   (`PUT /console-api/api-keys/:key-id/all-tenants`, body `{\"all-tenants\": bool}`).
+
+   ANY admin may do it, not only the key's creator: the marker is
+   an operator's decision about a key's authority, and creator-only would strand
+   keys the seed or another admin made. The admin decision is `wrap-admin-auth`'s,
+   in front of the console router (the route declares `{:jwt-admin true}`).
+   `set-all-tenants!` writes the marker and its audit record in one transaction."
+  [ring-req]
+  (try
+    (let [api-key-id (:key-id (request-path-params ring-req))
+          _ (when-not api-key-id
+              (throw (ex-info "Missing API key ID" {:status 400})))
+          params (request-body-params ring-req)
+          ;; the one authorization of a key operation, shared with the key panel
+          _ (authz/authorize-key-op! @(db/get-conn) (:user/id ring-req) :set-all-tenants nil)
+          marked (api-keys/set-all-tenants! (db/get-conn) api-key-id (:all-tenants params)
+                                            {:user-id (:user/id ring-req)
+                                             :user-email (:user/email ring-req)})]
+      (log/info "API key all-tenant marker set"
+                {:user-id (:user/id ring-req) :api-key-id api-key-id :all-tenants marked})
+      (-> (res/response (json/generate-string {:api-key-id api-key-id :all-tenants marked}))
+          (res/status 200)
+          (res/content-type "application/json")))
+
+    (catch clojure.lang.ExceptionInfo e
+      (let [data (ex-data e)
+            status (or (:status data) 500)]
+        (log/error e "Failed to set the API key all-tenant marker")
+        (-> (res/response (api-error-body e))
+            (res/status status)
+            (res/content-type "application/json"))))
+
+    (catch Exception e
+      (log/error e "Unexpected error setting the API key all-tenant marker")
       (-> (res/response
             (json/generate-string {:error "Internal server error"}))
           (res/status 500)

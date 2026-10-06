@@ -1075,7 +1075,7 @@
                                         (count (filter (fn [[_ c]] (and c (seq c)))
                                                        enrichment-search-targets))
                                         0))
-           :dataset-ref (or dataset-ref (:dataset-ref inputs) (:dataset-ref skill-params))
+           :dataset-ref (or dataset-ref (:dataset-ref skill-params))
            :total-hits-before-merge (+ (count (:phrase-hits result))
                                        (count (:metadata-hits result))
                                        (count (:content-hits result))
@@ -1085,7 +1085,7 @@
          :retrieval-backend-failure
          (str "Retrieval backend failure: " (.getMessage e))
           {:queries queries
-          :dataset-ref (or dataset-ref (:dataset-ref inputs) (:dataset-ref skill-params))
+          :dataset-ref (or dataset-ref (:dataset-ref skill-params))
           :docs-collection docs-collection
           :chunks-collection chunks-collection
           :phrases-collection phrases-collection

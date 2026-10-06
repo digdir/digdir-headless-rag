@@ -66,9 +66,10 @@
 
    Existing explicit collection inputs win over dataset-derived defaults."
   [inputs {:keys [tenant dataset-config-key tenant-config-key skill-params dataset-ref agent-id entity] :as opts}]
+  ;; the dataset comes from the authorized opts,
+  ;; else skill-params - never from `inputs`, which a request writes.
   (let [dataset-ref (or (normalize-dataset-ref dataset-ref)
-                        (normalize-dataset-ref (:dataset-ref skill-params))
-                        (normalize-dataset-ref (:dataset-ref inputs)))
+                        (normalize-dataset-ref (:dataset-ref skill-params)))
         needs-dataset-resolution? (and dataset-ref
                                        (or (nil? tenant)
                                            (nil? dataset-config-key)

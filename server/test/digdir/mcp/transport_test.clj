@@ -36,7 +36,10 @@
     :uri "/api/mcp"
     :headers headers
     :body (json/generate-string body)
-    :api-key/id "k1"}))
+    :api-key/id "k1"
+    ;; the tenant axis fails closed, so the principal carries a real grant:
+    ;; the dataset the stubbed agent declares.
+    :api-key/dataset-scopes [{:tenant "altinn-docs" :dataset-config-key "dev"}]}))
 
 (defn- response->json
   [response]
@@ -288,6 +291,7 @@
    plain in-memory store, so the real conversation threading runs for real."
   [f]
   (let [store (atom {})          ; convo-id -> [{:message/role :message/text}]
+        tenants (atom {})        ; convo-id -> the tenant it was created in
         seen-history (atom [])   ; conversation-history invoke-rag was handed
         arities (atom [])]       ; which build-rag-skill-params arity was used
     (with-redefs [config-db/get-conn (fn [] (atom :fake-config-conn))
@@ -316,9 +320,15 @@
                     ([_config _params _agent-skill-params] (swap! arities conj 3) {}))
                   data-db/get-conn (fn [] (atom :fake-data-conn))
                   data-db/create-playground-conversation
-                  (fn [_ _ _] (let [id (str "convo-" (count @store))]
-                                (swap! store assoc id [])
-                                {:conversation-id id}))
+                  (fn [_ _ opts] (let [id (str "convo-" (count @store))]
+                                   (swap! store assoc id [])
+                                   (swap! tenants assoc id (:tenant opts))
+                                   {:conversation-id id}))
+                  ;; `invoke-tool` continues a conversation only within
+                  ;; the tenant of the call's scope, through this lookup.
+                  data-db/conversation-in-tenant
+                  (fn [_ id tenant] (when (and (some? tenant) (= tenant (get @tenants id)))
+                                      {:conversation/id id}))
                   data-db/fetch-conversation-tree (fn [_ id] (get @store id []))
                   data-db/transact-playground-user-msg
                   (fn [_ id text _ _ _]
@@ -372,7 +382,7 @@
   (testing "turn 2 uses only the handle turn 1 put in the response body"
     (with-conversation-stack
       (fn [{:keys [seen-history arities]}]
-        (let [turn1 (call-tool 21 {:query "Hva er Dialogporten?"})
+        (let [turn1 (call-tool 21 {:query "Hva er Dialogporten?" :tenant "altinn-docs"})
               ;; The ONLY thing carried across. Deliberately not (:_meta ...):
               ;; _meta is not a channel a model reads.
               handle (get-in turn1 [:result :structuredContent :conversation_id])]
@@ -380,7 +390,7 @@
           (is (string? handle)
               "turn 1 must publish the handle in the response body")
 
-          (let [turn2 (call-tool 22 {:query "Og hvem eier den?"
+          (let [turn2 (call-tool 22 {:query "Og hvem eier den?" :tenant "altinn-docs"
                                      :conversation_id handle})]
             (is (nil? (:error turn2)))
             (is (= handle (get-in turn2 [:result :structuredContent :conversation_id]))
@@ -491,7 +501,7 @@
     (with-conversation-stack
       (fn [_]
         (with-redefs [invoke/invoke-rag cited-invoke-result]
-          (let [body (call-tool 33 {:query "Hvor mange årsverk?"})
+          (let [body (call-tool 33 {:query "Hvor mange årsverk?" :tenant "altinn-docs"})
                 chunks (get-in body [:result :structuredContent :chunks])]
             (is (seq chunks) "structuredContent must carry the retrieved chunks")
             (is (every? seq chunks)
@@ -509,7 +519,7 @@
     (with-conversation-stack
       (fn [_]
         (with-redefs [invoke/invoke-rag cited-invoke-result]
-          (let [body (call-tool 32 {:query "Hvor mange årsverk?"})
+          (let [body (call-tool 32 {:query "Hvor mange årsverk?" :tenant "altinn-docs"})
                 content (get-in body [:result :content])
                 links (filterv #(= "resource_link" (:type %)) content)]
             (is (= "text" (:type (first content)))

@@ -733,7 +733,7 @@
 
 (e/defn FocusedInheritanceEditor
   "Render the shared inheritance/value editor for an explicit set of node selections."
-  [selections !refresh-counter user-id empty-message column-mode]
+  [selections !refresh-counter empty-message column-mode]
   (e/client
    (let [!path-filter-input (atom "")
          !path-filter (atom "")
@@ -789,16 +789,18 @@
 
      (when mutation
        (let [server-result (e/server
-                            (e/Offload #(try
+                            ;; the actor, read server-side in this form; merged LAST
+                            (let [actor (:user/id e/http-request)]
+                             (e/Offload #(try
                                           (common/mutate-config-tree!
                                            (merge mutation
                                                   {:tenant (:tenant mutation)
                                                    :root (:root mutation)
-                                                   :user-id user-id}))
+                                                   :user-id actor}))
                                           {:status :success}
                                           (catch #?(:clj Exception :cljs :default) e
                                             {:status :error
-                                             :error (or (ex-message e) "Update failed")}))))]
+                                             :error (or (ex-message e) "Update failed")})))))]
          (e/client
           (if (= :success (:status server-result))
             (do
@@ -961,8 +963,7 @@
                                              :root (:root column)})
                           (tok)))))))))
 
-              (let [master-key (e/server (common/get-master-key))
-                    global-version (get result :global-version)]
+              (let [global-version (get result :global-version)]
                 (e/for [[group-name group-defs] (e/diff-by first grouped-defs)]
                   (dom/div
                    (dom/props {:style inheritance-group-header-style})
@@ -995,7 +996,7 @@
                                            (get-in (:values-by-node column) [node-id path]))
                               display-value (when node-value
                                               (e/server
-                                               (common/decode-node-value node-value definition master-key)))
+                                               (common/decode-node-value node-value definition (common/get-master-key)))) ; never bound in client scope
                               winning-node-id (get-in (:results column) [path :trace :winning-node])
                               winner? (and applies? (= node-id winning-node-id))]
                           (if applies?
@@ -1028,7 +1029,7 @@
              (NodeValueEditModal editing-cell !editing-cell !mutation))
      )))))))
 
-(e/defn ConfigInheritanceEditor [tenants !refresh-counter user-id]
+(e/defn ConfigInheritanceEditor [tenants !refresh-counter]
   (e/client
    (let [!selected-node-cells (atom #{})
          !expanded-tree-nodes (atom #{})
@@ -1080,16 +1081,18 @@
            mutation (e/watch !mutation)]
        (when mutation
          (let [server-result (e/server
-                              (e/Offload #(try
+                              ;; the actor, read server-side in this form; merged LAST
+                              (let [actor (:user/id e/http-request)]
+                               (e/Offload #(try
                                             (common/mutate-config-tree!
                                              (merge mutation
                                                     {:tenant (:tenant mutation)
                                                      :root (:root mutation)
-                                                     :user-id user-id}))
+                                                     :user-id actor}))
                                             {:status :success}
                                             (catch #?(:clj Exception :cljs :default) e
                                               {:status :error
-                                               :error (or (ex-message e) "Update failed")}))))]
+                                               :error (or (ex-message e) "Update failed")})))))]
            (e/client
             (if (= :success (:status server-result))
               (do
@@ -1386,8 +1389,7 @@
                                                                       :text-align "center"})})
                     (dom/text (:header column)))))
 
-                (let [master-key (e/server (common/get-master-key))
-                      global-version (get-in result [:comparison :global-version])]
+                (let [global-version (get-in result [:comparison :global-version])]
                   (e/for [[group-name group-defs] (e/diff-by first grouped-defs)]
                     (dom/div
                      (dom/props {:style inheritance-group-header-style})
@@ -1418,7 +1420,7 @@
                                              (get-in (:values-by-node column) [node-id path]))
                                 display-value (when node-value
                                                 (e/server
-                                                 (common/decode-node-value node-value definition master-key)))
+                                                 (common/decode-node-value node-value definition (common/get-master-key)))) ; never bound in client scope
                                 winning-node-id (get-in (:results column) [path :trace :winning-node])
                                 winner? (and applies? (= node-id winning-node-id))]
                             (if applies?

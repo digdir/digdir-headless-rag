@@ -65,13 +65,17 @@
                                     :config.node/tenant-config-key "default"}
                              :matched-allowed-config-key
                              {:api-key.allowed-config-key/tenant-config-key "default"}})
-                config-db/resolve-dataset-ref-materializations
-                (fn [_ _] {:dataset-id "ds_123"})
+                ;; the runtime door resolves the dataset it SELECTS
+                ;; through get-dataset-by-ref, and hands the loader its id
+                config-db/get-dataset-by-ref
+                (fn [_ _ _] {:tenant "ka" :dataset-config-key "prod" :dataset-id "ds_123"
+                             :dataset-node-id "dataset/ka/prod"})
                 cfg/load-runtime-config-v2-with-trace
                 (fn [_] {:config {"skills.retrieval.top-k" 30}
                          :traces {"skills.retrieval.top-k" [{:node "default"}]}})]
     (let [response (datasets/resolve-runtime-config-handler
-                     {:body-params {:tenant "ka"
+                     {:api-key/dataset-scopes [{:tenant "ka" :dataset-config-key "prod"}] ;; a real grant
+                      :body-params {:tenant "ka"
                                     :runtime-config-key "default"
                                     :agent-id "builtin/agent-rag-agent"
                                     :dataset-config-key "prod"}})]
@@ -126,7 +130,8 @@
                   cfg/load-runtime-config-v2-with-trace
                   (fn [_] {:config {} :traces {}})]
       (let [response (datasets/resolve-runtime-config-handler
-                       {:body-params {:tenant "ka"
+                       {:api-key/dataset-scopes [{:tenant "ka" :dataset-config-key "prod"}] ;; a real grant
+                      :body-params {:tenant "ka"
                                       :runtime-config-key "default"
                                       :agent-id "builtin/agent-rag-agent"}})
             body (json/parse-string (:body response) true)]
@@ -155,7 +160,8 @@
                 (fn [_] {:config {"chunking.strategy" "semantic"}
                          :traces {"chunking.strategy" [{:node "prod"}]}})]
     (let [response (datasets/resolve-dataset-config-handler
-                     {:body-params {:tenant "ka" :dataset-config-key "prod"}})]
+                     {:api-key/dataset-scopes [{:tenant "ka" :dataset-config-key "prod"}] ;; a real grant
+                      :body-params {:tenant "ka" :dataset-config-key "prod"}})]
       (is (= 200 (:status response)) "the handler must reach its success path")
       (json/parse-string (:body response) true))))
 

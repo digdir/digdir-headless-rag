@@ -22,12 +22,12 @@
   (testing "include_diagnostics is strictly coerced to boolean"
     (let [app routes/api-router]
       (testing "valid true string"
-        (let [request (api-request :get "/api/conversations/123" nil {"include_diagnostics" "true"})
+        (let [request (api-request :get "/api/conversations/123" nil {"include_diagnostics" "true" "tenant" "t"})
               response (app request)]
           (is (not= 400 (:status response)))))
       
       (testing "invalid non-boolean string '1' is rejected"
-        (let [request (api-request :get "/api/conversations/123" nil {"include_diagnostics" "1"})
+        (let [request (api-request :get "/api/conversations/123" nil {"include_diagnostics" "1" "tenant" "t"})
               response (app request)
               body (json/parse-string (:body response) true)]
           (is (= 400 (:status response)))
@@ -37,12 +37,12 @@
   (testing "pagination parameters are coerced to integers"
     (let [app routes/api-router]
       (testing "valid integers"
-        (let [request (api-request :get "/api/conversations" nil {"page_size" "10" "page_index" "2"})
+        (let [request (api-request :get "/api/conversations" nil {"page_size" "10" "page_index" "2" "tenant" "t"})
               response (app request)]
           (is (not= 400 (:status response)))))
       
       (testing "invalid string is rejected"
-        (let [request (api-request :get "/api/conversations" nil {"page_size" "ten"})
+        (let [request (api-request :get "/api/conversations" nil {"page_size" "ten" "tenant" "t"})
               response (app request)
               body (json/parse-string (:body response) true)]
           (is (= 400 (:status response)))

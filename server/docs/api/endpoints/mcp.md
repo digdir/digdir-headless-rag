@@ -278,8 +278,8 @@ All preserved skill graphs share a single input schema (Malli source in
 | `model`                  | string   | no       | Explicit override. Leave unset to honor the skill-graph's runtime config.  |
 | `temperature`            | number   | no       | Same as `model` — overrides the runtime default when present.              |
 | `claim`                  | string   | no       | Only read by `:builtin/fact-checker`; defaults to `query`.                  |
-| `tenant`                 | string   | no       | Scope override (see below).                                                |
-| `dataset_config_key`     | string   | no       | Scope override (see below).                                                |
+| `tenant` | string | yes | The tenant this call acts in, on EVERY call: a conversation is addressed by tenant and id together. A key with no dataset scopes must name one too, and must then also name `dataset_config_key`, unless the agent, or the server default, supplies a dataset in that tenant; an agent's declared scopes also limit which tenant may be named. |
+| `dataset_config_key` | string | no | The dataset within `tenant`. Without it, the first dataset the key and agent may use in that tenant. A key with no dataset scopes names this too (else `dataset_not_authorized`), unless the agent, or the server default, supplies a dataset in that tenant; an agent's declared scopes also limit which tenant may be named. |
 | `conversation_id`        | string   | no       | Reuse an existing conversation; omit to start a new one.                   |
 | `overrides`              | object   | no       | Per-call skill-param overrides. See [Per-call overrides](#per-call-overrides). |
 
@@ -431,7 +431,7 @@ is set. Otherwise the response is plain JSON.
 { "jsonrpc": "2.0", "id": 1, "method": "tools/call",
   "params": {
     "name": "builtin.agent-rag-agent__agent-rag-graph-bundled",
-    "arguments": { "query": "What is X?" },
+    "arguments": { "tenant": "digdir", "query": "What is X?" },
     "_meta": { "progressToken": "client-supplied-id" }   // streams when set
   }}
 ```
@@ -548,7 +548,7 @@ curl -N -X POST https://rag.digdir.cloud/api/mcp \
     "method": "tools/call",
     "params": {
       "name": "builtin.agent-rag-agent__agent-rag-graph-bundled",
-      "arguments": { "query": "Hva er Digdir?" },
+      "arguments": { "tenant": "digdir", "query": "Hva er Digdir?" },
       "_meta": {
         "io.modelcontextprotocol/protocolVersion": "2026-07-28",
         "progressToken": "demo-1"

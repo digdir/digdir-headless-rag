@@ -29,8 +29,8 @@
    :description "Look up a chunk's content and its document's title/URL from Typesense, given the chunk-id. Used by the self-improve graph as the first step of each per-chunk sub-graph iteration."
    :category :retrieval
    ;; Only :chunk-id and :chunks-collection are strictly required. The
-   ;; skill body falls back to skill-params for :tenant and tolerates
-   ;; missing :docs-collection (doc-title degrades to nil). Listing
+   ;; tenant comes from skill-params ONLY, and a missing
+   ;; :docs-collection is tolerated (doc-title degrades to nil). Listing
    ;; optional inputs in :inputs would make the runner's validator
    ;; reject callers that elide them.
    :inputs [:chunk-id :chunks-collection]
@@ -89,8 +89,12 @@
    should not silently proceed with empty content. Missing doc title
    degrades gracefully (the propose-questions skill accepts nil)."
   [{:keys [inputs skill-params]}]
-  (let [{:keys [chunk-id tenant chunks-collection docs-collection]} inputs
-        effective-tenant (or tenant (:tenant skill-params))]
+  (let [{:keys [chunk-id chunks-collection docs-collection]} inputs
+        ;; the tenant - and with it the Typesense
+        ;; host and ADMIN key this skill uses - comes ONLY from the authorized
+        ;; skill-params. It used to prefer `inputs`' `:tenant`, so a request
+        ;; granted one tenant searched another's Typesense with that tenant's key.
+        effective-tenant (:tenant skill-params)]
     (cond
       (or (nil? chunk-id) (and (string? chunk-id) (empty? chunk-id)))
       (throw (ex-info "Missing :chunk-id input"

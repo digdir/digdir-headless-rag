@@ -38,6 +38,14 @@
   [data]
   (io/input-stream (.getBytes (json/generate-string data) "UTF-8")))
 
+(defn- as-console-admin
+  "the console key handlers authorize their caller themselves (the ONE
+   guard, plus the creator rule), so a handler test's principal must be what
+   `wrap-admin-auth` admits in production: an ADMIN. `user-123` is one here."
+  [f]
+  (with-redefs [perms/is-admin? (fn [_ user-id] (= "user-123" user-id))]
+    (f)))
+
 (defn example-agent
   ([] (example-agent {}))
   ([overrides]
@@ -1741,6 +1749,8 @@
         (is (= 404 (:status response)))))))
 
 (deftest test-create-api-key-handler-success
+  (as-console-admin
+   (fn []
   (testing "Successful API key creation returns key"
     (let [captured-opts (atom nil)]
       (with-redefs [config-db/get-dataset-by-ref (fn [_ dataset-ref _]
@@ -1801,9 +1811,11 @@
                                      :runtime-config-key "default"}]
                   :skill-graphs []
                   :user-email nil}
-                 (select-keys @captured-opts [:clients :dataset-scopes :agent-refs :allowed-config-keys :skill-graphs :user-email]))))))))
+                 (select-keys @captured-opts [:clients :dataset-scopes :agent-refs :allowed-config-keys :skill-graphs :user-email]))))))))))
 
 (deftest test-create-api-key-handler-supports-coerced-body-params
+  (as-console-admin
+   (fn []
   (testing "Direct API key creation accepts route-coerced body params"
     (let [captured-opts (atom nil)]
       (with-redefs [config-db/get-dataset-by-ref (fn [_ dataset-ref _]
@@ -1842,9 +1854,11 @@
           (is (= 201 (:status response)))
           (is (= "key-id-123" (:api-key-id body)))
           (is (= "client-1" (first (:clients @captured-opts))))
-          (is (= ["builtin/agent-rag-agent"] (:agent-refs @captured-opts))))))))
+          (is (= ["builtin/agent-rag-agent"] (:agent-refs @captured-opts))))))))))
 
 (deftest test-create-api-key-handler-defaults-allowed-config-keys-to-default-root-config-keys
+  (as-console-admin
+   (fn []
   (testing "Creating an API key without explicit ceilings defaults each root to config-key default"
     (let [captured-opts (atom nil)]
       (with-redefs [config-db/get-dataset-by-ref (fn [_ dataset-ref _]
@@ -1867,20 +1881,22 @@
           (is (= [{:root "platform" :tenant "ka" :tenant-config-key "default"}
                   {:root "runtime" :tenant "ka" :runtime-config-key "default"}
                   {:root "dataset" :tenant "ka" :dataset-config-key "default"}]
-                 (:allowed-config-keys @captured-opts))))))))
+                 (:allowed-config-keys @captured-opts))))))))))
 
 (deftest test-list-api-keys-handler-success
-  (testing "List API keys returns user's keys"
-    (let [mock-keys [{:api-key/id "key-1" :api-key/name "Key 1"}
-                     {:api-key/id "key-2" :api-key/name "Key 2"}]]
-      (with-redefs [api-keys/list-api-keys (fn [_ user-id]
-                                             (when (= user-id "user-123")
-                                               mock-keys))]
-        (let [request {:user/id "user-123"}
-              response (routes/list-api-keys-handler request)]
-          (is (= 200 (:status response)))
-          (let [body (json/parse-string (:body response) true)]
-            (is (= 2 (count (:api-keys body))))))))))
+  ;; an admin's list is EVERY key, whoever created it (the same
+  ;; answer as the console panel); the creator does not filter it.
+  (testing "List API keys returns every key to an admin"
+    (as-console-admin
+     (fn []
+       (let [mock-keys [{:api-key/id "key-1" :api-key/name "Key 1" :api-key/created-by "user-123"}
+                        {:api-key/id "key-2" :api-key/name "Key 2" :api-key/created-by "other-user"}]]
+         (with-redefs [api-keys/list-all-api-keys (fn [_] mock-keys)]
+           (let [response (routes/list-api-keys-handler {:user/id "user-123"})]
+             (is (= 200 (:status response)))
+             (let [body (json/parse-string (:body response) true)]
+               (is (= #{"key-1" "key-2"} (set (map :api-key-id (:api-keys body))))
+                   "the list is filtered: another user's key is missing")))))))))
 
 (deftest test-revoke-api-key-handler-not-found
   (testing "Revoke non-existent key returns 404"
@@ -1890,17 +1906,31 @@
             response (routes/revoke-api-key-handler request)]
         (is (= 404 (:status response)))))))
 
-(deftest test-revoke-api-key-handler-unauthorized
-  (testing "Revoke key owned by another user returns 403"
+(deftest test-revoke-api-key-handler-any-admin-may-revoke-another-users-key
+  ;; the key's creator decides nothing; the ONE guard does.
+  (testing "an admin revokes a key another user created"
+    (as-console-admin
+     (fn []
+       (with-redefs [api-keys/get-api-key-info (fn [_ _]
+                                                 {:api-key/id "key-123"
+                                                  :api-key/created-by "other-user"})
+                     api-keys/revoke-api-key (fn [_ _ _] true)]
+         (is (= 200 (:status (routes/revoke-api-key-handler {:user/id "user-123"
+                                                             :path-params {:key-id "key-123"}}))))))))
+  (testing "a non-admin is refused by the one guard, even for a key it created"
     (with-redefs [api-keys/get-api-key-info (fn [_ _]
                                               {:api-key/id "key-123"
-                                               :api-key/created-by "other-user"})]
-      (let [request {:user/id "user-123"
-                     :path-params {:key-id "key-123"}}
-            response (routes/revoke-api-key-handler request)]
-        (is (= 403 (:status response)))))))
+                                               :api-key/created-by "user-123"})]
+      (let [response (routes/revoke-api-key-handler {:user/id "user-123"
+                                                     :path-params {:key-id "key-123"}})]
+        (is (= 403 (:status response)))
+        (is (= "Permission denied - admin required"
+               (:error (json/parse-string (:body response) true)))
+            "refused by something other than the admin guard")))))
 
 (deftest test-revoke-api-key-handler-success
+  (as-console-admin
+   (fn []
   (testing "Successful revocation returns success"
     (with-redefs [api-keys/get-api-key-info (fn [_ _]
                                               {:api-key/id "key-123"
@@ -1912,9 +1942,11 @@
             response (routes/revoke-api-key-handler request)]
         (is (= 200 (:status response)))
         (let [body (json/parse-string (:body response) true)]
-          (is (true? (:success body))))))))
+          (is (true? (:success body))))))))))
 
 (deftest test-console-api-router-coerces-api-key-rotate-path-params
+  (as-console-admin
+   (fn []
   (testing "Console API router passes coerced API key path params into rotation"
     (with-redefs [api-keys/get-api-key-info (fn [_ key-id]
                                               (case key-id
@@ -1938,7 +1970,7 @@
             body (json/parse-string (:body response) true)]
         (is (= 200 (:status response)))
         (is (= "key-456" (:api-key-id body)))
-        (is (= "rag_rotated123" (:api-key body)))))))
+        (is (= "rag_rotated123" (:api-key body)))))))))
 
 (deftest test-update-api-key-allowed-config-keys-handler-missing-allowed-config-keys
   (testing "Update allowed config keys requires an explicit allowed-config-keys field"
@@ -1971,6 +2003,8 @@
         (is (= 403 (:status response)))))))
 
 (deftest test-update-api-key-allowed-config-keys-handler-success
+  (as-console-admin
+   (fn []
   (testing "Successful allowed config key replacement returns the updated ceiling set"
     (let [captured-ceilings (atom nil)
           captured-audit-opts (atom nil)]
@@ -2013,9 +2047,11 @@
                      :tenant "ka"
                      :node-id "runtime/ka/default"
                      :runtime-config-key "default"}]
-                   (:allowed-config-keys body)))))))))
+                   (:allowed-config-keys body)))))))))))
 
 (deftest test-update-api-key-allowed-config-keys-handler-supports-coerced-params
+  (as-console-admin
+   (fn []
   (testing "Direct allowed config key updates accept route-coerced path and body params"
     (let [captured-ceilings (atom nil)]
       (with-redefs [config-db/get-conn (fn [] (atom :config-db))
@@ -2042,7 +2078,7 @@
                     :tenant "ka"
                     :runtime-config-key "default"}]]
                  @captured-ceilings))
-          (is (= "key-123" (:api-key-id body))))))))
+          (is (= "key-123" (:api-key-id body))))))))))
 
 ;; ===== User Handler tests =====
 
@@ -2107,6 +2143,10 @@
 
 ;; ===== Conversation Handler tests =====
 
+;; every conversation request acts in exactly one tenant. These tests are
+;; about other behaviour, so their key is granted one tenant, which it derives.
+(def ^:private one-tenant-scopes [{:tenant "tenant-1" :dataset-config-key "docs"}])
+
 (deftest test-list-conversations-handler-requires-x-user-id
   (testing "List conversations rejects requests without the external API user id header"
     (let [response (routes/list-conversations-handler {:params {}})
@@ -2131,11 +2171,11 @@
                                (throw (ex-info "should not query internal user entity" {})))
                     d/pull (fn [& _]
                              (throw (ex-info "should not pull internal user by email" {})))
-                    db/conversations-by-user-paginated (fn [_ user-id _ _ _]
+                    db/conversations-by-user-paginated (fn [_ _tenant user-id _ _ _]
                                                          (swap! requested-user-ids conj user-id)
                                                          mock-result)]
-        (let [request {:headers {"x-user-id" "external-user-123"}
-                       :params {}}
+        (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes
+                       :params {:tenant "tenant-1"}}
               response (routes/list-conversations-handler request)
               body (json/parse-string (:body response) true)]
           (is (= 200 (:status response)))
@@ -2158,7 +2198,7 @@
                                       (some #(when (= id (:id %)) %) enabled-agents))
                 ;; Persistence, so a SUCCESSFUL selection reaches 201 rather
                 ;; than dying on the fake conn and reporting 500.
-                db/transact-new-msg-thread (fn [_ _ _ _] {:conversation-id "conv-1"})
+                db/transact-new-msg-thread (fn [_ _ _ _ _] {:conversation-id "conv-1"})
                 db/normalize-tags (fn [tags] (vec tags))
                 db/conversation-by-id (fn [_ _]
                                         {:conversation/id "conv-1"
@@ -2168,8 +2208,8 @@
                                          :conversation/tags []
                                          :conversation/created 1})]
     (let [response (routes/create-conversation-handler
-                     {:headers {"x-user-id" "external-user-123"}
-                      :body (json-body body)})]
+                     {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes
+                      :body (json-body (assoc body :tenant "tenant-1"))})]
       {:status (:status response)
        :error (:error (json/parse-string (:body response) true))})))
 
@@ -2218,15 +2258,15 @@
                                (throw (ex-info "should not query internal user entity" {})))
                     d/pull (fn [& _]
                              (throw (ex-info "should not pull internal user by email" {})))
-                    db/transact-new-msg-thread (fn [_ agent-id user-id filter-value]
+                    db/transact-new-msg-thread (fn [_ agent-id user-id filter-value _tenant]
                                                  (reset! created {:agent-id agent-id
                                                                   :user-id user-id
                                                                   :filter-value filter-value})
                                                  {:conversation-id "conv-1"})
                     db/conversation-by-id (fn [_ _] mock-conv)]
-        (let [request {:headers {"x-user-id" "external-user-123"}
+        (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes
                        :api-key/agent-refs ["builtin/agent-rag-agent"]
-                       :body (json-body {:filterValue {:source "api"}})}
+                       :body (json-body {:tenant "tenant-1" :filterValue {:source "api"}})}
               response (routes/create-conversation-handler request)
               body (json/parse-string (:body response) true)]
           (is (= 201 (:status response)))
@@ -2252,7 +2292,7 @@
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
                     config-db/get-conn (fn [] (atom {:db true}))
                     agents-db/list-enabled-agents (fn [_] [(example-agent)])
-                    db/transact-new-msg-thread (fn [_ agent-id user-id filter-value]
+                    db/transact-new-msg-thread (fn [_ agent-id user-id filter-value _tenant]
                                                  (reset! created {:agent-id agent-id
                                                                   :user-id user-id
                                                                   :filter-value filter-value})
@@ -2261,9 +2301,9 @@
                     db/set-conversation-tags (fn [_ convo-id tags]
                                                (reset! tagged-tags [convo-id tags]))
                     db/conversation-by-id (fn [_ _] tagged-conv)]
-        (let [request {:headers {"x-user-id" "external-user-123"}
+        (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes
                        :api-key/agent-refs ["builtin/agent-rag-agent"]
-                       :body (json-body {:title "Tagged thread"
+                       :body (json-body {:tenant "tenant-1" :title "Tagged thread"
                                          :tags ["alpha" "beta"]})}
               response (routes/create-conversation-handler request)
               body (json/parse-string (:body response) true)]
@@ -2287,7 +2327,7 @@
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
                     config-db/get-conn (fn [] (atom {:db true}))
                     agents-db/list-enabled-agents (fn [_] [(example-agent)])
-                    db/transact-new-msg-thread (fn [_ agent-id user-id filter-value]
+                    db/transact-new-msg-thread (fn [_ agent-id user-id filter-value _tenant]
                                                  (reset! created {:agent-id agent-id
                                                                   :user-id user-id
                                                                   :filter-value filter-value})
@@ -2296,9 +2336,9 @@
                     db/set-conversation-tags (fn [_ convo-id tags]
                                                (reset! tagged-tags [convo-id tags]))
                     db/conversation-by-id (fn [_ _] mock-conv)]
-        (let [request {:headers {"x-user-id" "external-user-123"}
+        (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes
                        :api-key/agent-refs ["builtin/agent-rag-agent"]
-                       :parameters {:body {:filter-value {:source "api"}
+                       :parameters {:body {:tenant "tenant-1" :filter-value {:source "api"}
                                            :tags ["alpha" "beta"]}}}
               response (routes/create-conversation-handler request)]
           (is (= 201 (:status response)))
@@ -2311,8 +2351,8 @@
 (deftest test-get-conversation-handler-not-found
   (testing "Get non-existent conversation returns 404"
     (with-redefs [db/get-conn (fn [] (atom {:db true}))
-                  db/conversation-by-id (fn [_ _] nil)]
-      (let [request {:headers {"x-user-id" "external-user-123"}
+                  db/conversation-in-tenant (fn [_ _ _] nil)]
+      (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes :params {:tenant "tenant-1"}
                      :path-params {:id "nonexistent"}}
             response (routes/get-conversation-handler request)]
         (is (= 404 (:status response)))))))
@@ -2320,10 +2360,10 @@
 (deftest test-get-conversation-handler-enforces-ownership
   (testing "Get conversation returns 404 when the conversation belongs to a different external user id"
     (with-redefs [db/get-conn (fn [] (atom {:db true}))
-                  db/conversation-by-id (fn [_ _]
+                  db/conversation-in-tenant (fn [_ _ _]
                                           {:conversation/id "conv-1"
                                            :conversation/user-id "other-external-user"})]
-      (let [request {:headers {"x-user-id" "external-user-123"}
+      (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes :params {:tenant "tenant-1"}
                      :path-params {:id "conv-1"}}
             response (routes/get-conversation-handler request)]
         (is (= 404 (:status response)))))))
@@ -2342,9 +2382,9 @@
                           :message/tags ["alpha"]
                           :message/created 1234567891}]]
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
-                    db/conversation-by-id (fn [_ _] mock-conv)
+                    db/conversation-in-tenant (fn [_ _ _] mock-conv)
                     db/fetch-convo-messages-mapped (fn [_ _] mock-messages)]
-        (let [request {:headers {"x-user-id" "external-user-123"}
+        (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes :params {:tenant "tenant-1"}
                        :path-params {:id "conv-1"}}
               response (routes/get-conversation-handler request)]
           (is (= 200 (:status response)))
@@ -2382,11 +2422,11 @@
                           :message/created 1234567891
                           :message/diagnostics (pr-str stored-diagnostics)}]]
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
-                    db/conversation-by-id (fn [_ _] mock-conv)
+                    db/conversation-in-tenant (fn [_ _ _] mock-conv)
                     db/fetch-convo-messages-mapped (fn [_ _] mock-messages)]
-        (let [request {:headers {"x-user-id" "external-user-123"}
+        (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes
                        :parameters {:path {:id "conv-1"}
-                                    :query {:include_diagnostics true}}}
+                                    :query {:tenant "tenant-1" :include_diagnostics true}}}
               response (routes/get-conversation-handler request)
               body (json/parse-string (:body response) true)]
           (is (= 200 (:status response)))
@@ -2410,11 +2450,11 @@
                           :message/diagnostics (pr-str {:search-history [{:queries ["q"]
                                                                           :result-count 1}]})}]]
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
-                    db/conversation-by-id (fn [_ _] mock-conv)
+                    db/conversation-in-tenant (fn [_ _ _] mock-conv)
                     db/fetch-convo-messages-mapped (fn [_ _] mock-messages)]
-        (let [request {:headers {"x-user-id" "external-user-123"}
+        (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes
                        :parameters {:path {:id "conv-1"}
-                                    :query {:include_diagnostics true}}}
+                                    :query {:tenant "tenant-1" :include_diagnostics true}}}
               response (routes/get-conversation-handler request)
               body (json/parse-string (:body response) true)]
           (is (= 200 (:status response)))
@@ -2433,11 +2473,11 @@
                           :message/created 1234567891
                           :message/diagnostics "{not valid edn"}]]
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
-                    db/conversation-by-id (fn [_ _] mock-conv)
+                    db/conversation-in-tenant (fn [_ _ _] mock-conv)
                     db/fetch-convo-messages-mapped (fn [_ _] mock-messages)]
-        (let [request {:headers {"x-user-id" "external-user-123"}
+        (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes
                        :path-params {:id "conv-1"}
-                       :params {"include_diagnostics" "true"}}
+                       :params {"include_diagnostics" "true" :tenant "tenant-1"}}
               response (routes/get-conversation-handler request)
               body (json/parse-string (:body response) true)]
           (is (= 200 (:status response)))
@@ -2447,12 +2487,12 @@
   (testing "Update conversation rejects requests for a conversation owned by another external user id"
     (let [rename-called? (atom false)]
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
-                    db/conversation-by-id (fn [_ _]
+                    db/conversation-in-tenant (fn [_ _ _]
                                             {:conversation/id "conv-1"
                                              :conversation/user-id "other-external-user"})
                     db/rename-convo-topic (fn [& _]
                                             (reset! rename-called? true))]
-        (let [request {:headers {"x-user-id" "external-user-123"}
+        (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes :params {:tenant "tenant-1"}
                        :path-params {:id "conv-1"}
                        :body (json-body {:title "Updated"})}
               response (routes/update-conversation-handler request)]
@@ -2464,7 +2504,7 @@
     (let [renamed-titles (atom [])
           tagged-tags (atom nil)]
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
-                    db/conversation-by-id (fn [_ _]
+                    db/conversation-in-tenant (fn [_ _ _]
                                             {:conversation/id "conv-1"
                                              :conversation/topic "Updated"
                                              :conversation/agent-id "builtin/agent-rag-agent"
@@ -2475,7 +2515,7 @@
                                             (swap! renamed-titles conj [convo-id new-title]))
                     db/set-conversation-tags (fn [_ convo-id tags]
                                                (reset! tagged-tags [convo-id tags]))]
-        (let [request {:headers {"x-user-id" "external-user-123"}
+        (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes :params {:tenant "tenant-1"}
                        :path-params {:id "conv-1"}
                        :body (json-body {:title "Updated"
                                          :tags ["alpha" "beta"]})}
@@ -2489,7 +2529,7 @@
     (let [renamed-titles (atom [])
           tagged-tags (atom nil)]
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
-                    db/conversation-by-id (fn [_ _]
+                    db/conversation-in-tenant (fn [_ _ _]
                                             {:conversation/id "conv-1"
                                              :conversation/topic "Updated"
                                              :conversation/agent-id "builtin/agent-rag-agent"
@@ -2500,8 +2540,9 @@
                                             (swap! renamed-titles conj [convo-id new-title]))
                     db/set-conversation-tags (fn [_ convo-id tags]
                                                (reset! tagged-tags [convo-id tags]))]
-        (let [request {:headers {"x-user-id" "external-user-123"}
+        (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes
                        :parameters {:path {:id "conv-1"}
+                                    :query {:tenant "tenant-1"}
                                     :body {:title "Updated"
                                            :tags ["alpha"]}}}
               response (routes/update-conversation-handler request)]
@@ -2512,8 +2553,8 @@
 (deftest test-delete-conversation-handler-not-found
   (testing "Delete non-existent conversation returns 404"
     (with-redefs [db/get-conn (fn [] (atom {:db true}))
-                  db/conversation-by-id (fn [_ _] nil)]
-      (let [request {:headers {"x-user-id" "external-user-123"}
+                  db/conversation-in-tenant (fn [_ _ _] nil)]
+      (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes :params {:tenant "tenant-1"}
                      :path-params {:id "nonexistent"}}
             response (routes/delete-conversation-handler request)]
         (is (= 404 (:status response)))))))
@@ -2522,13 +2563,13 @@
   (testing "Delete conversation rejects requests for a conversation owned by another external user id"
     (let [delete-called? (atom false)]
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
-                    db/conversation-by-id (fn [_ _]
+                    db/conversation-in-tenant (fn [_ _ _]
                                             {:db/id 123
                                              :conversation/id "conv-1"
                                              :conversation/user-id "other-external-user"})
                     db/delete-convo (fn [& _]
                                       (reset! delete-called? true))]
-        (let [request {:headers {"x-user-id" "external-user-123"}
+        (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes :params {:tenant "tenant-1"}
                        :path-params {:id "conv-1"}}
               response (routes/delete-conversation-handler request)]
           (is (= 404 (:status response)))
@@ -2540,9 +2581,9 @@
                      :conversation/id "conv-1"
                      :conversation/user-id "external-user-123"}]
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
-                    db/conversation-by-id (fn [_ _] mock-conv)
+                    db/conversation-in-tenant (fn [_ _ _] mock-conv)
                     db/delete-convo (fn [_ _] nil)]
-        (let [request {:headers {"x-user-id" "external-user-123"}
+        (let [request {:headers {"x-user-id" "external-user-123"} :api-key/dataset-scopes one-tenant-scopes :params {:tenant "tenant-1"}
                        :path-params {:id "conv-1"}}
               response (routes/delete-conversation-handler request)]
           (is (= 200 (:status response)))
@@ -2633,10 +2674,10 @@
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
                     api-keys/validate-api-key (fn [_ key]
                                                 (when (= key "rag_valid123")
-                                                  {:dataset-scopes []
+                                                  {:dataset-scopes one-tenant-scopes
                                                    :agent-refs []
                                                    :scopes #{:query}}))
-                    db/conversation-by-id (fn [_ _] mock-conv)
+                    db/conversation-in-tenant (fn [_ _ _] mock-conv)
                     db/fetch-convo-messages-mapped (fn [_ _]
                                                     (reset! requested-diagnostics? true)
                                                     [{:message/id "msg-1"
@@ -2648,7 +2689,7 @@
         (let [response (handler {:request-method :get
                                  :uri "/api/conversations/conv-1"
                                  :path-info "/api/conversations/conv-1"
-                                 :query-string "include_diagnostics=true"
+                                 :query-string "include_diagnostics=true&tenant=tenant-1"
                                  :headers {"x-api-key" "rag_valid123"
                                            "x-user-id" "external-user-123"}})
               body (json/parse-string (:body response) true)]
@@ -2665,7 +2706,7 @@
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
                     api-keys/validate-api-key (fn [_ key]
                                                 (when (= key "rag_valid123")
-                                                  {:dataset-scopes []
+                                                  {:dataset-scopes one-tenant-scopes
                                                    :agent-refs []
                                                    :scopes #{:query}}))
                     db/conversation-by-id (fn [& _]
@@ -2674,7 +2715,7 @@
         (let [response (handler {:request-method :get
                                  :uri "/api/conversations/conv-1"
                                  :path-info "/api/conversations/conv-1"
-                                 :query-string "include_diagnostics=not-a-bool"
+                                 :query-string "include_diagnostics=not-a-bool&tenant=tenant-1"
                                  :headers {"x-api-key" "rag_valid123"
                                            "x-user-id" "external-user-123"}})
               body (json/parse-string (:body response) true)]
@@ -2692,10 +2733,10 @@
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
                     api-keys/validate-api-key (fn [_ key]
                                                 (when (= key "rag_valid123")
-                                                  {:dataset-scopes []
+                                                  {:dataset-scopes one-tenant-scopes
                                                    :agent-refs []
                                                    :scopes #{:query}}))
-                    db/conversations-by-user-paginated (fn [_ external-user-id page-size page-index tags]
+                    db/conversations-by-user-paginated (fn [_ _tenant external-user-id page-size page-index tags]
                                                          (reset! requested-page-params {:external-user-id external-user-id
                                                                                         :page-size page-size
                                                                                         :page-index page-index
@@ -2707,7 +2748,7 @@
         (let [response (handler {:request-method :get
                                  :uri "/api/conversations"
                                  :path-info "/api/conversations"
-                                 :query-string "page_size=10&page_index=2&tags=alpha,beta"
+                                 :query-string "page_size=10&page_index=2&tags=alpha,beta&tenant=tenant-1"
                                  :headers {"x-api-key" "rag_valid123"
                                            "x-user-id" "external-user-123"}})]
           (is (= 200 (:status response)))
@@ -2726,7 +2767,7 @@
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
                     api-keys/validate-api-key (fn [_ key]
                                                 (when (= key "rag_valid123")
-                                                  {:dataset-scopes []
+                                                  {:dataset-scopes one-tenant-scopes
                                                    :agent-refs []
                                                    :scopes #{:query}}))
                     db/conversations-by-user-paginated (tu/recording-fn
@@ -2735,7 +2776,7 @@
         (let [response (handler {:request-method :get
                                  :uri "/api/conversations"
                                  :path-info "/api/conversations"
-                                 :query-string "page_size=not-an-int"
+                                 :query-string "page_size=not-an-int&tenant=tenant-1"
                                  :headers {"x-api-key" "rag_valid123"
                                            "x-user-id" "external-user-123"}})
               body (json/parse-string (:body response) true)]
@@ -2761,10 +2802,10 @@
                     agents-db/list-enabled-agents (fn [_] [(example-agent)])
                     api-keys/validate-api-key (fn [_ key]
                                                 (when (= key "rag_valid123")
-                                                  {:dataset-scopes []
+                                                  {:dataset-scopes one-tenant-scopes
                                                    :agent-refs ["builtin/agent-rag-agent"]
                                                    :scopes #{:query}}))
-                    db/transact-new-msg-thread (fn [_ agent-id user-id filter-value]
+                    db/transact-new-msg-thread (fn [_ agent-id user-id filter-value _tenant]
                                                  (reset! created {:agent-id agent-id
                                                                   :user-id user-id
                                                                   :filter-value filter-value})
@@ -2778,7 +2819,7 @@
                                  :headers {"x-api-key" "rag_valid123"
                                            "x-user-id" "external-user-123"
                                            "content-type" "application/json"}
-                                 :body (json-body {:filterValue {:source "api"}
+                                 :body (json-body {:tenant "tenant-1" :filterValue {:source "api"}
                                                    :tags ["alpha" "beta"]})})
               body (json/parse-string (:body response) true)]
           (is (= 201 (:status response)))
@@ -2798,7 +2839,7 @@
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
                     api-keys/validate-api-key (fn [_ key]
                                                 (when (= key "rag_valid123")
-                                                  {:dataset-scopes []
+                                                  {:dataset-scopes one-tenant-scopes
                                                    :agent-refs ["builtin/agent-rag-agent"]
                                                    :scopes #{:query}}))
                     db/transact-new-msg-thread (fn [& _]
@@ -2810,7 +2851,7 @@
                                  :headers {"x-api-key" "rag_valid123"
                                            "x-user-id" "external-user-123"
                                            "content-type" "application/json"}
-                                 :body (json-body {:title 123})})
+                                 :body (json-body {:title 123 :tenant "tenant-1"})})
               body (json/parse-string (:body response) true)]
           (is (= 400 (:status response)))
           (is (= "Request validation failed" (:error body)))
@@ -2825,7 +2866,7 @@
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
                     api-keys/validate-api-key (fn [_ key]
                                                 (when (= key "rag_valid123")
-                                                  {:dataset-scopes []
+                                                  {:dataset-scopes one-tenant-scopes
                                                    :agent-refs ["builtin/agent-rag-agent"]
                                                    :scopes #{:query}}))
                     db/transact-new-msg-thread (fn [& _]
@@ -2854,10 +2895,10 @@
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
                     api-keys/validate-api-key (fn [_ key]
                                                 (when (= key "rag_valid123")
-                                                  {:dataset-scopes []
+                                                  {:dataset-scopes one-tenant-scopes
                                                    :agent-refs []
                                                    :scopes #{:query}}))
-                    db/conversation-by-id (fn [_ _]
+                    db/conversation-in-tenant (fn [_ _ _]
                                             {:conversation/id "conv-1"
                                              :conversation/topic "Updated"
                                              :conversation/agent-id "builtin/agent-rag-agent"
@@ -2871,6 +2912,7 @@
         (let [response (handler {:request-method :put
                                  :uri "/api/conversations/conv-1"
                                  :path-info "/api/conversations/conv-1"
+                                 :query-string "tenant=tenant-1"
                                  :headers {"x-api-key" "rag_valid123"
                                            "x-user-id" "external-user-123"
                                            "content-type" "application/json"}
@@ -2889,7 +2931,7 @@
       (with-redefs [db/get-conn (fn [] (atom {:db true}))
                     api-keys/validate-api-key (fn [_ key]
                                                 (when (= key "rag_valid123")
-                                                  {:dataset-scopes []
+                                                  {:dataset-scopes one-tenant-scopes
                                                    :agent-refs []
                                                    :scopes #{:query}}))
                     db/conversation-by-id (fn [& _]
@@ -2898,6 +2940,7 @@
         (let [response (handler {:request-method :put
                                  :uri "/api/conversations/conv-1"
                                  :path-info "/api/conversations/conv-1"
+                                 :query-string "tenant=tenant-1"
                                  :headers {"x-api-key" "rag_valid123"
                                            "x-user-id" "external-user-123"
                                            "content-type" "application/json"}
@@ -3102,6 +3145,8 @@
           (is (false? @list-called?)))))))
 
 (deftest test-console-api-router-coerces-create-api-key-body
+  (as-console-admin
+   (fn []
   (testing "Console API router parses and validates API key creation bodies"
     (let [captured-opts (atom nil)
           handler (-> routes/console-api-router
@@ -3151,7 +3196,7 @@
           (is (= "client-1" (first (:clients @captured-opts))))
           (is (= [{:tenant "ka"
                    :dataset-config-key "prod"}]
-                 (:dataset-scopes @captured-opts))))))))
+                 (:dataset-scopes @captured-opts))))))))))
 
 (deftest test-console-api-router-rejects-invalid-create-api-key-body
   (testing "Console API router rejects malformed API key creation bodies before creation"
@@ -3174,6 +3219,8 @@
           (is (false? @created?)))))))
 
 (deftest test-console-api-router-coerces-api-key-allowed-config-keys-update
+  (as-console-admin
+   (fn []
   (testing "Console API router parses and validates API key allowed config key updates"
     (let [captured-ceilings (atom nil)
           handler (-> routes/console-api-router
@@ -3209,7 +3256,7 @@
                     :node-id "runtime/ka/default"
                     :runtime-config-key "default"}]]
                  @captured-ceilings))
-          (is (= "key-123" (:api-key-id body))))))))
+          (is (= "key-123" (:api-key-id body))))))))))
 
 (deftest test-console-api-router-rejects-invalid-api-key-allowed-config-keys-update
   (testing "Console API router rejects malformed allowed config key updates before mutation"
@@ -3658,7 +3705,9 @@
 (def ^:private expected-public-api-key-fields
   #{:scopes :expires-at :api-key-id :client-id :name :usage-count
     :allowed-config-keys :created :revoked :dataset-scopes :created-by
-    :agent-refs :modes :last-used :key-prefix :key-last-four})
+    :agent-refs :modes :last-used :key-prefix :key-last-four
+    ;; the explicit all-tenant marker, shown wherever a key is
+    :all-tenants})
 
 (deftest public-api-key-emits-exactly-the-expected-keys
   (testing "the whole key set, not just the fields a caller happens to read"
@@ -3728,6 +3777,8 @@
       (is (not (contains? public :skill-graphs))))))
 
 (deftest create-api-key-accepts-modes-and-stores-skill-graphs
+  (as-console-admin
+   (fn []
   (testing "request side crosses the same boundary in the other direction"
     (let [captured-opts (atom nil)]
       (with-redefs [config-db/get-dataset-by-ref (fn [_ _ _] {:dataset-id "d1"})
@@ -3746,4 +3797,4 @@
               "the public `modes` field must arrive at storage as :skill-graphs")
           (let [body (json/parse-string (:body response) true)]
             (is (not (contains? body :skill-graphs))
-                "and the response must not leak the internal name")))))))
+                "and the response must not leak the internal name")))))))))

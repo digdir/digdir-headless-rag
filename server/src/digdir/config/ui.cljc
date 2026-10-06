@@ -458,39 +458,6 @@
    (defn create-config-tree-binding! [& _]
      (throw (ex-info "Config tree binding creation is only available on the JVM server" {}))))
 
-#?(:clj
-   (defn create-dataset-handler!
-     "Create a new durable parent dataset for operator workflows."
-     [name description user-id]
-     (common/create-dataset-handler! name description user-id))
-   :cljs
-   (defn create-dataset-handler! [& _]
-     (throw (ex-info "Dataset creation is only available on the JVM server" {}))))
-
-#?(:clj
-   (defn create-pipeline-handler!
-     "Create a new pipeline."
-     [tenant dataset-id pipeline-id properties user-id]
-     (common/create-pipeline-handler! tenant dataset-id pipeline-id properties user-id)))
-
-#?(:clj
-   (defn create-tenant-handler!
-     "Create a new tenant with ID and display name."
-     [tenant-id tenant-name user-id]
-     (common/create-tenant-handler! tenant-id tenant-name user-id)))
-
-#?(:clj
-   (defn duplicate-pipeline-handler!
-     "Duplicate an existing pipeline."
-     [tenant source-pipeline-id new-pipeline-id user-id]
-     (common/duplicate-pipeline-handler! tenant source-pipeline-id new-pipeline-id user-id)))
-
-#?(:clj
-   (defn soft-delete-pipeline-handler!
-     "Soft-delete an pipeline."
-     [tenant pipeline-id user-id]
-     (common/soft-delete-pipeline-handler! tenant pipeline-id user-id)))
-
 ;; =============================================================================
 ;; Operations Handlers (Server-side)
 ;; =============================================================================
@@ -824,245 +791,6 @@
                         (e/fn [] (when (seq edit-value) (On-save edit-value)))
                         {:disabled (empty? edit-value)}))))))))
 
-(e/defn NewTenantModal [existing-tenant-ids user-id !refresh-counter !show-modal]
-  "Modal for creating a new tenant with name and ID."
-  (e/client
-   (let [!tenant-name        (atom "")
-         !tenant-id          (atom "")
-         !id-manually-edited (atom false)
-         tenant-name         (e/watch !tenant-name)
-         tenant-id           (e/watch !tenant-id)
-         id-manually-edited  (e/watch !id-manually-edited)
-         suggested-id        (sanitize-tenant-id tenant-name)
-         tenant-exists?      (contains? (set existing-tenant-ids) tenant-id)
-         id-valid?           (valid-tenant-id? tenant-id)]
-     (Modal
-      !show-modal
-      nil
-      (e/fn []
-        (dom/div
-         (dom/props {:style {:display         "flex"
-                             :justify-content "space-between"
-                             :align-items     "center"
-                             :margin-bottom   "1rem"}})
-         (dom/div
-          (dom/props {:style {:font-weight "600"
-                              :font-size   "1rem"}})
-          (dom/text "Create New Tenant"))
-         (dom/button
-          (dom/props {:style {:background "none"
-                              :border     "none"
-                              :font-size  "1.5rem"
-                              :cursor     "pointer"
-                              :color      "#6b7280"}})
-          (dom/text "×")
-          (let [[tok _] (e/Token (dom/On "click" identity nil))]
-            (when tok
-              (reset! !show-modal nil)
-              (tok)))))
-        ;; Tenant name field
-        (dom/div
-         (dom/props {:style {:margin-bottom "1rem"}})
-         (dom/label
-          (dom/props {:style {:display       "block"
-                              :font-weight   "500"
-                              :margin-bottom "0.25rem"}})
-          (dom/text "Name *"))
-         (dom/input
-          (dom/props {:type        "text"
-                      :placeholder "e.g., My Tenant"
-                      :value       tenant-name
-                      :style       input-style})
-          (dom/On "input"
-                  (fn [e]
-                    (let [v (.. e -target -value)
-                          next-id (sanitize-tenant-id v)]
-                      (reset! !tenant-name v)
-                      (when-not id-manually-edited
-                        (reset! !tenant-id next-id))))
-                  nil)))
-        ;; Tenant ID field
-        (dom/div
-         (dom/props {:style {:margin-bottom "0.25rem"}})
-         (dom/label
-          (dom/props {:style {:display       "block"
-                              :font-weight   "500"
-                              :margin-bottom "0.25rem"}})
-          (dom/text "ID *"))
-         (dom/input
-          (dom/props {:type        "text"
-                      :placeholder "e.g., my-tenant"
-                      :value       tenant-id
-                      :style       (merge input-style {:font-family "monospace"})})
-          (dom/On "input"
-                  (fn [e]
-                    (let [raw (.. e -target -value)]
-                      (reset! !id-manually-edited true)
-                      (reset! !tenant-id (sanitize-tenant-id raw))))
-                  nil)))
-        (dom/div
-         (dom/props {:style {:font-size     "0.75rem"
-                             :color         "#6b7280"
-                             :margin-bottom "0.25rem"}})
-         (dom/text "Allowed: lowercase letters, numbers, and hyphens (a-z, 0-9, -)."))
-        (when (and (seq suggested-id) (not= suggested-id tenant-id))
-          (dom/div
-           (dom/props {:style {:font-size     "0.75rem"
-                               :color         "#1e40af"
-                               :margin-bottom "0.5rem"}})
-           (dom/text (str "Suggested ID: " suggested-id))))
-        (when (and (seq tenant-id) (not id-valid?))
-          (dom/div
-           (dom/props {:style {:font-size     "0.75rem"
-                               :color         "#dc2626"
-                               :margin-bottom "0.5rem"}})
-           (dom/text "Invalid ID format.")))
-        (when tenant-exists?
-          (dom/div
-           (dom/props {:style {:font-size     "0.75rem"
-                               :color         "#dc2626"
-                               :margin-bottom "0.5rem"}})
-           (dom/text "Tenant ID already exists.")))
-        (dom/div
-         (dom/props {:style {:display         "flex"
-                             :gap             "0.5rem"
-                             :justify-content "flex-end"
-                             :margin-top      "1rem"}})
-         (ModalButton (t :config/cancel) :secondary
-                      (e/fn [] (reset! !show-modal nil)) nil)
-         (ModalButton (t :config/create) :primary
-                      (e/fn []
-                        (e/server (create-tenant-handler! tenant-id tenant-name user-id))
-                        (reset! !show-modal nil)
-                        (swap! !refresh-counter inc))
-                      {:disabled (or (str/blank? tenant-name)
-                                     (str/blank? tenant-id)
-                                     tenant-exists?
-                                     (not id-valid?))})))))))
-
-(e/defn NewPipelineModal [tenant on-create !show-modal]
-  "Modal for creating a new pipeline."
-  (e/client
-   (let [!pipeline-id   (atom "")
-         !pipeline-name (atom "")
-         pipeline-id    (e/watch !pipeline-id)
-         pipeline-name  (e/watch !pipeline-name)]
-     (Modal
-      !show-modal
-      nil
-      (e/fn []
-        (dom/div
-         (dom/props {:style {:display         "flex"
-                             :justify-content "space-between"
-                             :align-items     "center"
-                             :margin-bottom   "1rem"}})
-         (dom/div
-          (dom/props {:style {:font-weight "600"
-                              :font-size   "1rem"}})
-          (dom/text (t :config/create-pipeline tenant)))
-         (dom/button
-          (dom/props {:style {:background "none"
-                              :border     "none"
-                              :font-size  "1.5rem"
-                              :cursor     "pointer"
-                              :color      "#6b7280"}})
-          (dom/text "×")
-          (let [[tok _] (e/Token (dom/On "click" identity nil))]
-            (when tok
-              (reset! !show-modal nil)
-              (tok)))))
-        ;; Pipeline ID field
-        (dom/div
-         (dom/props {:style {:margin-bottom "1rem"}})
-         (dom/label
-          (dom/props {:style {:display       "block"
-                              :font-weight   "500"
-                              :margin-bottom "0.25rem"}})
-          (dom/text (t :config/pipeline-id)))
-         (dom/input
-          (dom/props {:type        "text"
-                      :placeholder "e.g., my-new-bot"
-                      :value       pipeline-id
-                      :style       input-style})
-          (dom/On "input" #(reset! !pipeline-id (.. % -target -value)) nil)))
-        ;; Pipeline Name field
-        (dom/div
-         (dom/props {:style {:margin-bottom "1rem"}})
-         (dom/label
-          (dom/props {:style {:display       "block"
-                              :font-weight   "500"
-                              :margin-bottom "0.25rem"}})
-          (dom/text (t :config/display-name)))
-         (dom/input
-          (dom/props {:type        "text"
-                      :placeholder "e.g., My New Bot"
-                      :value       pipeline-name
-                      :style       input-style})
-          (dom/On "input" #(reset! !pipeline-name (.. % -target -value)) nil)))
-        (dom/div
-         (dom/props {:style {:display         "flex"
-                             :gap             "0.5rem"
-                             :justify-content "flex-end"
-                             :margin-top      "1rem"}})
-         (ModalButton (t :config/cancel) :secondary
-                      (e/fn [] (reset! !show-modal nil)) nil)
-         (ModalButton (t :config/create) :primary
-                      (e/fn [] (on-create pipeline-id {:name pipeline-name}))
-                      {:disabled (str/blank? pipeline-id)})))))))
-
-(e/defn DuplicatePipelineModal [tenant source-pipeline-id on-duplicate !show-modal]
-  "Modal for duplicating an existing pipeline."
-  (e/client
-   (let [!new-pipeline-id (atom (str source-pipeline-id "-copy"))
-         new-pipeline-id  (e/watch !new-pipeline-id)]
-     (Modal
-      !show-modal
-      nil
-      (e/fn []
-        (dom/div
-         (dom/props {:style {:display         "flex"
-                             :justify-content "space-between"
-                             :align-items     "center"
-                             :margin-bottom   "1rem"}})
-         (dom/div
-          (dom/props {:style {:font-weight "600"
-                              :font-size   "1rem"}})
-          (dom/text (t :config/duplicate-pipeline source-pipeline-id)))
-         (dom/button
-          (dom/props {:style {:background "none"
-                              :border     "none"
-                              :font-size  "1.5rem"
-                              :cursor     "pointer"
-                              :color      "#6b7280"}})
-          (dom/text "×")
-          (let [[tok _] (e/Token (dom/On "click" identity nil))]
-            (when tok
-              (reset! !show-modal nil)
-              (tok)))))
-        ;; New Pipeline ID field
-        (dom/div
-         (dom/props {:style {:margin-bottom "1rem"}})
-         (dom/label
-          (dom/props {:style {:display       "block"
-                              :font-weight   "500"
-                              :margin-bottom "0.25rem"}})
-          (dom/text (t :config/new-pipeline-id)))
-         (dom/input
-          (dom/props {:type  "text"
-                      :value new-pipeline-id
-                      :style input-style})
-          (dom/On "input" #(reset! !new-pipeline-id (.. % -target -value)) nil)))
-        (dom/div
-         (dom/props {:style {:display         "flex"
-                             :gap             "0.5rem"
-                             :justify-content "flex-end"
-                             :margin-top      "1rem"}})
-         (ModalButton (t :config/cancel) :secondary
-                      (e/fn [] (reset! !show-modal nil)) nil)
-         (ModalButton (t :config/duplicate) :primary
-                      (e/fn [] (on-duplicate source-pipeline-id new-pipeline-id))
-                      {:disabled (str/blank? new-pipeline-id)})))))))
-
 ;; -----------------------------------------------------------------------------
 ;; Badge Components
 ;; -----------------------------------------------------------------------------
@@ -1266,7 +994,7 @@
        (.click a)
        (js/URL.revokeObjectURL url))))
 
-(e/defn ExportCard [tenants user-id !refresh-counter]
+(e/defn ExportCard [tenants !refresh-counter]
   "Export operation card with preview and download functionality."
   (e/client
    (let [!tenant        (atom nil)
@@ -1375,7 +1103,7 @@
                                       :aria-busy (some? t)
                                       :disabled  (some? t)})
                           t)]
-          (let [result (e/server (e/Offload #(export-preview tenant include-audit user-id)))]
+          (let [result (e/server (let [actor (:user/id e/http-request)] (e/Offload #(export-preview tenant include-audit actor))))]
             (if (= :success (:status result))
               (do (reset! !preview (:data result))
                   (reset! !message nil))
@@ -1391,7 +1119,7 @@
                                       :aria-busy (some? t)
                                       :disabled  (or (str/blank? password) (some? t))})
                           t)]
-          (let [result (e/server (e/Offload #(do-export! tenant include-audit password user-id)))]
+          (let [result (e/server (let [actor (:user/id e/http-request)] (e/Offload #(do-export! tenant include-audit password actor))))]
             (if (= :success (:status result))
               (let [json-str (:data result)
                     filename (str "config-export-"
@@ -1527,7 +1255,7 @@
        (dom/div
         (dom/text (str "Total node values: " (or (:total vals) 0)))))))))
 
-(e/defn ImportCard [user-id !refresh-counter]
+(e/defn ImportCard [!refresh-counter]
   "Import operation card with progress tracking and results display."
   (e/client
    (let [!json-data   (atom nil)
@@ -1552,8 +1280,8 @@
        ;; Note: case is used because Electric supports it and Preview works with it
        (case state
          :previewing
-         (let [server-result (e/server
-                              (e/Offload #(import-preview json-data on-conflict user-id)))]
+         (let [server-result (e/server (let [actor (:user/id e/http-request)]
+                              (e/Offload #(import-preview json-data on-conflict actor))))]
            (e/client
             (if (= :success (:status server-result))
               (do (reset! !preview (:data server-result))
@@ -1562,8 +1290,8 @@
                   (reset! !state :error)))))
 
          :importing
-         (let [server-result (e/server
-                              (e/Offload #(do-import! json-data password on-conflict user-id)))]
+         (let [server-result (e/server (let [actor (:user/id e/http-request)]
+                              (e/Offload #(do-import! json-data password on-conflict actor))))]
            (e/client
             (if (= :success (:status server-result))
               (do (reset! !result (:data server-result))
@@ -1799,7 +1527,7 @@
     (dom/div (dom/text (str "Builtin agents ensured: " (count (get-in result [:agents :builtin])))))
     (dom/div (dom/text (str "Placeholder agents ensured: " (count (get-in result [:agents :placeholder]))))))))
 
-(e/defn CloneTenantCard [tenants user-id !refresh-counter]
+(e/defn CloneTenantCard [tenants !refresh-counter]
   "Clone tenant operation card aligned with the tenant/root/node config model."
   (e/client
    (let [!source-tenant (atom nil)
@@ -1899,7 +1627,7 @@
                                                     (str/blank? target-tenant)
                                                     (some? t))})
                           t)]
-          (let [server-result (e/server (e/Offload #(preview-clone-tenant source-tenant target-tenant exclude-ents user-id)))]
+          (let [server-result (e/server (let [actor (:user/id e/http-request)] (e/Offload #(preview-clone-tenant source-tenant target-tenant exclude-ents actor))))]
             (if (= :success (:status server-result))
               (do (reset! !preview (:data server-result))
                   (reset! !result nil)
@@ -1916,7 +1644,7 @@
                                                     (str/blank? target-tenant)
                                                     (some? t))})
                           t)]
-          (let [server-result (e/server (e/Offload #(do-clone-tenant! source-tenant target-tenant exclude-ents user-id)))]
+          (let [server-result (e/server (let [actor (:user/id e/http-request)] (e/Offload #(do-clone-tenant! source-tenant target-tenant exclude-ents actor))))]
             (if (= :success (:status server-result))
               (do (reset! !result (:data server-result))
                   (reset! !preview nil)
@@ -1925,7 +1653,7 @@
               (reset! !error (or (:error server-result) "Clone failed")))
             (tok)))))))))
 
-(e/defn DeploymentTopologyCard [user-id !refresh-counter]
+(e/defn DeploymentTopologyCard [!refresh-counter]
   "Bootstrap the refactor-aware target deployment topology."
   (e/client
    (let [!tenant-config-key (atom "default")
@@ -1982,7 +1710,7 @@
                                      :aria-busy (some? t)
                                      :disabled (some? t)})
                          t)]
-         (let [server-result (e/server (e/Offload #(do-bootstrap-deployment-target-topology! tenant-config-key user-id)))]
+         (let [server-result (e/server (let [actor (:user/id e/http-request)] (e/Offload #(do-bootstrap-deployment-target-topology! tenant-config-key actor))))]
            (if (= :success (:status server-result))
              (do (reset! !result (:data server-result))
                  (reset! !error nil)
@@ -1990,7 +1718,7 @@
              (reset! !error (or (:error server-result) "Topology bootstrap failed")))
            (tok))))))))
 
-(e/defn TenantRetirementCard [user-id !refresh-counter]
+(e/defn TenantRetirementCard [!refresh-counter]
   "Preview and apply source-tenant retirement."
   (e/client
    (let [!tenant-input          (atom "altinn\naltinn-docs\nka")
@@ -2087,7 +1815,7 @@
                                       :aria-busy (some? t)
                                       :disabled (or (empty? parsed-tenants) (some? t))})
                           t)]
-          (let [server-result (e/server (e/Offload #(preview-tenant-retirement tenant-input tenant-config-key user-id)))]
+          (let [server-result (e/server (let [actor (:user/id e/http-request)] (e/Offload #(preview-tenant-retirement tenant-input tenant-config-key actor))))]
             (if (= :success (:status server-result))
               (do (reset! !preview (:data server-result))
                   (reset! !result nil)
@@ -2102,10 +1830,10 @@
                                       :aria-busy (some? t)
                                       :disabled (or (empty? parsed-tenants) (some? t))})
                           t)]
-          (let [server-result (e/server (e/Offload #(do-retire-source-tenants! tenant-input
+          (let [server-result (e/server (let [actor (:user/id e/http-request)] (e/Offload #(do-retire-source-tenants! tenant-input
                                                                             tenant-config-key
                                                                             conversation-strategy
-                                                                            user-id)))]
+                                                                            actor))))]
             (if (= :success (:status server-result))
               (do (reset! !result (:data server-result))
                   (reset! !preview nil)
@@ -2114,7 +1842,7 @@
               (reset! !error (or (:error server-result) "Tenant retirement failed")))
             (tok)))))))))
 
-(e/defn DatabaseOperationsContent [tenants !refresh-counter user-id]
+(e/defn DatabaseOperationsContent [tenants !refresh-counter]
   (dom/div
    (dom/props {:style ops-panel-style})
    (dom/div
@@ -2127,17 +1855,17 @@
     (dom/props {:style {:display   "flex"
                         :gap       "1rem"
                         :flex-wrap "wrap"}})
-    (ExportCard tenants user-id !refresh-counter)
-    (ImportCard user-id !refresh-counter)
-    (CloneTenantCard tenants user-id !refresh-counter)
-    (DeploymentTopologyCard user-id !refresh-counter)
-    (TenantRetirementCard user-id !refresh-counter))))
+    (ExportCard tenants !refresh-counter)
+    (ImportCard !refresh-counter)
+    (CloneTenantCard tenants !refresh-counter)
+    (DeploymentTopologyCard !refresh-counter)
+    (TenantRetirementCard !refresh-counter))))
 
-(e/defn DBManagement [tenants !refresh-counter is-admin user-id]
+(e/defn DBManagement [tenants !refresh-counter is-admin]
   (dom/div
    (dom/props {:style {:padding "1rem" :max-width "100%"}})
    (if is-admin
-     (DatabaseOperationsContent tenants !refresh-counter user-id)
+     (DatabaseOperationsContent tenants !refresh-counter)
      (dom/div
       (dom/props {:style {:padding "1rem"
                           :background "#fef3c7"
@@ -2150,11 +1878,11 @@
 ;; Main Config Component
 ;; =============================================================================
 
-(e/defn ConfigManagement [all-tenants !refresh-counter user-id]
+(e/defn ConfigManagement [all-tenants !refresh-counter]
   (dom/div
    #_(dom/props {:style {:padding "1rem" :max-width "100%"}})
    #_(ks/Heading {:level 2} (e/fn [] (dom/text (t :config/heading))))
-   (ConfigInheritanceEditor all-tenants !refresh-counter user-id)))
+   (ConfigInheritanceEditor all-tenants !refresh-counter)))
 ;; =============================================================================
 ;; Main Tabbed Config UI
 ;; =============================================================================
@@ -2175,10 +1903,9 @@
 (e/defn ConfigTabs []
   (e/client
    (let [!refresh-counter (atom 0)
-         user-id (e/server (:user/id e/http-request))
          all-tenants (e/server (or (some-> (config-db/get-conn) deref config-db/list-tenants) []))
-         is-admin (e/server (let [conn (config-db/get-conn)]
-                              (boolean (and conn (perms/is-admin? @conn user-id)))))
+         is-admin (e/server (let [actor (:user/id e/http-request)] (let [conn (config-db/get-conn)]
+                              (boolean (and conn (common/config-ui-admin? @conn actor))))))
          [active-tab set-active-tab!] (routing/UseRoutedTab :config 1)
          tab-labels [(t :config/tab-config)
                      (t :config/tab-db-management)
@@ -2200,16 +1927,16 @@
 
       ;; Tab content
       (case active-tab
-        0 (ConfigManagement all-tenants !refresh-counter user-id)
-        1 (DBManagement all-tenants !refresh-counter is-admin user-id)
+        0 (ConfigManagement all-tenants !refresh-counter)
+        1 (DBManagement all-tenants !refresh-counter is-admin)
         2 (AuditLog)
         3 (Permissions)
         4 (APIKeys)
         5 (SkillsUI)
         6 (AgentsUI)
         7 (DiagnosticsPanel)
-        8 (GlobalDefaultsEditor user-id)
-        (ConfigManagement all-tenants !refresh-counter user-id))))))
+        8 (GlobalDefaultsEditor)
+        (ConfigManagement all-tenants !refresh-counter))))))
 
 (e/defn Config []
   (ConfigTabs))

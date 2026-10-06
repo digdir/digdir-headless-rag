@@ -92,7 +92,9 @@
     ;; 30 -> 32: the OpenAPI tool surface. Both entries carry their reason in
     ;; `response-schema-not-established` — for these two a declared schema is
     ;; the wrong shape, not an unfinished one.
-    (is (= 32 enum)
+    ;; 32 -> 33: PUT /console-api/api-keys/:key-id/all-tenants, beside
+    ;; its sibling key routes, none of which declares a response schema.
+    (is (= 33 enum)
         (str "operations enumerated as not-established changed to " enum
              ". Removing an entry requires adding its schema."))))
 

@@ -207,7 +207,7 @@
 (deftest test-resolve-request-execution-context-merges-config-and-traces
   (testing "Agent-scoped request resolution returns merged config, policy, and traces"
     (let [runtime-call (atom nil)
-          ceiling-call (atom nil)]
+          ceiling-calls (atom [])]
       (with-redefs [config-db/get-conn (fn [] (atom :config-db))
                     ;; Also stubbed so this test does not depend on the config DB
                     ;; having been initialised by something else first. It used to
@@ -259,8 +259,8 @@
                                                                       :config.node/tenant-config-key slug
                                                                       :config.node/enabled? true})
                     api-keys/require-allowed-config-key! (fn [_ allowed-config-keys opts]
-                                                       (reset! ceiling-call {:allowed-config-keys allowed-config-keys
-                                                                             :opts opts})
+                                                       (swap! ceiling-calls conj {:allowed-config-keys allowed-config-keys
+                                                                                  :opts opts})
                                                        {:matched true})]
         (let [request {:api-key/agent-refs ["builtin/agent-rag-agent"]
                        :api-key/dataset-scopes [{:tenant "ka" :dataset-config-key "prod"}]
@@ -284,11 +284,17 @@
           (is (= {:dataset {"pipeline.storage.docs-collection" {:resolved-from "dataset/ka/prod"}}
                   :runtime {"skills.rerank.top-k" {:resolved-from "runtime/ka/default"}}}
                  (:traces resolved)))
-          (is (= {:allowed-config-keys [{:api-key.allowed-config-key/id "dataset-default"}]
-                  :opts {:root :dataset
-                         :tenant "ka"
-                         :node-id "dataset/ka/prod"}}
-                 @ceiling-call)))))))
+          ;; the runtime node that is loaded is grant-checked too,
+          ;; after the dataset node.
+          (is (= [{:allowed-config-keys [{:api-key.allowed-config-key/id "dataset-default"}]
+                   :opts {:root :dataset
+                          :tenant "ka"
+                          :node-id "dataset/ka/prod"}}
+                  {:allowed-config-keys [{:api-key.allowed-config-key/id "dataset-default"}]
+                   :opts {:root :runtime
+                          :tenant "ka"
+                          :node-id "runtime/ka/default"}}]
+                 (mapv #(update % :allowed-config-keys vec) @ceiling-calls))))))))
 
 (deftest test-resolve-request-execution-context-requires-runtime-config-key-for-agent-flow
   (testing "Agent-scoped requests fail fast when runtime-config-key is required"

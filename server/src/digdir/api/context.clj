@@ -5,6 +5,7 @@
             [clojure.tools.logging :as log]
             [digdir.agents.db :as agents-db]
             [digdir.agents.policy :as agents-policy]
+            [digdir.api.auth :as api-auth]
             [digdir.config.api-keys :as api-keys]
             [digdir.config.accessor :as cfg]
             [digdir.config.db :as config-db]
@@ -210,7 +211,10 @@
          granted-set (set (map dataset-ref-key granted-scopes))
          policy-restricted? (seq allowed-dataset-scopes)
          effective-granted-scopes (filter-dataset-scopes granted-scopes allowed-dataset-scopes)
-         effective-granted-set (set (map dataset-ref-key effective-granted-scopes))
+         ;; a key marked all-tenant has no dataset scopes to narrow; the
+         ;; agent's declared scopes still narrow it (they can never widen a key).
+         marked? (api-auth/all-tenants? ring-req)
+         effective-granted-set (set (map dataset-ref-key (if marked? allowed-dataset-scopes effective-granted-scopes)))
          available (available-dataset-scopes-for-error effective-granted-scopes)]
      (cond
        (= requested invalid-dataset-ref)
@@ -228,7 +232,7 @@
 
        requested
        (do
-         (when-not (seq granted-set)
+         (when-not (or marked? (seq granted-set))
            (log/debug "Rejecting API request because the API key has no dataset scopes"
                       {:request-method (:request-method ring-req)
                        :uri (:uri ring-req)
@@ -250,16 +254,8 @@
            (throw (ex-info "Selected agent is not allowed to access the selected dataset"
                            {:status 403
                             :dataset-scope requested})))
-         (when-not (contains? granted-set (dataset-ref-key requested))
-           (log/debug "Rejecting API request because the API key is not granted access to the requested dataset"
-                      {:request-method (:request-method ring-req)
-                       :uri (:uri ring-req)
-                       :path-info (:path-info ring-req)
-                       :requested-dataset-ref requested
-                       :granted-dataset-scopes granted-scopes})
-           (throw (ex-info "API key is not allowed to access the selected dataset"
-                           {:status 403
-                            :dataset-scope requested})))
+         ;; THE one decision on the tenant and the dataset.
+         (api-auth/authorize-scope! ring-req {:dataset-ref requested})
          requested)
 
        (and policy-restricted? (seq granted-scopes) (empty? effective-granted-scopes))
@@ -497,6 +493,15 @@
                                                                                   :node-id (:dataset-node-id dataset-context)})
          runtime-config-key (or runtime-config-key
                                 (param-value params :runtime-config-key))
+         ;; the runtime node this loads is the one
+         ;; whose grant is checked - here, inside the fn, so no caller inherits
+         ;; a load of a runtime node the key was never granted. A call that
+         ;; names no runtime node loads the resolver's default, as before.
+         _ (when (and agent-id (or runtime-config-key runtime-node-id))
+             (resolve-request-config-node! ring-req conn {:tenant (:tenant dataset-ref)
+                                                          :root :runtime
+                                                          :tenant-config-key runtime-config-key
+                                                          :node-id runtime-node-id}))
          runtime-config-result (when agent-id
                                  (try
                                    (cfg/get-runtime-skill-config-v2-with-trace

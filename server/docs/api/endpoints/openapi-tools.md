@@ -96,12 +96,15 @@ deliberately not validated against a fixed schema: arguments are per-tool and
 open-ended, and this API's coercion strips fields it does not know about
 (#174).
 
+**`tenant` is required on every call**: a conversation is addressed by
+tenant and id together, and a call without one is refused with `tenant_required`.
+
 ```bash
 curl -s -X POST \
   "https://rag.digdir.cloud/api/tools/call/builtin.agent-rag-agent__agent-rag-graph-faithful" \
   -H "X-API-Key: $DIGDIR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"query": "Hva er Altinn?"}'
+  -d '{"query": "Hva er Altinn?", "tenant": "digdir", "dataset_config_key": "public-docs"}'
 ```
 
 ```json

@@ -226,7 +226,7 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/conversations?page_size=10&page_index=0",
+              "raw": "{{base_url}}/api/conversations?tenant=digdir&page_size=10&page_index=0",
               "host": [
                 "{{base_url}}"
               ],
@@ -235,6 +235,10 @@
                 "conversations"
               ],
               "query": [
+                {
+                  "key": "tenant",
+                  "value": "digdir"
+                },
                 {
                   "key": "page_size",
                   "value": "10"

@@ -138,11 +138,10 @@
    :category :orchestration
    ;; Batch input forms (any of): :chunk-outcomes (foreach collect-as vector of
    ;; maps, chunk-id extracted), :chunk-ids (vector of strings), :chunk-id (single).
-   ;; :tenant / :dataset-config-key are declared for documentation but marked
-   ;; optional: in a graph step they arrive via skill-params (the execute falls
-   ;; back to them), not as graph inputs, so requiring them would reject the step.
-   :inputs [:user-query :tenant :dataset-config-key]
-   :optional-inputs [:chunk-id :chunk-ids :chunk-outcomes :tenant :dataset-config-key]
+   ;; The tenant and dataset are NOT inputs: they come from skill-params
+   ;; only, the authorized scope of the call.
+   :inputs [:user-query]
+   :optional-inputs [:chunk-id :chunk-ids :chunk-outcomes]
    :outputs [:verdicts :batch-summary :rows :summary]
    ;; :max-clarification-rounds is deliberately absent: run-comparison does not
    ;; simulate a user, so declaring the knob would advertise a control that does
@@ -165,12 +164,11 @@
 (defn execute-eval-sweep
   [{:keys [inputs parameters skill-params]}]
   (let [{:keys [user-query chunk-id chunk-ids chunk-outcomes]} inputs
-        ;; In a graph step tenant/dataset arrive via skill-params, not inputs
-        ;; (the playground doesn't thread them as graph inputs); standalone
-        ;; callers pass them in :inputs. Honor either.
-        tenant (or (:tenant inputs) (:tenant skill-params))
-        dataset-config-key (or (:dataset-config-key inputs)
-                               (:dataset-config-key skill-params)
+        ;; the tenant and dataset come ONLY
+        ;; from the authorized skill-params. They used to prefer `inputs`, so a
+        ;; request granted one dataset ran the agent graph on another tenant's.
+        tenant (:tenant skill-params)
+        dataset-config-key (or (:dataset-config-key skill-params)
                                "public-docs")
         ;; Accept the foreach :chunk-outcomes (vector of per-chunk output maps) and
         ;; pull the chunk-id out of each, plus explicit :chunk-ids / :chunk-id.

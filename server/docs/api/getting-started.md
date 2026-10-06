@@ -283,8 +283,8 @@ object inside a `200` response instead of an HTTP error status:
 | `conversation-history` | array | no | Vector of `{:role :text}` maps. Server-managed conversations fill this in automatically. |
 | `model` | string | no | Explicit override. Leave unset to honor the skill-graph's runtime config. |
 | `temperature` | number | no | Overrides the runtime default when present. |
-| `tenant` | string | no | Scope override — required if the calling key/agent needs disambiguation. |
-| `dataset_config_key` | string | no | Scope override — required if the calling key/agent needs disambiguation. |
+| `tenant` | string | yes | The tenant this call acts in, on EVERY call: a conversation is addressed by tenant and id together. A key with no dataset scopes must name one too, and must then also name `dataset_config_key`, unless the agent, or the server default, supplies a dataset in that tenant; an agent's declared scopes also limit which tenant may be named. |
+| `dataset_config_key` | string | no | The dataset within `tenant`. Without it, the first dataset the key and agent may use in that tenant. A key with no dataset scopes names this too (else `dataset_not_authorized`), unless the agent, or the server default, supplies a dataset in that tenant; an agent's declared scopes also limit which tenant may be named. |
 | `conversation_id` | string | no | Reuse an existing conversation; omit to start a new one. |
 | `overrides` | object | no | `retrieve-filter-by`, `retrieve-auto-filter` and `retrieve-top-k`; any other key is refused. See `endpoints/mcp.md`. |
 

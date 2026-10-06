@@ -10,7 +10,60 @@
             #?(:clj [digdir.agents.db :as agents-db])
             #?(:clj [digdir.config.api-keys :as api-keys])
             #?(:clj [digdir.config.db :as config-db])
+            #?(:clj [digdir.config.api-key-authz :as authz])
+            #?(:clj [digdir.config.ui.common :as common])
             #?(:clj [digdir.config.structure :as structure])))
+
+#?(:clj
+   (do
+     ;; EVERY server call of this panel goes through one of these, and
+     ;; each authorizes through `authz/authorize-key-op!`: the ONE console guard
+     ;; (`common/ensure-config-ui-admin!`); any admin may do any key operation
+     ;; on any key, exactly as through the console HTTP door. Each
+     ;; call site reads the ACTOR
+     ;; from `e/http-request` inside the SAME `e/server` form; the
+     ;; tab renders for any permissioned user, so the check here is the
+     ;; enforcement and the render gate only explanation.
+
+     (defn panel-read
+       "A read of the key panel (the key list, and the tenant, dataset and agent
+        lookups): `(read-fn)` for an admin, nil for anyone else. Key metadata of
+        every tenant is disclosure."
+       [db actor read-fn]
+       (try
+         (authz/authorize-key-op! db actor :list nil)
+         (read-fn)
+         (catch clojure.lang.ExceptionInfo e
+           (if (= :not-admin (:reason (ex-data e)))
+             nil
+             (throw e)))))
+
+     (defn panel-create-key!
+       "Create a key as `actor`, who is recorded as its creator by USER ID
+        (this door used to record the email). The creator is
+        attribution only: it decides nothing."
+       [conn actor key-name opts]
+       (authz/authorize-key-op! @conn actor :create nil)
+       (api-keys/create-api-key! conn key-name actor opts))
+
+     (defn panel-revoke-key!
+       [conn actor actor-email api-key-id]
+       (authz/authorize-key-op! @conn actor :revoke (api-keys/get-api-key-info conn api-key-id))
+       (api-keys/revoke-api-key conn api-key-id {:user-id actor :user-email actor-email}))
+
+     (defn panel-replace-allowed-config-keys!
+       [conn actor actor-email api-key-id allowed-config-keys]
+       (authz/authorize-key-op! @conn actor :replace-allowed-config-keys (api-keys/get-api-key-info conn api-key-id))
+       (api-keys/replace-api-key-allowed-config-keys! conn api-key-id allowed-config-keys
+                                                      {:user-id actor :user-email actor-email}))
+
+     (defn set-all-tenants-as-admin!
+       "the key UI's door to the all-tenant marker. Since
+        the console admin-gate fix it authorizes through the one fn both doors share (any admin), and
+        the write is `set-all-tenants!`'s, audited in the same transaction."
+       [conn user-id user-email api-key-id all-tenants?]
+       (authz/authorize-key-op! @conn user-id :set-all-tenants nil)
+       (api-keys/set-all-tenants! conn api-key-id all-tenants? {:user-id user-id :user-email user-email}))))
 
 #?(:clj
    (defn build-dataset-name-index
@@ -275,6 +328,23 @@
    (dom/props {:style {:color "#b45309" :font-size "0.75rem" :font-weight "600"}})
    (dom/text (str "Unrestricted \u2014 all " what))))
 
+(e/defn TenantReachSummary [tenant-reach tenants]
+  "what a key reaches on the TENANT axis, derived server-side by
+   `api-keys/tenant-reach` from the one granted-tenant set and the marker. The
+   tenant axis fails closed: a key with no granted tenant and no marker is
+   refused everywhere, so it must never read as unrestricted."
+  (case tenant-reach
+    :all-tenants (dom/span
+                  (dom/props {:style {:color "#b91c1c" :font-size "0.75rem" :font-weight "700"}})
+                  (dom/text "All tenants"))
+    :no-tenant (dom/span
+                (dom/props {:style {:color "#6b7280" :font-size "0.75rem" :font-weight "600"}})
+                (dom/text "No tenant granted"))
+    (dom/div
+     (dom/props {:style {:display "flex" :flex-wrap "wrap" :gap "0.125rem"}})
+     (e/for [tenant (e/diff-by identity (sort tenants))]
+       (ItemTag tenant :tenant)))))
+
 (e/defn AllowedConfigKeyTag [allowed-config-key]
   (ItemTag (allowed-config-key-tag-label allowed-config-key) :tenant))
 
@@ -366,8 +436,11 @@
                                                    (conj s item))))) nil))
               (dom/text (item-label item)))))))))))
 
-(e/defn APIKeyRow [api-key dataset-names agent-names !editing-key-id]
+(e/defn APIKeyRow [api-key dataset-names agent-names !editing-key-id is-admin]
   (let [key-id (:api-key/id api-key)
+        tenant-reach (:ui/tenant-reach api-key)
+        marked? (= :all-tenants tenant-reach)
+        has-policy? (some? (get-in api-key [:api-key/policy :access-policy/id]))
         is-revoked (:api-key/revoked api-key)
         expires-at (:api-key/expires-at api-key)
         days-left (e/server (days-until-expiry expires-at))
@@ -402,6 +475,11 @@
       (e/for [scope (e/diff-by identity (or (:api-key/scopes api-key) [:query]))]
         (ScopeTag scope)))
 
+     ;; Tenants
+     (dom/td
+      (dom/props {:style {:padding "0.75rem" :border-bottom "1px solid #e5e7eb"}})
+      (TenantReachSummary tenant-reach (:api-key/tenants api-key)))
+
      ;; Agents
      (dom/td
       (dom/props {:style {:padding "0.75rem" :border-bottom "1px solid #e5e7eb"}})
@@ -416,7 +494,11 @@
      (dom/td
       (dom/props {:style {:padding "0.75rem" :border-bottom "1px solid #e5e7eb"}})
       (if (empty? dataset-ids)
-        (UnrestrictedSummary "datasets")
+        ;; an empty dataset grant reaches NO dataset, unless the key is
+        ;; marked all-tenant (the dataset axis fails closed too).
+        (dom/span
+         (dom/props {:style {:color (if marked? "#b91c1c" "#6b7280") :font-size "0.75rem" :font-weight "600"}})
+         (dom/text (if marked? "All datasets (all-tenant key)" "No dataset granted")))
         (dom/div
          (dom/props {:style {:display "flex" :flex-wrap "wrap" :gap "0.125rem"}})
          (e/for [dataset-id (e/diff-by identity dataset-ids)]
@@ -482,6 +564,33 @@
                         (when t
                           (case (reset! !editing-key-id key-id)
                             (t))))))
+         ;; only an admin sees it, and the server checks
+         ;; again; a key without a policy has nothing to mark.
+         (when (and is-admin has-policy?)
+           (ks/Button {:data-size "sm"
+                       :data-variant "tertiary"
+                       :data-color "danger"}
+                      (e/fn []
+                        (dom/text (if marked? "Clear all-tenant marker" "Mark all tenants"))
+                        (let [[t _] (e/Token (dom/On "click" identity nil))]
+                          (when t
+                            (let [confirmed (e/client (js/confirm (if marked?
+                                                                    "Clear the all-tenant marker? The key keeps only its granted tenants."
+                                                                    "Mark this key ALL TENANTS? It will reach EVERY tenant's data.")))
+                                  result (when confirmed
+                                           (e/server
+                                            (let [user-id (:user/id e/http-request)
+                                                  user-email (:user/email e/http-request)
+                                                  kid (e/client key-id)
+                                                  v (e/client (not marked?))]
+                                              (e/Offload
+                                               #(try
+                                                  (set-all-tenants-as-admin! (db/get-conn) user-id user-email kid v)
+                                                  ::done
+                                                  (catch clojure.lang.ExceptionInfo ex (ex-message ex)))))))]
+                              (case result
+                                (nil ::done) (t)
+                                (t result))))))))
          (ks/Button {:data-size "sm"
                      :data-variant "tertiary"
                      :data-color "danger"}
@@ -490,40 +599,46 @@
                       (let [[t err] (e/Token (dom/On "click" identity nil))]
                         (when t
                           (case (and (e/client (js/confirm "Are you sure you want to revoke this API key? This cannot be undone."))
-                                     (e/server (api-keys/revoke-api-key (db/get-conn) key-id)))
+                                     (e/server
+                                      (let [actor (:user/id e/http-request)
+                                            actor-email (:user/email e/http-request)]
+                                        (panel-revoke-key! (db/get-conn) actor actor-email key-id))))
                             (t))))))))))))
 
 (e/defn NewAPIKeyModal [!show-modal !new-key-data config-node-options]
   (let [;; Get tenants and dataset data from server
         tenant-ids (e/server
-                    (let [conn (config-db/get-conn)
+                    (let [actor (:user/id e/http-request)
+                          conn (config-db/get-conn)
                           db (some-> conn deref)]
-                      (if db
-                        (->> (config-db/list-tenants db)
-                             sort
-                             vec)
-                        [])))
+                      (or (when db
+                            (panel-read db actor #(->> (config-db/list-tenants db)
+                                                       sort
+                                                       vec)))
+                          [])))
         all-dataset-ids (e/server
-                         (let [conn (config-db/get-conn)
+                         (let [actor (:user/id e/http-request)
+                               conn (config-db/get-conn)
                                db (some-> conn deref)]
-                           (if db
-                             (let [tenants (config-db/list-tenants db)]
-                               (->> (build-dataset-name-index db tenants)
-                                    keys
-                                    all-dataset-option-ids))
-                             [])))
+                           (or (when db
+                                 (panel-read db actor #(let [tenants (config-db/list-tenants db)]
+                                                         (->> (build-dataset-name-index db tenants)
+                                                              keys
+                                                              all-dataset-option-ids))))
+                               [])))
         dataset-names (e/server
-                      (let [conn (config-db/get-conn)
+                      (let [actor (:user/id e/http-request)
+                            conn (config-db/get-conn)
                             db (some-> conn deref)]
-                        (if db
-                          (let [tenants (config-db/list-tenants db)]
-                            (build-dataset-name-index db tenants))
-                          {})))
+                        (or (when db
+                              (panel-read db actor #(build-dataset-name-index db (config-db/list-tenants db))))
+                            {})))
         enabled-agents (e/server
-                        (let [conn (config-db/get-conn)]
-                          (if conn
-                            (agents-db/list-enabled-agents @conn)
-                            [])))
+                        (let [actor (:user/id e/http-request)
+                              conn (config-db/get-conn)]
+                          (or (when conn
+                                (panel-read @conn actor #(agents-db/list-enabled-agents @conn)))
+                              [])))
         agent-ids (mapv :id enabled-agents)
         agent-names (into {} (map (juxt :id :name) enabled-agents))
 
@@ -758,10 +873,10 @@
                                                 (remove nil?)
                                                 vec)
                               result (e/server
-                                      (let [created-by (or (:user/email e/http-request) "unknown")]
-                                        (api-keys/create-api-key! (db/get-conn)
+                                      (let [actor (:user/id e/http-request)]
+                                        (panel-create-key! (db/get-conn)
+                                                                  actor
                                                                   name-val
-                                                                  created-by
                                                                   {:dataset-scopes dataset-scopes
                                                                    :agent-refs agent-refs-vec
                                                                    :allowed-config-keys effective-allowed-config-keys
@@ -921,41 +1036,52 @@
                       (when t
                         (let [selected-allowed-config-keys (selected-allowed-config-key-maps config-node-options selected-allowed-config-key-keys)
                               _ (e/server
-                                 (api-keys/replace-api-key-allowed-config-keys!
-                                  (db/get-conn)
-                                  key-id
-                                  selected-allowed-config-keys
-                                  {:user-email (or (:user/email e/http-request) "unknown")
-                                   :user-id (or (:user/id e/http-request)
-                                                (:user/email e/http-request)
-                                                "unknown")}))]
+                                 (let [actor (:user/id e/http-request)
+                                       actor-email (:user/email e/http-request)]
+                                   (panel-replace-allowed-config-keys! (db/get-conn)
+                                                                       actor
+                                                                       actor-email
+                                                                       key-id
+                                                                       selected-allowed-config-keys)))]
                           (case (reset! !editing-key-id nil)
                             (t))))))))))))
 
 (e/defn APIKeys []
   (let [;; Server-side data - watch the db for reactivity
         api-keys-list (e/server
-                       (let [conn (db/get-conn)]
-                         (vec (sort-by :api-key/created > (api-keys/list-all-api-keys (e/watch conn))))))
+                       (let [actor (:user/id e/http-request)
+                             db (e/watch (db/get-conn))]
+                         (or (panel-read db actor
+                                         #(->> (api-keys/list-all-api-keys db)
+                                               (sort-by :api-key/created >)
+                                               ;; the tenant reach, derived by the one fn
+                                               (mapv (fn [k] (assoc k :ui/tenant-reach (api-keys/tenant-reach k))))))
+                             [])))
+        ;; what the panel SHOWS, from the one guard's verdict
+        is-admin (e/server
+                  (let [actor (:user/id e/http-request)]
+                    (common/config-ui-admin? @(db/get-conn) actor)))
         config-node-options (e/server
-                             (let [conn (config-db/get-conn)
+                             (let [actor (:user/id e/http-request)
+                                   conn (config-db/get-conn)
                                    db (some-> conn deref)]
-                               (if db
-                                 (build-allowed-config-key-options db)
-                                 [])))
+                               (or (when db
+                                     (panel-read db actor #(build-allowed-config-key-options db)))
+                                   [])))
         ;; Get dataset names for display
         dataset-names (e/server
-                      (let [conn (config-db/get-conn)
+                      (let [actor (:user/id e/http-request)
+                            conn (config-db/get-conn)
                             db (some-> conn deref)]
-                        (if db
-                          (let [tenants (config-db/list-tenants db)]
-                            (build-dataset-name-index db tenants))
-                          {})))
+                        (or (when db
+                              (panel-read db actor #(build-dataset-name-index db (config-db/list-tenants db))))
+                            {})))
         agent-names (e/server
-                     (let [conn (config-db/get-conn)]
-                       (if conn
-                         (into {} (map (juxt :id :name) (agents-db/list-enabled-agents @conn)))
-                         {})))
+                     (let [actor (:user/id e/http-request)
+                           conn (config-db/get-conn)]
+                       (or (when conn
+                             (panel-read @conn actor #(into {} (map (juxt :id :name) (agents-db/list-enabled-agents @conn)))))
+                           {})))
         ;; Client-side UI state atoms
         !show-create-modal (atom false)
         show-create-modal (e/watch !show-create-modal)
@@ -997,7 +1123,7 @@
                           (case (swap! !show-revoked not)
                             (t)))))))
 
-       (ks/Button {:data-variant "primary"}
+       (ks/Button {:data-variant "primary" :disabled (not is-admin)}
                   (e/fn []
                     (dom/text "Create New Key")
                     (let [[t err] (e/Token (dom/On "click" identity nil))]
@@ -1012,7 +1138,16 @@
                                 (ks/Paragraph {:style {:margin-bottom "1rem"}}
                                               (e/fn [] (dom/text "Manage API keys for accessing the RAG API. Keys are used for authentication and can have different permission scopes.")))
 
-                                (if (empty? visible-api-keys)
+                                (cond
+                                  ;; explanation only; the server returns nothing to a non-admin
+                                  (not is-admin)
+                                  (dom/div
+                                   (dom/props {:style {:text-align "center"
+                                                       :padding "2rem"
+                                                       :color "#6b7280"}})
+                                   (dom/text "API keys are available to administrators."))
+
+                                  (empty? visible-api-keys)
                                   (dom/div
                                    (dom/props {:style {:text-align "center"
                                                        :padding "2rem"
@@ -1021,6 +1156,7 @@
                                               (str "All " revoked-count " key(s) are revoked. Use \"Show revoked\" to view them.")
                                               "No API keys yet. Create one to get started.")))
 
+                                  :else
                                   ;; API Keys table
                                   (dom/div
                                    (dom/props {:style {:overflow-x "auto"}})
@@ -1032,6 +1168,7 @@
                                       (dom/props {:style {:background "#f9fafb"}})
                                       (dom/th (dom/props {:style {:padding "0.75rem" :text-align "left" :font-weight "600" :border-bottom "2px solid #e5e7eb"}}) (dom/text "Name"))
                                       (dom/th (dom/props {:style {:padding "0.75rem" :text-align "left" :font-weight "600" :border-bottom "2px solid #e5e7eb"}}) (dom/text "Scopes"))
+                                      (dom/th (dom/props {:style {:padding "0.75rem" :text-align "left" :font-weight "600" :border-bottom "2px solid #e5e7eb"}}) (dom/text "Tenants"))
                                       (dom/th (dom/props {:style {:padding "0.75rem" :text-align "left" :font-weight "600" :border-bottom "2px solid #e5e7eb"}}) (dom/text "Agents"))
                                       (dom/th (dom/props {:style {:padding "0.75rem" :text-align "left" :font-weight "600" :border-bottom "2px solid #e5e7eb"}}) (dom/text "Datasets"))
                                       (dom/th (dom/props {:style {:padding "0.75rem" :text-align "left" :font-weight "600" :border-bottom "2px solid #e5e7eb"}}) (dom/text "Allowed Config Keys"))
@@ -1041,7 +1178,7 @@
                                       (dom/th (dom/props {:style {:padding "0.75rem" :text-align "left" :font-weight "600" :border-bottom "2px solid #e5e7eb"}}) (dom/text "Actions"))))
                                     (dom/tbody
                                      (e/for [api-key (e/diff-by :api-key/id visible-api-keys)]
-                                       (APIKeyRow api-key dataset-names agent-names !editing-key-id))))))))))
+                                       (APIKeyRow api-key dataset-names agent-names !editing-key-id is-admin))))))))))
 
      ;; Modals
      (when show-create-modal

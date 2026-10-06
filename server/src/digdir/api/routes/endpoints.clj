@@ -5,8 +5,11 @@
    [clojure.set :as set]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
+   [clojure.walk :as walk]
    [taoensso.telemere :as t]
    [digdir.api.context :as api-ctx]
+   [digdir.auth.core :as auth]
+   [digdir.api.request-collections :as request-collections]
    [digdir.api.util :refer [api-error-body
                             
                             read-json-body
@@ -66,6 +69,7 @@
                                        list-access-policies-handler
                                        revoke-api-key-handler
                                        rotate-api-key-handler
+                                       set-api-key-all-tenants-handler
                                        update-api-key-allowed-config-keys-handler]]
    [digdir.config.api-keys :as api-keys]
    [digdir.data.db :as db]
@@ -337,18 +341,35 @@
           :middleware [debug-coerce-exceptions-middleware
                        reitit.ring.coercion/coerce-request-middleware]}})
 
+(def ^:private conversation-tenant-parameter
+  "the tenant a conversation request acts in. REQUIRED on every call, for
+   every key: a conversation is addressed by the pair (tenant, conversation id),
+   never by id alone. Declared, because coercion strips undeclared keys."
+  [:tenant [:string {:min 1}]])
+
+(def conversation-tenant-query-parameters
+  [:map conversation-tenant-parameter])
+
 (def conversation-pagination-query-parameters
   [:map
    [:page_size {:optional true} [:int {:min 1 :max 100}]]
    [:page_index {:optional true} [:int {:min 0}]]
    [:tags {:optional true} [:or string? [:vector [:string {:min 1}]]]]])
 
+(def api-conversation-list-query-parameters
+  "The PUBLIC list's query: pagination plus the request's tenant. The
+   console list shares the pagination but is not tenant-scoped, so it keeps the
+   plain schema and does not advertise a `tenant` it would ignore."
+  (into conversation-pagination-query-parameters [conversation-tenant-parameter]))
+
 (def conversation-detail-query-parameters
   [:map
+   conversation-tenant-parameter
    [:include_diagnostics {:optional true} boolean?]])
 
 (def conversation-create-body-parameters
   [:map
+   conversation-tenant-parameter
    [:agent-id {:optional true} string?]
    [:title {:optional true} string?]
    [:filter-value {:optional true} any?]
@@ -459,6 +480,12 @@
 (def update-api-key-allowed-config-keys-body-parameters
   [:map
    [:allowed-config-keys [:vector allowed-config-key-body-parameters]]])
+
+(def set-api-key-all-tenants-body-parameters
+  "the body of PUT /console-api/api-keys/:key-id/all-tenants. Only a JSON
+   boolean sets or clears the marker; anything else is a 400."
+  [:map
+   [:all-tenants :boolean]])
 
 (def user-id-path-parameters
   [:map
@@ -634,12 +661,24 @@
           inputs (:inputs params)
           _ (when-not inputs
               (throw (ex-info "Missing required field: inputs" {:status 400})))
-          {:keys [dataset-ref config]}
+          ;; a skill acts only in the scope this
+          ;; door authorizes. Inputs and parameters that name a tenant, dataset
+          ;; or config node are refused before anything is resolved - a key
+          ;; granted one tenant moved the tenant into `inputs` and made the
+          ;; server use another tenant's Typesense host and admin key.
+          _ (request-collections/check-request-identity! params)
+          {:keys [dataset-ref config] :as dataset-context}
           ;; No opts: explicit tenant + dataset-config-key is enforced
           ;; unconditionally by select-request-dataset-ref!, and agent policy
           ;; deliberately does not apply here. See
           ;; decisions/execute-skill-authorization.md.
           (api-ctx/resolve-request-dataset-context! ring-req params)
+
+          ;; the client's inputs and parameters reach the skill unchanged,
+          ;; and skills honour an explicit collection name over the dataset's. So
+          ;; every collection this request names must be the resolved dataset's,
+          ;; checked HERE, where every skill behind this door is reached.
+          _ (request-collections/check-request-collections! dataset-context params)
 
           ;; Build execution options
           opts {:tenant (:tenant config)
@@ -655,7 +694,11 @@
       (log/info "Skill executed" {:skill-id skill-id :dataset-ref dataset-ref})
 
       (if (:error result)
-        (-> (res/response (json/generate-string {:error (:error result)}))
+        ;; A skill's error can carry a Class (`:exception-type`); cheshire
+        ;; cannot encode one, and the 400 became a generic 500.
+        ;; Its name is what a client can use.
+        (-> (res/response (json/generate-string {:error (walk/postwalk #(if (class? %) (.getName ^Class %) %)
+                                                                       (:error result))}))
             (res/status 400)
             (res/content-type "application/json"))
         (-> (res/response (json/generate-string {:result result}))
@@ -741,6 +784,12 @@
                           :api-key/id (:api-key-id key-info)
                           :api-key/name (:name key-info)
                           :api-key/dataset-scopes dataset-scopes
+                          ;; the key's granted tenants (`api-keys/granted-tenants`,
+                          ;; the union) and the explicit all-tenant marker - what
+                          ;; `digdir.api.auth/authorize-scope!` decides by. This
+                          ;; middleware used to DROP the tenants.
+                          :api-key/granted-tenants (vec (:tenants key-info))
+                          :api-key/all-tenants? (true? (:all-tenants? key-info))
                           :api-key/agent-refs agent-refs
                           :api-key/allowed-config-keys allowed-config-keys
                           :api-key/scopes scopes
@@ -778,7 +827,9 @@
             (res/status 503)
             (res/content-type "application/json"))
 
-        (= provided-key expected-key)
+        ;; compared in constant time, through THE one secret
+        ;; comparison - the exemption "secret-guarded" rests on this compare.
+        (auth/secure-digest= provided-key expected-key)
         (handler request)
 
         :else
@@ -947,6 +998,7 @@
     ["put" "/console-api/api-keys/:key-id/allowed-config-keys"]
     ["post" "/console-api/api-keys/:key-id/revoke"]
     ["post" "/console-api/api-keys/:key-id/rotate"]
+    ["put" "/console-api/api-keys/:key-id/all-tenants"]
     ["get" "/console-api/access-policies"]
     ["get" "/console-api/users"]
     ["delete" "/console-api/users/:id"]
@@ -991,29 +1043,41 @@
   [["/api"
     ["/config/:root/nodes" {:get {:parameters {:path config-root-path-parameters
                                                :query tenant-query-parameters}
+                                  :auth {:key {:derived '[digdir.api.routes.datasets/list-config-nodes-handler digdir.api.auth/authorize-scope!]}}
                                   :handler (wrap-required-api-key-scope :query list-config-nodes-handler)}}]
     ["/runtime/config/resolve" {:post {:parameters {:body runtime-config-resolve-body-parameters}
                                        :responses {200 {:body runtime-config-resolve-response-body}}
+                                       :auth {:key {:derived '[digdir.api.routes.datasets/resolve-runtime-config-handler digdir.api.auth/authorize-scope!]}}
                                        :handler (wrap-required-api-key-scope :query resolve-runtime-config-handler)}}]
     ["/dataset/config/resolve" {:post {:parameters {:body dataset-config-resolve-body-parameters}
                                        :responses {200 {:body dataset-config-resolve-response-body}}
+                                       :auth {:key {:derived '[digdir.api.routes.datasets/resolve-dataset-config-handler digdir.api.auth/authorize-scope!]}}
                                        :handler (wrap-required-api-key-scope :query resolve-dataset-config-handler)}}]
     ["/datasets"
      ["" {:get {:parameters {}
+                :auth {:key {:derived '[digdir.api.routes.datasets/list-public-datasets-handler digdir.api.routes.datasets/authorized-dataset-refs digdir.api.auth/authorize-scope!]}}
                 :handler (wrap-required-api-key-scope :query list-public-datasets-handler)}}]
      ["/:dataset-id" {:get {:parameters {:path dataset-id-path-parameters}
+                            :auth {:key {:derived '[digdir.api.routes.datasets/get-public-dataset-handler digdir.api.routes.datasets/authorized-dataset-refs digdir.api.auth/authorize-scope!]}}
                             :handler (wrap-required-api-key-scope :query get-public-dataset-handler)}}]]
-    ["/conversations" {:get {:parameters {:query conversation-pagination-query-parameters}
+    ["/conversations" {:get {:parameters {:query api-conversation-list-query-parameters}
+                            :auth {:key {:derived '[digdir.api.routes.conversations/list-conversations-handler digdir.api.auth/authorize-scope!]}}
                             :handler (wrap-required-api-key-scope :query list-conversations-handler)}
                        :post {:parameters {:body conversation-create-body-parameters}
+                              :auth {:key {:derived '[digdir.api.routes.conversations/create-conversation-handler digdir.api.auth/authorize-scope!]}}
                               :handler (wrap-required-api-key-scope :query create-conversation-handler)}}]
     ["/conversations/:id" {:get {:parameters {:path resource-id-path-parameters
                                               :query conversation-detail-query-parameters}
+                                 :auth {:key {:derived '[digdir.api.routes.conversations/get-conversation-handler digdir.api.auth/authorize-scope!]}}
                                  :handler (wrap-required-api-key-scope :query get-conversation-handler)}
                            :put {:parameters {:path resource-id-path-parameters
+                                              :query conversation-tenant-query-parameters
                                               :body conversation-update-body-parameters}
+                                 :auth {:key {:derived '[digdir.api.routes.conversations/update-conversation-handler digdir.api.auth/authorize-scope!]}}
                                  :handler (wrap-required-api-key-scope :query update-conversation-handler)}
-                           :delete {:parameters {:path resource-id-path-parameters}
+                           :delete {:parameters {:path resource-id-path-parameters
+                                                 :query conversation-tenant-query-parameters}
+                                    :auth {:key {:derived '[digdir.api.routes.conversations/delete-conversation-handler digdir.api.auth/authorize-scope!]}}
                                     :handler (wrap-required-api-key-scope :query delete-conversation-handler)}}]
     ;; Only `execute` remains under /skills. The listing and inspection
     ;; endpoints - GET /api/skills, /api/skills/:id, /api/skills/tools and the
@@ -1032,6 +1096,7 @@
       ["/execute" {:post {:parameters {:path resource-id-path-parameters
                                        :body skill-execution-body-parameters}
                           :responses {200 {:body skill-execution-response-body}}
+                          :auth {:key {:derived '[digdir.api.routes.endpoints/execute-skill-handler digdir.api.context/resolve-request-dataset-context! digdir.api.context/select-request-dataset-ref! digdir.api.auth/authorize-scope!]}}
                           :handler (wrap-required-api-key-scope :query execute-skill-handler)}}]]]
     ;; MCP server — JSON-RPC over a single POST endpoint. Per-API-key
     ;; rate limited because each tool call can spawn a full agent loop.
@@ -1041,9 +1106,12 @@
     ;; router's 404. Both verbs belonged to the pre-2026-07-28 transport (the
     ;; standalone SSE stream, and session termination); neither exists now, and
     ;; 405 lets a client tell "wrong verb" from "wrong endpoint".
-    ["/mcp" {:post {:handler (rate-limit-api/wrap-api-rate-limit mcp/handle-mcp-request)}
-             :get {:handler mcp/handle-mcp-method-not-allowed}
-             :delete {:handler mcp/handle-mcp-method-not-allowed}}]
+    ["/mcp" {:post {:auth {:key {:derived '[digdir.mcp.transport/handle-mcp-request digdir.mcp.transport/dispatch digdir.mcp.transport/implemented-methods digdir.mcp.transport/handle-tools-call digdir.mcp.transport/run-tools-call digdir.mcp.tools/invoke-tool digdir.mcp.tools/pick-dataset-scope digdir.mcp.tools/authorized digdir.api.auth/authorize-scope!]}}
+                    :handler (rate-limit-api/wrap-api-rate-limit mcp/handle-mcp-request)}
+             :get {:auth {:key {:none "405: this verb belonged to the retired transport; no data is returned"}}
+                   :handler mcp/handle-mcp-method-not-allowed}
+             :delete {:auth {:key {:none "405: this verb belonged to the retired transport; no data is returned"}}
+                      :handler mcp/handle-mcp-method-not-allowed}}]
     ;; OpenAPI tool-server surface — the same (agent, mode) tools /api/mcp
     ;; advertises, rendered as an OpenAPI document so Open WebUI's tool-server
     ;; feature can consume them WITHOUT the MCPO bridge. MCPO is built on the
@@ -1069,8 +1137,10 @@
     ;; succeed on /api/mcp and fail here.
     ["/tools"
      ["/openapi.json" {:get {:parameters {}
+                             :auth {:key {:none "lists the key's (agent, mode) tools: agents and skill graphs are global (no tenant attribute), and a listing exposes id, name and description only"}}
                              :handler openapi-spec-handler}}]
      ["/call/:tool-name" {:post {:parameters {:path tool-name-path-parameters}
+                                 :auth {:key {:derived '[digdir.api.routes.endpoints.openapi-tools/tool-call-handler digdir.mcp.tools/invoke-tool digdir.mcp.tools/pick-dataset-scope digdir.mcp.tools/authorized digdir.api.auth/authorize-scope!]}}
                                  :handler (rate-limit-api/wrap-api-rate-limit
                                             tool-call-handler)}}]]]
    ;; OpenAI-compatible /v1 surface — exposes each agent as a `model`
@@ -1079,76 +1149,82 @@
    ;; X-API-Key and Authorization: Bearer accepted.
    ["/v1"
     ["/models" {:get {:parameters {}
+                      :auth {:key {:none "lists the key's (agent, mode) models: agents and skill graphs are global (no tenant attribute), and a listing exposes id, name and description only"}}
                       :handler list-models-handler}}]
-    ["/chat/completions" {:post {:handler (rate-limit-api/wrap-api-rate-limit
+    ["/chat/completions" {:post {:auth {:key {:derived '[digdir.api.routes.endpoints.openai-compat/chat-completions-handler digdir.api.routes.endpoints.openai-compat/resolve-invocation digdir.mcp.tools/pick-dataset-scope digdir.mcp.tools/authorized digdir.api.auth/authorize-scope!]}}
+                                 :handler (rate-limit-api/wrap-api-rate-limit
                                             chat-completions-handler)}}]]])
 
 (def debug-routes
   "API route definitions for debug endpoints protected by X-Debug-Api-Key."
   [["/api/debug"
-    ["/dataset-config" {:get {:parameters {:query debug-dataset-config-query-parameters}
+    ["/dataset-config" {:get {:auth {:operator-secret "RAG_DEBUG_API_KEY" :reason "an operator's cross-tenant diagnostic door; its authority is the deployment secret, not an API key's grants"} :parameters {:query debug-dataset-config-query-parameters}
                               :handler debug-dataset-config-handler}}]
-    ["/chunk" {:get {:parameters {:query debug-chunk-query-parameters}
+    ["/chunk" {:get {:auth {:operator-secret "RAG_DEBUG_API_KEY" :reason "an operator's cross-tenant diagnostic door; its authority is the deployment secret, not an API key's grants"} :parameters {:query debug-chunk-query-parameters}
                      :handler debug-chunk-handler}}]
-    ["/typesense-search" {:get {:parameters {:query debug-typesense-search-query-parameters}
+    ["/typesense-search" {:get {:auth {:operator-secret "RAG_DEBUG_API_KEY" :reason "an operator's cross-tenant diagnostic door; its authority is the deployment secret, not an API key's grants"} :parameters {:query debug-typesense-search-query-parameters}
                                 :handler debug-typesense-search-handler}}]
-    ["/typesense-get" {:get {:parameters {:query debug-typesense-get-query-parameters}
+    ["/typesense-get" {:get {:auth {:operator-secret "RAG_DEBUG_API_KEY" :reason "an operator's cross-tenant diagnostic door; its authority is the deployment secret, not an API key's grants"} :parameters {:query debug-typesense-get-query-parameters}
                              :handler debug-typesense-get-handler}}]
-    ["/typesense-retrieve" {:get {:parameters {:query debug-typesense-retrieve-query-parameters}
+    ["/typesense-retrieve" {:get {:auth {:operator-secret "RAG_DEBUG_API_KEY" :reason "an operator's cross-tenant diagnostic door; its authority is the deployment secret, not an API key's grants"} :parameters {:query debug-typesense-retrieve-query-parameters}
                                   :handler debug-typesense-retrieve-handler}}]
-    ["/query-planner" {:get {:parameters {:query debug-query-planner-query-parameters}
+    ["/query-planner" {:get {:auth {:operator-secret "RAG_DEBUG_API_KEY" :reason "an operator's cross-tenant diagnostic door; its authority is the deployment secret, not an API key's grants"} :parameters {:query debug-query-planner-query-parameters}
                              :handler debug-query-planner-handler}}]
-    ["/config/refresh" {:post {:handler debug-config-refresh-handler}}]
+    ["/config/refresh" {:post {:auth {:operator-secret "RAG_DEBUG_API_KEY" :reason "an operator's cross-tenant diagnostic door; its authority is the deployment secret, not an API key's grants"} :handler debug-config-refresh-handler}}]
     ;; E2E-only — gated by DIGDIR_DEBUG_LAST_INVOCATION env var inside the
     ;; handler. Returns the resolved skill-params from the last invocation
     ;; recorded for the given agent-id; used by Layer-C Playwright tests
     ;; to prove agent-skill-params plumbing reached the skills layer.
-    ["/last-invocation" {:get {:parameters {:query debug-last-invocation-query-parameters}
+    ["/last-invocation" {:get {:auth {:operator-secret "RAG_DEBUG_API_KEY" :reason "an operator's cross-tenant diagnostic door; its authority is the deployment secret, not an API key's grants"} :parameters {:query debug-last-invocation-query-parameters}
                                :handler debug-last-invocation-handler}}]
     ;; E2E-only — same env-var gate as /last-invocation. Synchronously
     ;; loads the agent and returns its raw + merge-resolved skill-params,
     ;; with no MCP call required. Lets Playwright assert agent → merge
     ;; plumbing without standing up Typesense, datasets, or an LLM.
-    ["/agent-resolution" {:get {:parameters {:query debug-agent-resolution-query-parameters}
+    ["/agent-resolution" {:get {:auth {:operator-secret "RAG_DEBUG_API_KEY" :reason "an operator's cross-tenant diagnostic door; its authority is the deployment secret, not an API key's grants"} :parameters {:query debug-agent-resolution-query-parameters}
                                 :handler debug-agent-resolution-handler}}]]])
 
 (def console-api-routes
   "API route definitions for JWT-authenticated Operator Console operations."
-  [["/console-api/api-keys" {:get {:parameters {}
+  [["/console-api/api-keys" {:get {:auth {:jwt-admin true} :parameters {}
                                    :handler list-api-keys-handler}
-                             :post {:parameters {:body create-api-key-body-parameters}
+                             :post {:auth {:jwt-admin true} :parameters {:body create-api-key-body-parameters}
                                     :handler create-api-key-handler}}]
-   ["/console-api/api-keys/:key-id/allowed-config-keys" {:put {:parameters {:path api-key-path-parameters
+   ["/console-api/api-keys/:key-id/allowed-config-keys" {:put {:auth {:jwt-admin true} :parameters {:path api-key-path-parameters
                                                                              :body update-api-key-allowed-config-keys-body-parameters}
                                                                 :handler update-api-key-allowed-config-keys-handler}}]
-   ["/console-api/api-keys/:key-id/revoke" {:post {:parameters {:path api-key-path-parameters}
+   ["/console-api/api-keys/:key-id/revoke" {:post {:auth {:jwt-admin true} :parameters {:path api-key-path-parameters}
                                                    :handler revoke-api-key-handler}}]
-   ["/console-api/api-keys/:key-id/rotate" {:post {:parameters {:path api-key-path-parameters}
+   ["/console-api/api-keys/:key-id/rotate" {:post {:auth {:jwt-admin true} :parameters {:path api-key-path-parameters}
                                                    :handler rotate-api-key-handler}}]
-   ["/console-api/access-policies" {:get {:parameters {}
+   ;; the ONE route that sets or clears a key's all-tenant marker
+   ["/console-api/api-keys/:key-id/all-tenants" {:put {:auth {:jwt-admin true} :parameters {:path api-key-path-parameters
+                                                                                             :body set-api-key-all-tenants-body-parameters}
+                                                       :handler set-api-key-all-tenants-handler}}]
+   ["/console-api/access-policies" {:get {:auth {:jwt-admin true} :parameters {}
                                           :handler list-access-policies-handler}}]
-   ["/console-api/users" {:get {:parameters {}
+   ["/console-api/users" {:get {:auth {:jwt-admin true} :parameters {}
                                 :handler list-users-handler}
-                          :post {:parameters {:body create-user-body-parameters}
+                          :post {:auth {:jwt-admin true} :parameters {:body create-user-body-parameters}
                                  :responses {201 {:body user-response-body}}
                                  :handler create-user-handler}}]
-   ["/console-api/users/:id" {:get {:parameters {:path user-id-path-parameters}
+   ["/console-api/users/:id" {:get {:auth {:jwt-admin true} :parameters {:path user-id-path-parameters}
                                     :responses {200 {:body user-response-body}}
                                     :handler get-user-handler}
-                              :delete {:parameters {:path user-id-path-parameters}
+                              :delete {:auth {:jwt-admin true} :parameters {:path user-id-path-parameters}
                                        :handler delete-user-handler}}]
-   ["/console-api/users/:id/permissions" {:put {:parameters {:path user-id-path-parameters
+   ["/console-api/users/:id/permissions" {:put {:auth {:jwt-admin true} :parameters {:path user-id-path-parameters
                                                              :body update-user-permissions-body-parameters}
                                                 :responses {200 {:body user-response-body}}
                                                 :handler update-user-permissions-handler}}]
-   ["/console-api/permissions" {:get {:parameters {}
+   ["/console-api/permissions" {:get {:auth {:jwt-admin true} :parameters {}
                                       :handler list-permissions-handler}}]
-   ["/console-api/conversations" {:get {:parameters {:query conversation-pagination-query-parameters}
+   ["/console-api/conversations" {:get {:auth {:jwt-admin true} :parameters {:query conversation-pagination-query-parameters}
                                         :handler admin-list-conversations-handler}}]
-   ["/console-api/datasets" {:get {:parameters {}
+   ["/console-api/datasets" {:get {:auth {:jwt-admin true} :parameters {}
                                    :responses {200 {:body operator-dataset-list-response-body}}
                                    :handler list-datasets-handler}
-                             :post {:parameters {:body create-dataset-body-parameters}
+                             :post {:auth {:jwt-admin true} :parameters {:body create-dataset-body-parameters}
                                     :handler create-dataset-handler}}]
    ;; Both of these parents declare methods AND have children. Reitit drops a
    ;; parent's own handlers in that shape unless it is given an explicit ""
@@ -1158,35 +1234,35 @@
    ;; covered. Asserted against the COMPILED router in routes_test, not by
    ;; reading this form - a source-level assertion is what let #112 survive.
    ["/console-api/datasets/:dataset-id"
-    ["" {:get {:parameters {:path dataset-id-path-parameters}
+    ["" {:get {:auth {:jwt-admin true} :parameters {:path dataset-id-path-parameters}
                :responses {200 {:body operator-dataset-response-body}}
                :handler get-dataset-handler}
-         :put {:parameters {:path dataset-id-path-parameters
+         :put {:auth {:jwt-admin true} :parameters {:path dataset-id-path-parameters
                             :body update-dataset-body-parameters}
                :responses {200 {:body operator-dataset-response-body}}
                :handler update-dataset-handler}}]
-    ["/pipelines" {:get {:parameters {:path dataset-id-path-parameters
+    ["/pipelines" {:get {:auth {:jwt-admin true} :parameters {:path dataset-id-path-parameters
                                       :query console-materialization-query-parameters}
                          :responses {200 {:body operator-pipeline-list-response-body}}
                          :handler list-pipelines-handler}
-                   :post {:parameters {:path dataset-id-path-parameters
+                   :post {:auth {:jwt-admin true} :parameters {:path dataset-id-path-parameters
                                        :body create-pipeline-body-parameters}
                           :handler create-pipeline-handler}}]
     ["/pipelines/:pipeline-id"
-     ["" {:get {:parameters {:path dataset-pipeline-path-parameters
+     ["" {:get {:auth {:jwt-admin true} :parameters {:path dataset-pipeline-path-parameters
                              :query console-materialization-query-parameters}
                 :handler get-pipeline-handler}
-          :put {:parameters {:path dataset-pipeline-path-parameters
+          :put {:auth {:jwt-admin true} :parameters {:path dataset-pipeline-path-parameters
                              :query console-materialization-query-parameters
                              :body update-pipeline-body-parameters}
                 :handler update-pipeline-handler}
-          :delete {:parameters {:path dataset-pipeline-path-parameters
+          :delete {:auth {:jwt-admin true} :parameters {:path dataset-pipeline-path-parameters
                                 :query console-materialization-query-parameters}
                    :handler delete-pipeline-handler}}]
-     ["/execute" {:post {:parameters {:path dataset-pipeline-path-parameters
+     ["/execute" {:post {:auth {:jwt-admin true} :parameters {:path dataset-pipeline-path-parameters
                                       :query console-materialization-query-parameters}
                          :handler execute-pipeline-handler}}]
-     ["/executions" {:get {:parameters {:path dataset-pipeline-path-parameters
+     ["/executions" {:get {:auth {:jwt-admin true} :parameters {:path dataset-pipeline-path-parameters
                                         :query console-materialization-query-parameters}
                            :handler list-executions-handler}}]]]])
 

@@ -3,6 +3,7 @@
   (:require [clojure.string :as str]
             [digdir.config.db :as config-db]
             [digdir.config.structure :as structure]
+            [digdir.import-export.entities.api-keys :as api-keys-entity]
             [digdir.import-export.model :as model]))
 
 (def ^:private default-agent-id "builtin/agent-rag-agent")
@@ -238,8 +239,10 @@
                                           :api-key.allowed-config-key/tenant-config-key (or (kw-or-string allowed-config-key :api-key.allowed-config-key/tenant-config-key)
                                                                                              (kw-or-string allowed-config-key :api-key.config-ceiling/tenant-config-key))
                                           :api-key.allowed-config-key/created-at (or (kw-or-string allowed-config-key :api-key.allowed-config-key/created-at)
-                                                                                     (kw-or-string allowed-config-key :api-key.config-ceiling/created-at))})))]
-    {:api-key/id (kw-or-string api-key :api-key/id)
+                                                                                     (kw-or-string allowed-config-key :api-key.config-ceiling/created-at))})))
+        marker (api-keys-entity/imported-all-tenants-marker api-key)]
+    (cond->
+     {:api-key/id (kw-or-string api-key :api-key/id)
      :api-key/key (kw-or-string api-key :api-key/key)
      :api-key/key-digest (kw-or-string api-key :api-key/key-digest)
      :api-key/prefix (kw-or-string api-key :api-key/prefix)
@@ -276,7 +279,11 @@
                            (if (seq agent-refs)
                              agent-refs
                              (normalize-agent-refs api-key)))
-     :api-key/allowed-config-keys allowed-config-keys}))
+     :api-key/allowed-config-keys allowed-config-keys}
+      ;; the policy's all-tenant marker is CARRIED, and
+      ;; nothing else of the policy (its grants are folded into the key above).
+      ;; Only when the record carries one; absent stays absent (fail-closed).
+      (some? marker) (assoc :api-key/policy {:access-policy/all-tenants? marker}))))
 
 (defn- normalize-export-map-keys
   [prefix m]
