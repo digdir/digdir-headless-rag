@@ -3,7 +3,7 @@
 
    Like the sibling apply-questions tests, we stub Typesense via
    `with-redefs` — the goal here is to pin the filter shape, the
-   delete-call signature, the 404 idempotency path, and the input
+   delete-call signature, that a client not-found error propagates, and the input
    validation. End-to-end behavior against a live collection is
    covered by the Phase B.5 / graph smoke loop."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
@@ -153,21 +153,20 @@
         (is (not (contains? outputs :eval)))
         (is (not (contains? outputs :verify)))))))
 
-(deftest typesense-404-is-idempotent-no-op
-  (testing "A 404 'no documents matched' becomes reverted-count 0, not a thrown error"
+(deftest a-not-found-from-the-client-propagates
+  (testing "The client raises a 404 as `{:type :typesense.client/not-found}` (it carries no `:status`),
+            and it propagates: an unknown collection is not a successful no-op"
     (with-redefs [ts-utils/make-ts-settings (fn [_] {:uri "http://stub" :key "k"})
                   ts/delete-documents! (fn [& _]
-                                         (throw (ex-info "No documents matched"
-                                                         {:status 404})))]
-      (let [res (rc/execute-revert-chunk
-                 {:inputs {:chunk-id "c1"
-                           :collection-name "enrichment_hypothetical_questions_abc"}
-                  :parameters {}
-                  :skill-params {:tenant "digdir"}})
-            outputs (skills/get-result-outputs res)]
-        (is (skills/result-success? res))
-        (is (= 0 (:reverted-count outputs))
-            "404 is a successful no-op for an already-empty chunk")))))
+                                         (throw (ex-info "Not Found"
+                                                         {:type :typesense.client/not-found
+                                                          :message "Not Found"})))]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Not Found"
+                            (rc/execute-revert-chunk
+                             {:inputs {:chunk-id "c1"
+                                       :collection-name "enrichment_hypothetical_questions_abc"}
+                              :parameters {}
+                              :skill-params {:tenant "digdir"}}))))))
 
 (deftest non-404-typesense-errors-propagate
   (testing "Other ExceptionInfo errors are NOT swallowed"

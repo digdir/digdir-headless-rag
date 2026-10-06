@@ -131,23 +131,166 @@
     ids))
 
 ;; ============================================================================
+;; Writing rows: a refused row FAILS the write
+;; ============================================================================
+;;
+;; Every Typesense document write in shipped code goes through the functions
+;; below (`storage-choke-point-test` pins it). A bulk import answers HTTP 200 with
+;; ONE RESULT PER ROW and does not throw when a row is refused, so these read
+;; that answer and THROW. No caller has to remember to read anything: ignoring
+;; a return value is safe.
+;;
+;; The throw comes straight after the Typesense call that refused, before the
+;; caller's next step. That ordering is what keeps the orphan delete that follows
+;; a write from removing the old revision of a row whose replacement was refused.
+;;
+;; Nothing is rolled back. A bulk import is not atomic: the rows Typesense
+;; accepted in that call, and every earlier write of the run, stay. Every write
+;; is an upsert keyed by a stable id, so a re-run overwrites them.
+
+(defn- ts-id-list
+  "Render a seq of alphanumeric IDs as a Typesense filter list:
+   `[id1,id2,id3]`. The IDs we use (chunk_id, doc_num) are sha256
+   short hashes — all alphanumeric — so no escaping is needed."
+  [ids]
+  (str "[" (str/join "," ids) "]"))
+
+(def ^:private max-refused-sample
+  "How many refused rows the error's data names. The COUNT is always exact."
+  20)
+
+(def ^:private max-refused-ids-in-message
+  "How many refused ids the error's MESSAGE names. A run's record keeps only the
+   message, so it must say what a person needs on its own."
+  5)
+
+(def ^:private max-error-length 300)
+
+(defn- capped [s]
+  (let [s (str s)]
+    (if (> (count s) max-error-length) (subs s 0 max-error-length) s)))
+
+(defn- refused-rows
+  "The rows of `rows` that Typesense's per-row `response` does not CONFIRM, as
+   `{:index :id :error}`, in the order they were sent. A row whose result is
+   missing (a response shorter than what was sent) is not confirmed."
+  [rows response]
+  (let [results (if (sequential? response) (vec response) [])]
+    (vec (for [[i row] (map-indexed vector rows)
+               :let [result (get results i)]
+               :when (not (true? (:success result)))]
+           {:index i
+            :id (:id row)
+            :error (capped (if result
+                             (:error result)
+                             "no result for this row in Typesense's response"))}))))
+
+(defn- throw-rows-refused!
+  "Signal the refusal for logs, then throw it. Ids and Typesense's own messages
+   only: no row body, field value or chunk text."
+  [coll sent refused cause]
+  (let [n (count refused)
+        sample (vec (take max-refused-sample (map #(dissoc % :index) refused)))]
+    (t/event! :pipeline/rows-rejected
+              {:level :error
+               :data {:collection coll
+                      :sent sent
+                      :rejected-count n
+                      :first-rejected (vec (take 5 sample))}})
+    (throw (ex-info (str "Typesense refused " n " of " sent " rows written to " coll
+                         (let [ids (keep :id (take max-refused-ids-in-message refused))]
+                           (if (seq ids)
+                             (str " (ids: " (str/join ", " ids) ")")
+                             (str " (" n " rows without ids)")))
+                         ": " (:error (first refused)))
+                    {:type :digdir.storage/rows-refused
+                     :collection coll
+                     :sent sent
+                     :written (- sent n)
+                     :refused n
+                     :refused-sample sample
+                     ;; every refused row's position in what was sent, for a
+                     ;; caller whose rows carry no id (integers only)
+                     :refused-indices (vec (keep :index refused))}
+                    cause))))
+
+(defn upsert-rows!
+  "Bulk-upsert `rows` into `coll`. Returns the number of rows written. THROWS
+   `:digdir.storage/rows-refused` if Typesense refuses any row, or does not
+   confirm it. An empty `rows` sends nothing."
+  [settings coll rows]
+  (let [rows (vec rows)]
+    (if (empty? rows)
+      0
+      (let [refused (refused-rows rows (ts/upsert-documents! settings coll rows))]
+        (when (seq refused)
+          (throw-rows-refused! coll (count rows) refused nil))
+        (count rows)))))
+
+(def refusal-types
+  "The client errors that mean Typesense refused THIS ROW's data: a 400 and a
+   422. Only these make a single-document write a refusal (tolerated within the
+   run's budget). Every other client error (401, 404, 409, 503, any other
+   status) and every other exception is not about the row: it propagates
+   unchanged and fails the run at once."
+  #{:typesense.client/bad-request :typesense.client/unprocessable-entity})
+
+(defn upsert-row!
+  "Upsert one `row` into `coll`. Returns 1. The single-document endpoint, unlike
+   the bulk one, THROWS on any non-2xx (`typesense.client/upsert-document!`). A
+   data refusal (`refusal-types`) is re-raised in the same shape as a bulk
+   refusal, with the client's error as its cause; anything else propagates as it is."
+  [settings coll row]
+  (try
+    (ts/upsert-document! settings coll row)
+    1
+    (catch clojure.lang.ExceptionInfo e
+      (if (contains? refusal-types (:type (ex-data e)))
+        (throw-rows-refused! coll 1 [{:index 0 :id (:id row) :error (capped (ex-message e))}] e)
+        (throw e)))))
+
+(defn delete-by-filter!
+  "Delete the documents in `coll` matching `filter-by`. Returns how many were
+   deleted. There is no per-row answer; a client error passes through."
+  [settings coll filter-by]
+  (:num_deleted (ts/delete-documents! settings coll {:filter_by filter-by})))
+
+(defn delete-orphans!
+  "Delete the rows in `coll` for `doc-num` whose Typesense `:id` is NOT in
+   `current-ids`: the previous revision of a document's chunks or phrases, after
+   the current ones were written.
+
+   Filters on `id`, not `chunk_id`, so it also catches legacy rows with
+   auto-generated numeric ids. No-op when `current-ids` is empty or `doc-num` is
+   blank: a keep-set of nothing would delete the document's every row."
+  [settings coll doc-num current-ids]
+  (when (and (seq current-ids) (not (str/blank? (str doc-num))))
+    (let [filter-by (str "doc_num:=" doc-num
+                         " && id:!=" (ts-id-list current-ids))]
+      (t/event! :pipeline/deleting-orphans
+                {:data {:collection coll
+                        :doc-num doc-num
+                        :keep-count (count current-ids)
+                        :filter filter-by}})
+      (delete-by-filter! settings coll filter-by))))
+
+;; ============================================================================
 ;; Document Storage
 ;; ============================================================================
 
 (defn upsert-document!
-  "Upserts a single document into the collection.
-   Returns the document on success."
+  "Upserts a single document into the collection. Returns 1; throws on a refusal."
   [config coll-name doc]
   (t/event! :pipeline/upserting-document {:data {:id (:id doc)}})
-  (ts/upsert-document! (ts config) coll-name doc))
+  (upsert-row! (ts config) coll-name doc))
 
 (defn upsert-documents!
-  "Upserts multiple documents into the collection.
-   Returns the results on success."
+  "Upserts multiple documents into the collection. Returns the number written;
+   throws on a refusal."
   [config coll-name docs]
   (when (seq docs)
-    (t/event! :pipeline/upserting-documents {:data {:count (count docs)}})
-    (ts/upsert-documents! (ts config) coll-name docs)))
+    (t/event! :pipeline/upserting-documents {:data {:count (count docs)}}))
+  (upsert-rows! (ts config) coll-name docs))
 
 ;; ============================================================================
 ;; Chunk Storage
@@ -184,21 +327,16 @@
     (not (:id chunk)) (assoc :id (:chunk_id chunk))))
 
 (defn store-chunks!
-  "Stores chunks for a document into the chunks collection.
+  "Stores chunks for a document into the chunks collection. Returns the number
+   written; throws if Typesense refuses any (`upsert-rows!`).
    Enforces `:id := :chunk_id` so upsert is keyed correctly even if
    the upstream prepare-fn omitted the field."
   [config chunks-coll chunks]
-  (when (seq chunks)
+  (if (seq chunks)
     (let [chunks-with-ids (mapv ensure-chunk-id chunks)]
       (t/event! :pipeline/upserting-chunks {:data {:count (count chunks-with-ids)}})
-      (ts/upsert-documents! (ts config) chunks-coll chunks-with-ids))))
-
-(defn- ts-id-list
-  "Render a seq of alphanumeric IDs as a Typesense filter list:
-   `[id1,id2,id3]`. The IDs we use (chunk_id, doc_num) are sha256
-   short hashes — all alphanumeric — so no escaping is needed."
-  [ids]
-  (str "[" (str/join "," ids) "]"))
+      (upsert-rows! (ts config) chunks-coll chunks-with-ids))
+    0))
 
 (defn delete-orphan-chunks!
   "Delete chunks for `doc-num` whose Typesense `:id` is NOT in the
@@ -217,14 +355,7 @@
    No-op when `current-ids` is empty (defensive: avoid wiping the
    doc's chunks if upstream produced zero)."
   [config chunks-coll doc-num current-ids]
-  (when (and (seq current-ids) (not (str/blank? (str doc-num))))
-    (let [filter-by (str "doc_num:=" doc-num
-                         " && id:!=" (ts-id-list current-ids))]
-      (t/event! :pipeline/deleting-orphan-chunks
-                {:data {:doc-num doc-num
-                        :keep-count (count current-ids)
-                        :filter filter-by}})
-      (ts/delete-documents! (ts config) chunks-coll {:filter_by filter-by}))))
+  (delete-orphans! (ts config) chunks-coll doc-num current-ids))
 
 ;; ============================================================================
 ;; Phrase Storage
@@ -263,22 +394,24 @@
                 (str (:chunk_id phrase) "|" (:search_phrase phrase))))))
 
 (defn store-phrases!
-  "Stores search phrases for a document into the phrases collection.
+  "Stores search phrases for a document into the phrases collection. Returns the
+   number written; throws if Typesense refuses any (`upsert-rows!`).
    Enforces a deterministic `:id` per (chunk_id, search_phrase) pair
    so upsert is keyed correctly even if the upstream caller omitted
    the field."
   [config phrases-coll phrases doc-id]
   (t/event! :pipeline/phrase-count {:data {:count (count phrases) :doc-id doc-id}})
-  (when (seq phrases)
+  (if (seq phrases)
     (let [phrases-with-ids (mapv ensure-phrase-id phrases)]
       (try
-        (ts/upsert-documents! (ts config) phrases-coll phrases-with-ids)
+        (upsert-rows! (ts config) phrases-coll phrases-with-ids)
         (catch Exception e
           (t/error! {:id :pipeline/upsert-phrases-error
                      :msg ["Failed to upsert phrases" "doc:" doc-id "count:" (count phrases-with-ids)]}
                     e)
           (t/log! ["Sample phrases:" (take 3 phrases-with-ids)])
-          (throw e))))))
+          (throw e))))
+    0))
 
 (defn delete-orphan-phrases!
   "Delete phrases for `doc-num` whose Typesense `:id` is NOT in
@@ -292,14 +425,7 @@
 
    No-op when `current-ids` is empty."
   [config phrases-coll doc-num current-ids]
-  (when (and (seq current-ids) (not (str/blank? (str doc-num))))
-    (let [filter-by (str "doc_num:=" doc-num
-                         " && id:!=" (ts-id-list current-ids))]
-      (t/event! :pipeline/deleting-orphan-phrases
-                {:data {:doc-num doc-num
-                        :keep-count (count current-ids)
-                        :filter filter-by}})
-      (ts/delete-documents! (ts config) phrases-coll {:filter_by filter-by}))))
+  (delete-orphans! (ts config) phrases-coll doc-num current-ids))
 
 ;; ============================================================================
 ;; Complete Document Storage
@@ -328,7 +454,11 @@
    upsert and delete is sub-second per doc; during that window a query
    may see both revisions of one doc's chunks.
 
-   Returns nil on success, throws on error."
+   Returns nil on success, throws on error. A row Typesense refuses is an
+   error: `store-chunks!` and `store-phrases!` throw straight after the write
+   that was refused, so that collection's orphan delete never runs. It keeps
+   only the ids just sent, and would otherwise delete the old revision of the
+   row whose replacement was refused."
   [config doc prepare-doc-fn prepare-chunks-fn]
   (let [[docs-coll chunks-coll phrases-coll] (coll-ids config)
         doc-num (:doc_num doc)]
@@ -357,9 +487,12 @@
       (t/event! :pipeline/document-stored {:data {:id (:id doc)}})
 
       (catch Exception e
-        (t/error! {:id :pipeline/store-document-error
-                   :msg ["Failed to store document" (:id doc)]}
-                  e)
+        ;; A refused row is counted ONCE, as a refused document, by the store
+        ;; step that catches it. Every other error is reported here, as before.
+        (when-not (= :digdir.storage/rows-refused (:type (ex-data e)))
+          (t/error! {:id :pipeline/store-document-error
+                     :msg ["Failed to store document" (:id doc)]}
+                    e))
         (throw e)))))
 
 ;; ============================================================================

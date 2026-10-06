@@ -145,37 +145,28 @@
 
 (defn get-or-generate-collection-names
   "Get collection names from pipeline config, or generate if not set.
-   Checks if collection names are already stored in the pipeline.
-   If not, generates new names and optionally stores them.
+   Returns the stored names when all three are present, otherwise the names
+   `pipeline-collection-names` generates. Never stores anything.
+
+   ⚠️ the stale stored-collection-names issue: IT USED TO STORE WHAT IT GENERATED, and that is why it no longer
+   takes a connection. The executor called that arity before every run, which
+   persisted generated names that no loader writes to (loaders name by
+   `digdir.docs.pipeline.storage/coll-ids`), so a first run that failed left three
+   names naming no collection. The executor now records names only after a run
+   succeeds, and only the names that run wrote.
 
    Args:
      pipeline-config - Pipeline configuration map
-     conn - Datahike connection (optional, for storing names)
-     master-key - Encryption key (optional, for storing names)
 
    Returns: Map with :docs-collection, :chunks-collection, :phrases-collection"
-  ([pipeline-config]
-   (get-or-generate-collection-names pipeline-config nil nil))
-  ([pipeline-config conn master-key]
-   (let [stored-names {:docs-collection (:docs-collection pipeline-config)
-                       :chunks-collection (:chunks-collection pipeline-config)
-                       :phrases-collection (:phrases-collection pipeline-config)}
-         all-present? (every? some? (vals stored-names))]
-     (if all-present?
-       ;; Use stored names
-       stored-names
-       ;; Generate new names
-       (let [generated (pipeline-collection-names pipeline-config)]
-         ;; Store if conn provided
-         (when (and conn master-key (:tenant pipeline-config) (:pipeline-name pipeline-config))
-           (track-pipeline-collections! conn
-                                        (:tenant pipeline-config)
-                                        (:tenant-config-key pipeline-config)
-                                        (or (:dataset-id pipeline-config) (:pipeline-name pipeline-config))
-                                        (:pipeline-name pipeline-config)
-                                        generated
-                                        master-key))
-         generated)))))
+  [pipeline-config]
+  (let [stored-names {:docs-collection (:docs-collection pipeline-config)
+                      :chunks-collection (:chunks-collection pipeline-config)
+                      :phrases-collection (:phrases-collection pipeline-config)}
+        all-present? (every? some? (vals stored-names))]
+    (if all-present?
+      stored-names
+      (pipeline-collection-names pipeline-config))))
 
 (comment
   ;; Generate collection names with custom prefix

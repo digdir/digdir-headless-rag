@@ -420,9 +420,12 @@
   (orch/mk-store-documents-f config mk-store-document-t documents-f))
 
 (defn mk-materialize-t
-  "Creates the complete materialization task"
+  "Creates the complete materialization task. Its prepare and store steps share
+   ONE failure record, so a refused document and a document that failed to
+   prepare count against the same budget."
   [config]
-  (m/sp
+  (let [config (orch/with-failure-record config)]
+   (m/sp
     (t/event! :episerver/materializing {:data {:config config :colls (coll-ids config)}})
 
     (m/? (m/via m/blk (create-stores config)))
@@ -438,10 +441,12 @@
           pages-flow (m/seed lang-filtered)
           filtered-flow (mk-filter-pages-f config pages-flow)]
 
-      (m/?
-       (m/reduce
-        rfs/last
-        (mk-store-documents-f config (mk-prepare-documents-f config filtered-flow)))))))
+      (let [last-stored (m/?
+                         (m/reduce
+                          rfs/last
+                          (mk-store-documents-f config (mk-prepare-documents-f config filtered-flow))))]
+        (orch/check-stored! config)
+        last-stored)))))
 
 ;; ============================================================================
 ;; Entry Points

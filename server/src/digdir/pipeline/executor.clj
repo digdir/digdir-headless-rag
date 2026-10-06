@@ -8,6 +8,7 @@
             [taoensso.telemere :as t]
             [digdir.pipeline.core :as pipeline]
             [digdir.pipeline.collections :as collections]
+            [digdir.docs.pipeline.orchestration :as orchestration]
             [digdir.docs.pipeline.storage :as ingest-storage]
             [digdir.pipeline.materialization :as materialization]
             [nano-id.core :refer [nano-id]]))
@@ -205,6 +206,18 @@
       ;; Failure events fired by orchestration's prepare-documents flow.
       ;; The orchestration emits `<pipeline-name>/recoverable-failure` and
       ;; `<pipeline-name>/terminal-failure`, so we recognize on the name.
+      ;; A document whose rows Typesense refused: a document failure, counted
+      ;; once (storage does not also emit :pipeline/store-document-error for it).
+      (= :pipeline/document-refused sig-id)
+      (-> progress
+          (update :failures inc)
+          (record-error
+           {:kind :rows-refused
+            :doc-id (:document-id data)
+            :collection (:collection data)
+            :ids (:ids data)
+            :message (:first-error data)}))
+
       (or (= "recoverable-failure" sig-name)
           (= "terminal-failure" sig-name)
           (= :pipeline/store-document-error sig-id))
@@ -307,7 +320,9 @@
        :documents-processed - Number of documents processed
        :documents-failed - Number of documents failed
        :documents-total - Total documents discovered for this run (if known)
-       :error-message - Error message (for failed status)"
+       :error-message - The run's failure summary, on any run with failures
+                        (a completed run included), or the error that
+                        failed it"
   [conn execution-id status & [{:keys [documents-processed documents-failed
                                        documents-total error-message]}]]
   (let [db @conn
@@ -344,10 +359,18 @@
      prev-snapshot - Last snapshot we flushed (so we can skip if unchanged).
                      Pass nil on the first flush.
 
+   Once the run is no longer `:running`, its processed and failed counts are its
+   own and are left as written.
+
    Returns: the snapshot that was flushed (or prev-snapshot if no flush occurred)."
   [conn execution-id prev-snapshot]
   (when-let [progress (get-execution-progress execution-id)]
-    (let [stored (or (:stored progress) 0)
+    (let [running? (= :running (d/q '[:find ?s .
+                                      :in $ ?id
+                                      :where [?e :pipeline-execution/id ?id]
+                                             [?e :pipeline-execution/status ?s]]
+                                    @conn execution-id))
+          stored (or (:stored progress) 0)
           failures (or (:failures progress) 0)
           total (:total-urls progress)
           snapshot {:stored stored :failures failures :total total}]
@@ -359,10 +382,13 @@
                          :where [?e :pipeline-execution/id ?id]]
                        db execution-id)]
           (when eid
+            ;; Live counts are telemetry's, and only while the run is running. Once
+            ;; it has finished, its processed and failed counts are its own (written
+            ;; with its status) and a later flush must not overwrite them.
             (let [tx-map (cond-> {:db/id eid
-                                  :pipeline-execution/documents-processed stored
-                                  :pipeline-execution/documents-failed failures
                                   :pipeline-execution/last-progress-at (now-inst)}
+                           running? (assoc :pipeline-execution/documents-processed stored
+                                           :pipeline-execution/documents-failed failures)
                            total (assoc :pipeline-execution/documents-total total))]
               (d/transact conn {:tx-data [tx-map]})))
           snapshot)))))
@@ -455,6 +481,29 @@
      :documents-failed (or (:failures progress) 0)
      :documents-total (:total-urls progress)}))
 
+(defn- budget-reached
+  "The `:digdir.pipeline/failure-budget-reached` error in `e`'s cause chain, if any."
+  [e]
+  (->> e (iterate ex-cause) (take-while some?)
+       (some #(when (= :digdir.pipeline/failure-budget-reached (:type (ex-data %))) %))))
+
+(defn- run-failures
+  "What a run's own record says, for its execution record: the documents STORED
+   (processed) and FAILED, and the failure summary as `:error-message` on any run
+   with failures. On a run failed by its document-failure budget the message says
+   so first. A run failed by anything else keeps that error's own message. `e` is
+   nil for a completed run."
+  [record e]
+  (let [summary (orchestration/failure-summary record)]
+    (cond-> {:documents-processed (:stored record 0)
+             :documents-failed (:failed record 0)}
+      (and summary (nil? e))
+      (assoc :error-message (str "completed with " summary))
+
+      (and e (budget-reached e))
+      (assoc :error-message (str "failed: " (ex-message (budget-reached e))
+                                 (when summary (str ": " summary)))))))
+
 (defn execute-pipeline!
   "Execute a dataset materialization.
 
@@ -505,24 +554,34 @@
            ;; marking a materialization that had already succeeded as failed.
            durable-dataset-id (:dataset-id dataset-config)
 
-           collection-names (collections/get-or-generate-collection-names
-                             dataset-config conn master-key)
-           dataset-config-with-colls (merge dataset-config collection-names)
-
-           loader-config (convert-pipeline-config-to-loader-format dataset-config-with-colls)
+           ;; ⚠️ the stale stored-collection-names issue: NOTHING IS PERSISTED BEFORE THE LOADER RUNS. This used to
+           ;; call the STORING arity of `get-or-generate-collection-names`, which,
+           ;; with nothing stored yet, persisted `pipeline-collection-names`. No
+           ;; loader writes to those names, and the loader never read them back:
+           ;; the stored names have no loader key. So a first run that failed, or
+           ;; was killed, left three stored names naming no collection, and the
+           ;; all-present gate then kept returning them. The only names recorded
+           ;; are now the ones below, after the loader succeeds.
+           loader-config (convert-pipeline-config-to-loader-format dataset-config)
 
              ;; #497: the names the INGEST PATH actually writes to. `coll-ids`
-             ;; derives them from the loader config, and its result — not the
-             ;; `collection-names` merged in above — is what the loader uses. The
-             ;; two were computed by different functions over different config
-             ;; shapes, so what retrieval later read from
-             ;; `pipeline.storage.*-collection` named collections ingest had never
-             ;; written to, and every query 404'd against a full corpus.
+             ;; derives them from the loader config, and they are the only names
+             ;; this run records. A second function over a different config shape
+             ;; used to name collections as well, so what retrieval later read
+             ;; from `pipeline.storage.*-collection` named collections ingest had
+             ;; never written to, and every query 404'd against a full corpus.
              materialized-collections (let [[docs chunks phrases]
                                             (ingest-storage/coll-ids loader-config)]
                                         {:docs-collection docs
                                          :chunks-collection chunks
                                          :phrases-collection phrases})
+
+           ;; The run's failure record, shared by its prepare and store steps. The
+           ;; count and the summary persisted below come from it, not from
+           ;; telemetry, which is asynchronous. (The key is in no namespace that
+           ;; names a collection, so the names above do not change.)
+           failures (orchestration/failure-record)
+           loader-config (assoc loader-config :fault-tolerance/failures failures)
 
            execution-id (or execution-id
                             (create-execution-record! conn dataset-id user-id))
@@ -531,10 +590,10 @@
                        {:data {:execution-id execution-id
                                :dataset-id dataset-id
                                :source-type (:source-type dataset-config)
-                               :collections collection-names}})]
+                               :collections materialized-collections}})]
 
        (try
-         (let [loader-task (dispatch-to-loader dataset-config-with-colls loader-config)
+         (let [loader-task (dispatch-to-loader dataset-config loader-config)
                _ (m/? loader-task)
                final (final-progress-counts execution-id)]
 
@@ -561,7 +620,8 @@
            (update-execution-status! conn execution-id :completed
                                      (merge {:documents-processed 0
                                              :documents-failed 0}
-                                            final))
+                                            final
+                                            (run-failures @failures nil)))
 
            (t/event! :pipeline/completed
                      {:data {:execution-id execution-id
@@ -573,7 +633,8 @@
            (let [final (final-progress-counts execution-id)]
              (update-execution-status! conn execution-id :failed
                                        (merge {:error-message (.getMessage e)}
-                                              final)))
+                                              final
+                                              (run-failures @failures e))))
 
            (t/error! {:id :pipeline/failed
                       :data {:execution-id execution-id

@@ -313,7 +313,9 @@
           chunks-without-id [{:chunk_id "c1" :doc_num "d1" :content_markdown "x"}
                              {:chunk_id "c2" :doc_num "d1" :content_markdown "y"}]]
       (with-redefs [ts/upsert-documents! (fn [_settings _coll docs]
-                                           (reset! captured docs))]
+                                           (reset! captured docs)
+                                           ;; Typesense's answer: one result per row
+                                           (mapv (constantly {:success true}) docs))]
         (storage/store-chunks! cfg "chunks_coll" chunks-without-id)
         (is (= ["c1" "c2"] (mapv :id @captured))
             "store-chunks! must enforce :id := :chunk_id at the storage boundary")))))
@@ -324,7 +326,9 @@
           phrases-without-id [{:chunk_id "c1" :doc_num "d1" :search_phrase "alpha"}
                               {:chunk_id "c1" :doc_num "d1" :search_phrase "beta"}]]
       (with-redefs [ts/upsert-documents! (fn [_settings _coll docs]
-                                           (reset! captured docs))]
+                                           (reset! captured docs)
+                                           ;; Typesense's answer: one result per row
+                                           (mapv (constantly {:success true}) docs))]
         (storage/store-phrases! cfg "phrases_coll" phrases-without-id "doc1")
         (is (every? :id @captured)
             ":id must be set on every phrase row")
@@ -332,7 +336,7 @@
             "different (chunk, phrase) pairs → different ids")
         ;; Determinism: storing the same phrases again yields the same ids
         (let [captured2 (atom nil)]
-          (with-redefs [ts/upsert-documents! (fn [_ _ docs] (reset! captured2 docs))]
+          (with-redefs [ts/upsert-documents! (fn [_ _ docs] (reset! captured2 docs) (mapv (constantly {:success true}) docs))]
             (storage/store-phrases! cfg "phrases_coll" phrases-without-id "doc1")
             (is (= (mapv :id @captured) (mapv :id @captured2)))))))))
 

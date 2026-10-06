@@ -415,9 +415,12 @@
   (orch/mk-store-documents-f config mk-store-document-t documents-f))
 
 (defn mk-materialize-t
-  "Creates the complete materialization task"
+  "Creates the complete materialization task. Its prepare and store steps share
+   ONE failure record, so a refused document and a document that failed to
+   prepare count against the same budget."
   [config]
-  (m/sp
+  (let [config (orch/with-failure-record config)]
+   (m/sp
     (t/event! :folder/materializing {:data {:config config :colls (coll-ids config)}})
 
     (m/? (m/via m/blk (create-stores config)))
@@ -430,10 +433,12 @@
           file-entries-flow (m/seed file-entries)
           filtered-flow (mk-filter-file-entries-f config file-entries-flow)]
 
-      (m/?
-       (m/reduce
-        net.cgrand.xforms.rfs/last
-        (mk-store-documents-f config (mk-prepare-documents-f config filtered-flow)))))))
+      (let [last-stored (m/?
+                         (m/reduce
+                          net.cgrand.xforms.rfs/last
+                          (mk-store-documents-f config (mk-prepare-documents-f config filtered-flow))))]
+        (orch/check-stored! config)
+        last-stored)))))
 
 ;; ============================================================================
 ;; Entry Points
